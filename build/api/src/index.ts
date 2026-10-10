@@ -12,7 +12,7 @@ import {
 } from "./runtime/render";
 import { registerMethod, request, startRpc, notify } from "./runtime/rpc";
 import { resolveCallback, serializeCallback } from "./runtime/reconciler";
-import { InternalNavigationRoot, useNavigation } from "./runtime/navigation";
+import { InternalNavigationRoot, resetNavigation, useNavigation } from "./runtime/navigation";
 
 export { useNavigation };
 
@@ -844,19 +844,27 @@ registerMethod("initialize", async (launchContext: any) => {
   const launchType = launchContext.launchType ?? "userInitiated";
 
   // `Yg` (InternalRootComponent): the command tree lives inside the navigation root, which owns
-  // the `ray-navigation-stack` element and the routes the stack model is built from.
-  const element = React.createElement(
-    InternalNavigationRoot,
-    null,
-    React.createElement(Component, {
-      arguments: argumentValues,
-      launchArguments: argumentValues,
-      preferences,
-      launchType,
-    }),
+  // the `ray-navigation-stack` element and the routes the stack model is built from. Navigation
+  // state is module-level (see navigation.ts); a push/pop re-renders this root. The root element
+  // is rebuilt on every render on purpose — re-rendering the same element object would bail the
+  // reconciler out (oldProps === newProps by reference) and module-state changes would never
+  // reach the shadow tree, so `push` would produce a renderEmpty.
+  const commandProps = {
+    arguments: argumentValues,
+    launchArguments: argumentValues,
+    preferences,
+    launchType,
+  };
+  const buildRoot = () =>
+    React.createElement(InternalNavigationRoot, null, React.createElement(Component, commandProps));
+  activeRoot = createCommandRoot(buildRoot());
+  resetNavigation(
+    React.createElement(Component, commandProps),
+    () => {
+      if (activeRoot) activeRoot.render(buildRoot());
+    },
   );
-  activeRoot = createCommandRoot(element);
-  activeRoot.render(element);
+  activeRoot.render(buildRoot());
 
   // The commit listener ships the model; this call covers a command that renders nothing at all.
   await new Promise((resolve) => queueMicrotask(resolve));

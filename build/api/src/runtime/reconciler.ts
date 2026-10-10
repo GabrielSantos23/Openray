@@ -133,8 +133,11 @@ const hostConfig: any = {
     if (index >= 0) container.childElements.splice(index, 1);
   },
 
-  commitUpdate(instance: ShadowNode, _type: string, oldProps: any, newProps: any) {
-    instance.props = collectProps(newProps);
+  // react-reconciler's signature is (instance, updatePayload, type, prevProps, nextProps, handle);
+  // the props that matter are `nextProps` — committing `prevProps` (as a 4-arg signature suggests)
+  // would freeze every prop at its first-render value (navigationInfo included).
+  commitUpdate(instance: ShadowNode, _updatePayload: unknown, _type: string, _prevProps: any, nextProps: any) {
+    instance.props = collectProps(nextProps);
   },
 
   commitTextUpdate(instance: ShadowNode, _oldText: string, newText: string) {

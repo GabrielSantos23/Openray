@@ -1,15 +1,15 @@
-// The extension-side navigation stack — Raycast's `zg` (InternalNavigationRoot) and `Mw`
-// (useNavigation) in `api/node_modules/@raycast/api/index.js`:
+// The extension-side navigation stack — the wire contract of Raycast's `zg`
+// (InternalNavigationRoot) and `Mw` (useNavigation) in `api/node_modules/@raycast/api/index.js`:
 //
-//   function zg(e){ let[t,r]=useState({routes:[{node:e.children}],lastNavigationInfo:{action:"new",id:""}}) …
-//     return jsx("ray-navigation-stack",{navigationInfo:t.lastNavigationInfo,onPop:n,
-//       children:jsx(Va.Provider,{value:r,children:t.routes.map(i=>i.node)})}) }
+//   <ray-navigation-stack navigationInfo={lastNavigationInfo} onPop={pop}>{routes…}</ray-navigation-stack>
+//   push: routes.push({node, onPop}); lastNavigationInfo = {action:"push", id}
+//   pop:  routes.pop();  lastNavigationInfo = {action:"pop", id}
+//   renderer-initiated pop: lastNavigationInfo = {action:"localPop", id:<the id from onPop>}
 //
-// The stack lives here, in the extension. The model ships only the top route's body plus
-// `navigationInfo`; the renderer keeps its own page stack and mirrors push/pop through
-// `navigationInfo.action`. A renderer-initiated pop (Escape) calls this element's `onPop` callback
-// through `nativeCallback`; the same pop id round-trips back in `navigationInfo` so the renderer
-// can tell the resulting render apart from an extension-initiated one.
+// Deliberately hook-free: the @raycast/api bundle can end up loading a different `react` instance
+// than the one the reconciler drives (deployments mix api trees), and a hook would then read a
+// null dispatcher. Module state + an explicit re-render of the command root produces the exact
+// same model stream — `navigationInfo.action` values and the `onPop` id round trip included.
 
 import * as React from "react";
 import { serializeCallback } from "./reconciler";
@@ -34,84 +34,80 @@ export interface Navigation {
   pop: () => void;
 }
 
-export const NavigationContext = React.createContext<Navigation | null>(null);
+let state: NavigationState = { routes: [], lastNavigationInfo: { action: "new", id: "" } };
+let rerender: () => void = () => undefined;
+let lastPopId = "";
+let active = false;
 
 function nextId(): string {
   return `nav_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/**
- * `zg(e)` — wraps the command component in the `ray-navigation-stack` host element. The `onPop`
- * prop is the renderer's way to pop; functions cannot cross the wire, so it is registered by
- * callback id (`onPopCallbackId`) and `toModel` copies it onto the stack.
- */
+function replaceState(next: NavigationState): void {
+  state = next;
+  rerender();
+}
+
+function popWithId(id: string): void {
+  if (state.routes.length <= 1) return;
+  const routes = state.routes.slice(0, -1);
+  const popped = state.routes[state.routes.length - 1];
+  if (popped?.onPop && lastPopId !== id) {
+    lastPopId = id;
+    popped.onPop(id);
+  }
+  state = { routes, lastNavigationInfo: { action: "localPop", id } };
+  rerender();
+}
+
+/** `InternalNavigationRoot` — a plain component rendering the stack from module state. */
 export function InternalNavigationRoot({ children }: { children?: React.ReactNode }) {
-  const [state, setState] = React.useState<NavigationState>({
-    routes: [{ node: children }],
-    lastNavigationInfo: { action: "new", id: "" },
-  });
-  const poppedForRef = React.useRef("");
-
-  const popWithId = React.useCallback(
-    (id: string) => {
-      setState((previous) => {
-        if (previous.routes.length <= 1) return previous;
-        const routes = previous.routes.slice(0, -1);
-        const popped = previous.routes[previous.routes.length - 1];
-        if (popped?.onPop && poppedForRef.current !== id) {
-          poppedForRef.current = id;
-          popped.onPop(id);
-        }
-        return { routes, lastNavigationInfo: { action: "localPop", id } };
-      });
-    },
-    [setState],
-  );
-
-  const onPop = React.useCallback((id: string) => popWithId(id), [popWithId]);
-  const onPopCallbackId = React.useMemo(() => serializeCallback(onPop), [onPop]);
-
-  const navigation = React.useMemo<Navigation>(
-    () => ({
-      push: (node, onPop) => {
-        setState((previous) => ({
-          routes: [...previous.routes, { node, onPop }],
-          lastNavigationInfo: { action: "push", id: nextId() },
-        }));
-      },
-      pop: () => {
-        const id = nextId();
-        setState((previous) => {
-          if (previous.routes.length <= 1) return previous;
-          const routes = previous.routes.slice(0, -1);
-          const popped = previous.routes[previous.routes.length - 1];
-          if (popped?.onPop && poppedForRef.current !== id) {
-            poppedForRef.current = id;
-            popped.onPop(id);
-          }
-          return { routes, lastNavigationInfo: { action: "pop", id } };
-        });
-      },
-    }),
-    [setState],
-  );
-
+  if (!active) {
+    active = true;
+    state = {
+      routes: [{ node: children }],
+      lastNavigationInfo: { action: "new", id: "" },
+    };
+  }
+  const onPop = serializeCallback((id: string) => popWithId(id));
   return React.createElement(
     "ray-navigation-stack",
-    { navigationInfo: state.lastNavigationInfo, onPopCallbackId },
-    React.createElement(
-      NavigationContext.Provider,
-      { value: navigation },
-      state.routes.map((route, index) => React.createElement(React.Fragment, { key: index }, route.node)),
-    ),
+    { navigationInfo: state.lastNavigationInfo, onPopCallbackId: onPop },
+    state.routes.map((route, index) => React.createElement(React.Fragment, { key: index }, route.node)),
   );
 }
 
-/** `Mw()` — the public `useNavigation()` hook. */
+/** `Mw()` — the public `useNavigation()` hook shape, backed by module state. */
 export function useNavigation(): Navigation {
-  const navigation = React.useContext(NavigationContext);
-  if (!navigation) {
-    throw new Error("useNavigation must be used inside a command view");
-  }
-  return navigation;
+  return {
+    push: (node, onPop) => {
+      replaceState({
+        routes: [...state.routes, { node, onPop }],
+        lastNavigationInfo: { action: "push", id: nextId() },
+      });
+    },
+    pop: () => {
+      const id = nextId();
+      if (state.routes.length <= 1) return;
+      const routes = state.routes.slice(0, -1);
+      const popped = state.routes[state.routes.length - 1];
+      if (popped?.onPop && lastPopId !== id) {
+        lastPopId = id;
+        popped.onPop(id);
+      }
+      state = { routes, lastNavigationInfo: { action: "pop", id } };
+      rerender();
+    },
+  };
+}
+
+/** Called once per command launch: reset the stack and wire the re-render. */
+export function resetNavigation(children: React.ReactNode, rerenderFn: () => void): void {
+  active = true;
+  lastPopId = "";
+  rerender = rerenderFn;
+  state = {
+    routes: [{ node: children }],
+    lastNavigationInfo: { action: "new", id: "" },
+  };
 }

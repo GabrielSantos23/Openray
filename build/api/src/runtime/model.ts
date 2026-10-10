@@ -472,7 +472,13 @@ export function toModel(root: ShadowRoot): RenderModel {
         kind: "navigationStack" as const,
         id: "navigationStack",
         body,
-        navigationInfo: root.navigationInfo,
+        // The stack element's own prop is the source of truth (InternalNavigationRoot passes
+        // `navigationInfo: state.lastNavigationInfo`); the shadow-root field is only the
+        // imperative fallback (render.ts's setNavigationInfo).
+        navigationInfo: ((child.props as any)?.navigationInfo ?? root.navigationInfo) as {
+          id: string | null;
+          action: string;
+        },
         onPop: (child.props as any).onPopCallbackId as string | undefined,
         actions: body?.actions,
       };
