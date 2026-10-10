@@ -31,17 +31,29 @@ recovered; raw string sweep of 51,238 printable runs; PE import table parsed):**
   exact linkage (dynamic resolution vs. shared-source branch) is not confirmed; the
   keyboard-translation + focus-restore machinery around it is.
 - **Hotkeys are native** — "RegisterHotkeys:"/"UnregisterHotkeys:" strings
-  (`0x1804bbdf4`/`0x1804bbf71`) and a command-verb table
-  ("ArrangeWindowCaptureMemoryDumpCloseWindowEnableSnippetAutoExpansionEnumerateVisibleWindows…");
-  no static `RegisterHotKey` import either (same linkage caveat).
-- **UI Automation is NOT in native.dll** — zero UIA strings and no `uiautomationcore`/`oleacc`
-  imports. `Raycast.dll` (.NET) references UIA COM interop type names — any UIA work lives in the
-  C# host, not the Rust layer.
+  (`0x1804bbdf4`/`0x1804bbf71`); the FFI export table names the implementations:
+  `uiaccess_register_hotkeys` @ `0x180081270`, `uiaccess_validate_hotkey` @ `0x1800955d0`,
+  `uiaccess_unregister_hotkey(s)` @ `0x180091810`/`0x180092100`,
+  `uiaccess_set_hotkeys_suppressed` @ `0x180086450`.
+- **UI Access (window automation over elevated windows) IS native** — the export table (699
+  exports, 70 UniFFI functions) is dominated by a `uiaccess_*` module:
+  `uiaccess_initialize`, `uiaccess_is_ui_access_enabled`,
+  `uiaccess_cancel_ui_access_helper_monitoring` (a separate UIAccess helper process),
+  `uiaccess_focused_element_text_before_caret` and `uiaccess_copy_text_from_foreground_app`
+  (focused-element text access), `uiaccess_enumerate_visible_windows`,
+  `uiaccess_bring_app_to_foreground_or_run`, `uiaccess_force_activate_window`,
+  `uiaccess_close/hide/maximize_window`, `uiaccess_minimize_all_windows_except`,
+  `uiaccess_find_app_quit_candidate_windows`, `uiaccess_find_hidden_in_tray_windows`,
+  `uiaccess_arrange_window`, `uiaccess_toggle_window_topmost`, plus the snippet-expansion set
+  (`uiaccess_enable_snippet_auto_expansion`, `uiaccess_expand_snippet`,
+  `uiaccess_unregister_snippets`, `uiaccess_update_snippet_expansion_config/_disabled_apps`).
+  Events delivered to the C# host via `nativeevents_on_*` callbacks: clipboard changed, binding
+  triggered, snippet matched/cancelled, recording event, log, panic.
 - **The file indexer and the fuzzy matcher/usage ranking are NOT native** — no Everything, NTFS,
-  USN, MFT, levenshtein/jaro/fuzzy/rank/score/smartcase strings in native.dll; the only "indexer"
-  mention is a log string about the *backend's* wake work ("indexer backlog drain"), i.e. the
-  indexer is the Node backend's own JS task. This matches the JS matcher evidence in
-  `docs/root-search-spec.md`.
+  USN, MFT, levenshtein/jaro/fuzzy/rank/score/smartcase strings, and no index/search/rank exports;
+  the only "indexer" mention is a log string about the *backend's* wake work ("indexer backlog
+  drain"), i.e. the indexer is the Node backend's own JS task. This matches the JS matcher
+  evidence in `docs/root-search-spec.md`.
 
 ---
 
