@@ -65,6 +65,9 @@ private MainWindow? _window;
     private NamedPipeBridge? _pipe;
     private ClipboardMonitor? _clipboard;
 
+    /// <summary>`--dev-extensions` / RAYCAST_MINI_DEV_EXTENSIONS=1: reveal internal test extensions.</summary>
+    public static bool DevExtensions { get; set; }
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);

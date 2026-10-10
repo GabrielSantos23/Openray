@@ -133,6 +133,15 @@ public partial class MainWindow : Window
         // first-show latency entirely).
         _ = HudWindow.GetOrCreate(() => _backend.FrontendRoot).PrewarmAsync();
 
+        // Dev flag: `--dev-extensions` (or RAYCAST_MINI_DEV_EXTENSIONS=1) reveals the internal test
+        // extensions in the root search (RaycastMini: `command-ux-test`).
+        if (Environment.GetCommandLineArgs().Any(arg => arg.Equals("--dev-extensions", StringComparison.OrdinalIgnoreCase)) ||
+            Environment.GetEnvironmentVariable("RAYCAST_MINI_DEV_EXTENSIONS") == "1")
+        {
+            App.DevExtensions = true;
+            PostToRenderer("window.devExtensions",
+                System.Text.Json.JsonSerializer.SerializeToElement(new { enabled = true }));
+        }
         // Diagnostics: read the renderer's own IPC state back so a broken bridge is visible in
         // launcher.log instead of a silent empty UI.
         _ = Task.Run(async () =>
@@ -186,14 +195,14 @@ public partial class MainWindow : Window
             return null;
         }
 
-        // The floating HUD (Raycast's `HudNativeView`): the renderer pushes a payload, this host
-        // owns the always-on-top window and its lifetime.
+        // The toast store's floating-HUD fallback (toast while the launcher is hidden) and the
+        // `showHUD` API: the host owns the HUD window, mirroring Raycast's Raycast.dll HUDs.
         if (method == "window.showHud")
         {
-            var hud = HudWindow.GetOrCreate(() => _backend.FrontendRoot);
             if (data is { ValueKind: System.Text.Json.JsonValueKind.Object } hudPayload)
             {
-                _webView.Dispatcher.Invoke(() => hud.ShowHud(hudPayload));
+                _webView.Dispatcher.Invoke(() =>
+                    HudWindow.GetOrCreate(() => _backend.FrontendRoot).ShowHud(hudPayload));
             }
             return null;
         }
@@ -204,11 +213,24 @@ public partial class MainWindow : Window
             return null;
         }
 
-        // The footer gear button opens Settings in its own OS window, like Raycast.
-        if (method == "window.openSettings")
+        // The renderer pulls the dev-extensions flag at startup (the one-shot push can race it).
+        if (method == "window.getDevExtensions")
         {
-            _webView.Dispatcher.Invoke(OpenSettings);
-            return null;
+            return System.Text.Json.JsonSerializer.SerializeToElement(new { enabled = App.DevExtensions });
+        }
+
+        // Automation only (dev): run a script in the renderer and return its JSON result. The
+        // renderer exposes its hooks as `window.__raycastMiniTest` when --dev-extensions is on.
+        if (method == "window.eval" && App.DevExtensions)
+        {
+            var script = data is { ValueKind: System.Text.Json.JsonValueKind.Object } evalPayload &&
+                         evalPayload.TryGetProperty("script", out var scriptElement)
+                ? scriptElement.GetString()
+                : null;
+            if (script is null) return null;
+            var output = await _webView.CoreWebView2.ExecuteScriptAsync(script);
+            App.Log.Write($"[test] {output}");
+            return System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(output);
         }
 
         if (isBackend)
