@@ -16,9 +16,32 @@ shipped artifacts; nothing here is inferred from Raycast's public documentation.
 | `artifacts/frontend/main-window-g1Vb1JLY.js` | List sections, filters, action panel, detail previews |
 
 REA MCP output was unusable in this environment (schema mismatch); the managed-PE inspector and
-custom UTF-16/ASCII string extractors over the same binaries produced the findings above. No native
-disassembly engine (Hopper/Ghidra/IDA) is installed, so control flow inside `native.dll` is known
-from its log strings and IPC contract rather than from decompiled code.
+custom UTF-16/ASCII string extractors over the same binaries produced the findings above.
+
+**2026-10-10 update — native.dll analyzed natively (Ghidra 12.1.4 via REA, 17,761 procedures
+recovered; raw string sweep of 51,238 printable runs; PE import table parsed):**
+
+- **Paste keyboard injection is native** — `native-dll\src\native_context\clipboard.rs` logs
+  "paste: using SendInput for {count} chars" (string @ `0x1804bf155`), alongside a
+  `"{target_pid}, process='{target_process}'"` failure context (focus-first, then type). The
+  user32 import surface matches: `VkKeyScanExW`, `ToUnicodeEx`, `GetKeyboardLayout(List)`,
+  `LoadKeyboardLayoutW`, `AttachThreadInput`, `GetGUIThreadInfo`, `SetForegroundWindow`,
+  `PostMessageW`. **Unresolved:** the `SendInput` symbol itself is neither in the import table,
+  the (empty) delay-load directory, nor present as a name string anywhere in the binary — so the
+  exact linkage (dynamic resolution vs. shared-source branch) is not confirmed; the
+  keyboard-translation + focus-restore machinery around it is.
+- **Hotkeys are native** — "RegisterHotkeys:"/"UnregisterHotkeys:" strings
+  (`0x1804bbdf4`/`0x1804bbf71`) and a command-verb table
+  ("ArrangeWindowCaptureMemoryDumpCloseWindowEnableSnippetAutoExpansionEnumerateVisibleWindows…");
+  no static `RegisterHotKey` import either (same linkage caveat).
+- **UI Automation is NOT in native.dll** — zero UIA strings and no `uiautomationcore`/`oleacc`
+  imports. `Raycast.dll` (.NET) references UIA COM interop type names — any UIA work lives in the
+  C# host, not the Rust layer.
+- **The file indexer and the fuzzy matcher/usage ranking are NOT native** — no Everything, NTFS,
+  USN, MFT, levenshtein/jaro/fuzzy/rank/score/smartcase strings in native.dll; the only "indexer"
+  mention is a log string about the *backend's* wake work ("indexer backlog drain"), i.e. the
+  indexer is the Node backend's own JS task. This matches the JS matcher evidence in
+  `docs/root-search-spec.md`.
 
 ---
 

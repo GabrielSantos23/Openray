@@ -98,7 +98,13 @@ This document specifies the behavior of Raycast's root search based on reverse e
 ## 3. Root Search Extras (PARTIALLY CONFIRMED)
 
 ### Include Files in Root Search
-- **Indexer**: Native implementation (native.dll or equivalent) - confirmed by presence of native resources in app bundle
+- **Indexer**: **Not native — it runs in the Node backend.** Binary analysis of `shell/native.dll`
+  (2026-10-10: raw string sweep of all 51,238 printable runs + PE import table) found **no**
+  Everything/NTFS/USN/MFT/filesystem-walker strings and no related imports. The only "indexer"
+  mention is a log string about the *backend's* wake work: "…so the backend's own wake work
+  (indexer backlog drain, extension reloads) is not power-throttled" — i.e. the indexer is the
+  Node backend's own (JS), and native.dll only knows about it as a background task to protect
+  from power throttling.
 - **Indexing Mechanism**: 
   - Included/excluded folders: Configurable per settings
   - Extension filter: Configurable per settings
@@ -113,7 +119,10 @@ This document specifies the behavior of Raycast's root search based on reverse e
   - Exact filename matches ranked higher than partial matches
   - Usage-based ranking applies to files (launch count = times opened)
 
-*Confirmed*: File search uses native backend; exact ranking behavior inferred.
+*Confirmed*: The matcher and usage ranking are JavaScript (the `menu.namespace-DEI7dAIB.js`
+algorithms tagged **[CONFIRMED]** above); the file indexer is backend JS, not native
+(native.dll binary analysis 2026-10-10 — no fuzzy/rank/score/usage strings, no NTFS/MFT/USN
+imports). Exact file-result ranking behavior remains inferred.
 
 ### Inline Sections
 - **Calculator**: 
