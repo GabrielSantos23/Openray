@@ -1,0 +1,89 @@
+// Raycast Mini — Node extension host.
+//
+// This is the Node half of Raycast's architecture: `Raycast.exe` spawns `backend/node.exe
+// backend/index.mjs`, which keeps a pool of `worker_threads` workers (one per running extension
+// command) and bridges extension <-> host <-> renderer traffic over a named pipe.
+//
+// The three legs, mirroring Raycast 2.4.0.0:
+//
+//   1. extension worker  -> backend     `parentPort.postMessage({kind:"request"|"notify", …})`
+//   2. backend           -> renderer    `z.frontend.extensionHost.render({…})`
+//   3. renderer          -> backend     `dispatchRequest("backend","extensionHost.loadCommand",…)`
+//
+// (2) and (3) both travel over the named pipe that the .NET launcher owns. Protocol messages are
+// newline-delimited JSON:
+//
+//   -> { type:"request",  id, module:"frontend"|"backend", method, data }
+//   <- { type:"response", id, ok, data | error }
+//   <- { type:"push",     module:"frontend", method, data }       (host -> renderer)
+//
+// `module: "frontend"` means "deliver to the WebView2 renderer" (Raycast's `z.frontend.*`);
+// `module: "backend"` means "ask the Node host / native host to do something"
+// (Raycast's `dispatchRequest("backend", …)`).
+
+"use strict";
+
+const path = require("node:path");
+const { createBackend } = require("./backend");
+const { createClipboardHistory } = require("./clipboard-history");
+const { createFileIndexer } = require("./file-indexer");
+const { createUsageTracker } = require("./usage-tracker");
+
+const config = {
+  // Must match host/NamedPipeBridge.cs
+  pipeName: process.env.RAYCAST_MINI_PIPE ?? "raycast-mini-ipc",
+  apiRoot: process.env.RAYCAST_MINI_API_ROOT ?? path.join(__dirname, "..", "..", "api"),
+  frontendRoot: process.env.RAYCAST_MINI_FRONTEND_ROOT ?? path.join(__dirname, "..", "..", "frontend"),
+  extensionsRoot:
+    process.env.RAYCAST_MINI_EXTENSIONS_ROOT ??
+    path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini", "extensions"),
+};
+
+const backend = createBackend({
+  pipeName: config.pipeName,
+  apiRoot: config.apiRoot,
+  frontendRoot: config.frontendRoot,
+  extensionsRoot: config.extensionsRoot,
+});
+
+// `connect()` owns the single pipe reader and answers host requests too, so nothing else has to
+// attach a second `readline` to the socket.
+backend.connect();
+
+// Raycast's internal `clipboard-history` extension is not a Node extension: the .NET host captures
+// clipboard changes, and this store persists them (`handler::clipboard-history`). Registering it here
+// keeps the capture path identical to Raycast's: host -> backend, never through a worker.
+const clipboard = createClipboardHistory({
+  dispatch: (method, data) => backend.dispatch("backend", method, data),
+});
+backend.registerClipboardHandler(clipboard.handlers);
+
+  // File indexer
+  const fileIndexer = createFileIndexer({});
+  backend.registerFileIndexerHandler(fileIndexer.handlers);
+
+  // Usage tracker
+  const usageTracker = createUsageTracker({});
+  backend.registerUsageTrackerHandler(usageTracker.handlers);
+
+// The Clipboard History shortcut is a per-command hotkey in Raycast, registered with the host once the
+// window exists. Re-registering is harmless if it is already in place.
+clipboard.handlers
+  .getHotkey()
+  .then(({ hotkey }) => backend.dispatch("backend", "clipboardHistory.registerHotkey", { hotkey }))
+  .catch((error) => console.warn("[clipboard] could not register the clipboard history hotkey", error.message));
+
+console.log(
+  JSON.stringify({
+    ready: true,
+    pipe: config.pipeName,
+    extensionsRoot: config.extensionsRoot,
+    apiRoot: config.apiRoot,
+  }),
+);
+
+process.on("uncaughtException", (error) => console.error("[backend] uncaught", error));
+process.on("unhandledRejection", (error) => console.error("[backend] unhandled rejection", error));
+
+// Keeps the process alive; the pipe does too, but this makes the intent explicit.
+setInterval(() => undefined, 1 << 30).unref();

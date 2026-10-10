@@ -1,0 +1,9 @@
+{
+  "name": "raycast-mini-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node extension host for Raycast Mini: worker pool + named-pipe bridge to the .NET launcher",
+  "dependencies": {
+    "jsqr": "^1.4.0"
+  }
+}

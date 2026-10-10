@@ -1,0 +1,15 @@
+{
+  "name": "@raycast/api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Re-implementation of the extension-facing Raycast API (worker-thread JSON-RPC + headless React renderer)",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-reconciler": "^0.29.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
