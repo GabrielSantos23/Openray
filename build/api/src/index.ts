@@ -324,23 +324,23 @@ Detail.Metadata = function Metadata({ children }: { children?: React.ReactNode }
   return React.createElement("ray-metadata", {}, children);
 };
 Detail.Metadata.Label = function MetadataLabel({ title, text, icon, ...rest }: any) {
-  return React.createElement("ray-detail-metadata-label", { title, text, icon, ...rest });
+  return React.createElement("ray-metadata-label", { title, text, icon, ...rest });
 };
 Detail.Metadata.Link = function MetadataLink({ title, text, target, ...rest }: any) {
-  return React.createElement("ray-detail-metadata-link", { title, text, target, ...rest });
+  return React.createElement("ray-metadata-link", { title, text, target, ...rest });
 };
 Detail.Metadata.TagList = function TagList({ title, children }: any) {
-  return React.createElement("ray-detail-metadata-tag-list", { title }, children);
+  return React.createElement("ray-metadata-taglist", { title }, children);
 };
 Detail.Metadata.TagList.Item = function TagItem({ text, icon, color, onAction, ...rest }: any) {
-  return React.createElement("ray-detail-metadata-tag", {
+  return React.createElement("ray-metadata-taglist-item", {
     text, icon, color,
     onAction: onAction ? serializeCallback(onAction) : undefined,
     ...rest,
   });
 };
 Detail.Metadata.Separator = function Separator() {
-  return React.createElement("ray-detail-metadata-separator", {});
+  return React.createElement("ray-metadata-separator", {});
 };
 
 export function Form({ children, actions, isLoading = false, navigationTitle, enableDrafts, searchBarAccessory, ...rest }: any) {

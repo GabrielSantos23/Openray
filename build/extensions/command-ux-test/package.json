@@ -1,0 +1,19 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "command-ux-test",
+  "title": "Command UX Test",
+  "description": "Internal test extension: navigation stack, forms, alerts, detail metadata, grid, list accessories (hidden unless raycast-mini:dev-extensions=1)",
+  "icon": "icon.png",
+  "author": "local",
+  "commands": [
+    {
+      "name": "index",
+      "title": "Command UX Tests",
+      "description": "Exercises navigation, alerts, forms, grid, detail and list behaviors",
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
