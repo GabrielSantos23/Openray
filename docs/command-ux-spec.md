@@ -347,3 +347,45 @@ Renderer → backend requests: `extensionHost.loadCommand`, `unloadEntryPoint`,
 `callNodeCallback {sessionId, callbackId, data}`.
 
 All **[CONFIRMED]** from `index.mjs` handler tables + `main-window-g1Vb1JLY.js` `Qne` table.
+
+---
+
+## 9. Implementation status (verified 2026-10-10)
+
+Everything below was verified in the running clone (`RaycastMini.exe --dev-extensions`, the
+`command-ux-test` extension) — by automated suites, by driving the real window, and by manual use.
+No mock counts as implemented.
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Navigation stack (push/pop/popToRoot, search text + selection restore, localPop round trip, Escape cascade, Ctrl+[, Shift+Escape) | **Done** | `build/api/src/runtime/navigation.ts`, `build/frontend/src/commandPages.ts` (9-check suite), exercised end-to-end in the running app; push/pop verified at worker level (render with `navigationInfo:{action:"push"}`) and by clicks/keys in the UI |
+| Form renderer (all field kinds, `error` validation, onChange/onBlur/onFocus throttling, formSetFocus/formReset, submit-form with values, drafts) | **Done** | `build/frontend/src/RenderedView.tsx` FormBody + `validateForm` (7-check suite); multi-page flow: list → detail → form → submitted verified in the UI |
+| Alerts (confirmAlert promise, default/cancel/destructive styles, keyboard, result returned) | **Done** | `build/frontend/src/AlertHost.tsx` + alertStore; destructive style, Escape dismiss, Enter confirm; results logged by the test extension |
+| Toasts / HUD | **Out of scope here** (previously implemented); this pass wired the floating-HUD fallback: `window.showHud`/`window.hideHud` dispatch in the host, and a live in-window toast migrates to the HUD when the window hides | `[hud] showHud received … size 215x46` in `launcher.log`; host `HudWindow.cs` |
+| Detail (metadata pane Label/Link/TagList/Separator; markdown: headings, inline, code, tables, images, lists, quotes, hr) | **Done** | `build/frontend/src/markdown.tsx` + DetailBody/MetadataPane; detail page scrolled and rendered in the UI |
+| Grid (sections with per-section columns/aspect/inset, itemSize, fit, 2D keyboard nav over ragged rows, empty view) | **Done** | GridBody + `moveInGrid`/`gridRowWidths`; arrow navigation verified in the UI |
+| List (accessories, sections, detail pane via `isShowingDetail`, filtering + throttle + keepSectionOrder, empty views, List.Dropdown, pagination `onLoadMore`) | **Done** | ListBody/ListRow/AccessoryView/SearchBarDropdown; big-list page (detail pane, accessories, pagination) rendered in the UI |
+
+Suites (all green): `command-pages` 9 checks, `form-validation` 7 checks, `render-model` 5 groups,
+`md5-hue` 18 cases.
+
+Clone decisions without direct Raycast evidence (in addition to §1.6/§2.4/§3/§5/§6/§7):
+
+- The extension-side navigation stack is deliberately **hook-free** (module state + explicit root
+  re-render): the api bundle can load a different `react` instance than react-reconciler in mixed
+  deployment trees, and a hook would read a null dispatcher. The wire model is identical to
+  Raycast's (`ray-navigation-stack`, top-body-only serialization, `onPopCallbackId`).
+- The command view has exactly **one** search input (the header): a List/Grid's
+  `searchBarPlaceholder` + search-bar accessory decorate that input, never a second one — matching
+  the shipped renderer's layout.
+- While a command is open the root search's keyboard handlers are gated off, so arrows/Enter
+  cannot "leak" through to the page underneath.
+- A toast that outlives the window (fired just before `closeMainWindow`) migrates to the floating
+  HUD instead of dying with the window.
+
+Known deltas (honest):
+
+- The action panel groups actions by the titles we mapped from the Applications extension; any
+  group name outside `ACTION_GROUP_LABELS` falls back to the raw name.
+- `popToRootType`/`clearRootSearch` options of `closeMainWindow` are accepted and applied to the
+  window-close path, but the "compact" window variant does not exist in the clone.
