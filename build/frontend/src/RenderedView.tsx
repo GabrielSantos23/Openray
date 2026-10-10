@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { RaycastIcon } from "./icons";
 import { markdownTitle, renderMarkdown } from "./markdown";
 import { onNotification } from "./ipc";
+import { isDevExtensions, overrideTestHooks } from "./testHooks";
 import type { PageState } from "./commandPages";
 import type {
   MetadataItem,
@@ -296,11 +297,10 @@ export interface RenderedViewProps {
 
 export function RenderedView({
   page,
-  onSearchTextChange,
   onSelectionChange,
   createCallback,
   onLoadMore,
-}: RenderedViewProps) {
+}: Omit<RenderedViewProps, "onSearchTextChange">) {
   const body = page.body;
   const bodyRef = useRef<HTMLDivElement>(null);
   const loadedPagesFor = useRef(0);
@@ -339,6 +339,22 @@ export function RenderedView({
   );
 
   const selectedItem = visibleItems.find((item) => item.id === selectedId) ?? null;
+
+  // Raycast keeps the selection visible while arrowing: scroll the body so the selected
+  // row/cell stays in view (same manual-geometry approach as the root list).
+  useEffect(() => {
+    const container = bodyRef.current;
+    if (!container) return;
+    const row = container.querySelector<HTMLElement>('[data-selected="true"]');
+    if (!row) return;
+    const rowRect = row.getBoundingClientRect();
+    const viewRect = container.getBoundingClientRect();
+    if (rowRect.top < viewRect.top) {
+      container.scrollTop -= viewRect.top - rowRect.top + 4;
+    } else if (rowRect.bottom > viewRect.bottom) {
+      container.scrollTop += rowRect.bottom - viewRect.bottom + 4;
+    }
+  }, [selectedId, body]);
 
   // `onSelectionChange` fires with `{value, eventCount}` — the eventCount mirrors Raycast's
   // host/extension selection arbitration; we only ever emit from user interaction.
@@ -379,29 +395,10 @@ export function RenderedView({
     void createCallback(callbackId)({ value: selectedId, eventCount: Date.now() % 100000 });
   }, [selectedId, createCallback]);
 
-  const showSearch = body.kind !== "Detail" && body.kind !== "MenuBarExtra";
-
+  // The command search bar (header) IS the List/Grid search — placeholder and accessory are
+  // rendered by the session header, so the body never adds a second input.
   return (
     <div className="command-view">
-      {showSearch ? (
-        <div className="command-view__search">
-          <span className="searchbar__icon" aria-hidden>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" strokeLinecap="round" />
-            </svg>
-          </span>
-          <input
-            value={page.searchText}
-            placeholder={body.searchBarPlaceholder ?? "Search…"}
-            onChange={(event) => onSearchTextChange(event.target.value)}
-          />
-          {body.searchBarAccessory && "sections" in (body.searchBarAccessory ?? {}) ? (
-            <SearchBarDropdown accessory={body.searchBarAccessory} createCallback={createCallback} />
-          ) : null}
-        </div>
-      ) : null}
-
       <div className="command-view__body" ref={bodyRef}>
         {body.kind === "List" && (
           <ListBody
@@ -464,7 +461,7 @@ export function RenderedView({
   );
 }
 
-function SearchBarDropdown({
+export function SearchBarDropdown({
   accessory,
   createCallback,
 }: {
@@ -581,7 +578,11 @@ function ListRow({
         className="list__row"
         data-selected={selected}
         onMouseEnter={() => select(item.id)}
-        onClick={() => select(item.id)}
+        onClick={() => {
+          select(item.id);
+          const primary = item.actions?.[0];
+          if (primary) runAction(primary);
+        }}
       >
         <ItemIcon item={item} />
         <span className="list__text">
@@ -594,8 +595,6 @@ function ListRow({
           ))}
         </span>
       </div>
-      {selected && item.actions?.length ? null : null}
-      <span className="hidden" data-actions={JSON.stringify(item.actions ?? [])} />
     </li>
   );
 }
@@ -745,20 +744,20 @@ function DetailBody({
 const FORM_THROTTLE_MS = 120;
 
 export function validateForm(fields: ViewFormField[], values: Record<string, unknown>): string[] {
-  const errors: string[] = [];
+  const errors = new Set<string>();
   for (const field of fields) {
-    if (field.error) errors.push(field.id);
+    if (field.error) errors.add(field.id);
     if (field.kind === "TextField" || field.kind === "TextArea") {
       const value = values[field.id];
       if (
         (field.title ?? "").endsWith("*") ||
         (field.error ?? "").toLowerCase().includes("required")
       ) {
-        if (typeof value !== "string" || value.trim() === "") errors.push(field.id);
+        if (typeof value !== "string" || value.trim() === "") errors.add(field.id);
       }
     }
   }
-  return errors;
+  return [...errors];
 }
 
 function FormBody({
@@ -855,6 +854,12 @@ function FormBody({
     }
     void createCallback(submitAction.id)(payload);
   }, [submitAction, submitDisabled, fields, values, createCallback]);
+
+  // Dev-only automation: submit the form with the current values through the hook channel.
+  useEffect(() => {
+    if (!isDevExtensions()) return;
+    overrideTestHooks({ submitForm: () => { submit(); return true; } });
+  });
 
   const registerRef = useCallback((id: string) => {
     return (element: HTMLElement | null) => {
@@ -1191,14 +1196,21 @@ export function selectableIds(sections: ViewSection[] | undefined, items: ViewLi
 }
 
 export function gridRowWidths(body: ViewBody): number[] {
+  const widths: number[] = [];
   if (body.sections) {
-    return body.sections.map((section) => Math.max(1, Math.min(8, section.columns ?? body.columns ?? GRID_DEFAULT_COLUMNS)));
+    for (const section of body.sections) {
+      const columns = Math.max(1, Math.min(8, section.columns ?? body.columns ?? GRID_DEFAULT_COLUMNS));
+      const total = section.items.length;
+      for (let index = 0; index < total; index += columns) {
+        widths.push(Math.min(columns, total - index));
+      }
+    }
+    return widths;
   }
   const columns = Math.max(1, Math.min(8, body.columns ?? GRID_DEFAULT_COLUMNS));
-  const rows: number[] = [];
   const total = (body.items ?? []).length;
-  for (let index = 0; index < total; index += columns) rows.push(Math.min(columns, total - index));
-  return rows;
+  for (let index = 0; index < total; index += columns) widths.push(Math.min(columns, total - index));
+  return widths;
 }
 
 export { ActionList, Icon, flatItems };

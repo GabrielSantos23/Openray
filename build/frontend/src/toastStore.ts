@@ -70,7 +70,31 @@ export const hostHud = {
 };
 
 function isLauncherVisible(): boolean {
+  // The host's push is authoritative (WPF Hide() does not always surface as a renderer
+  // visibility event); before the first push arrives, fall back to the document probe.
+  if (hostWindowVisibleTracked !== null) return hostWindowVisibleTracked;
   return typeof document === "undefined" || document.visibilityState === "visible";
+}
+
+let hostWindowVisibleTracked: boolean | null = null;
+
+/**
+ * `window.visibilityChanged` from the host. Also the migration rule: an in-window toast that
+ * outlives the window becomes a HUD — extensions commonly toast right before closing, and the
+ * toast must not die with the window (Raycast's hidden-window -> HUD fallback).
+ */
+export function setHostWindowVisible(visible: boolean): void {
+  hostWindowVisibleTracked = visible;
+  if (!visible && toastStore.get()) {
+    const toast = toastStore.get()!;
+    toastStore.clear();
+    hostHud.show({
+      title: toast.title,
+      message: toast.message,
+      variant: toast.variant,
+      durationMs: toast.variant === "pending" ? undefined : 3000,
+    });
+  }
 }
 
 class ToastStore extends ObservableStore<ToastState | null> {
@@ -101,6 +125,12 @@ class ToastStore extends ObservableStore<ToastState | null> {
       return;
     }
     if (this.toast?.onClose) this.toast.onClose();
+    this.toast = null;
+    this.notify();
+  }
+
+  /** Drop the current toast silently (used when migrating it to the HUD). */
+  clear(): void {
     this.toast = null;
     this.notify();
   }

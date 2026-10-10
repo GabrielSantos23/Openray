@@ -9,12 +9,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import {
   closeMainWindow,
   ipc,
+  ipcRequest,
   installHostMessageListener,
   onNotification,
   openSettings,
 } from "./ipc";
 import { ExtensionCommand, useExtensionCommand, type ViewAction, type ViewBody } from "./useExtensionCommand";
-import { RenderedView, flatItems, gridRowWidths, selectableIds } from "./RenderedView";
+import { RenderedView, SearchBarDropdown, flatItems, gridRowWidths, selectableIds } from "./RenderedView";
 import {
   applyRender,
   emptyPages,
@@ -26,9 +27,11 @@ import {
 } from "./commandPages";
 import { alertStore, type ExtensionAlertPayload } from "./alertStore";
 import AlertHost from "./AlertHost";
+import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "./testHooks";
 import { ActionPanel, type ActionGroup } from "./ActionPanel";
 import {
   hudStore,
+  setHostWindowVisible,
   styleToVariant,
   toastStore,
   type ExtensionHudPayload,
@@ -237,8 +240,9 @@ function buildSections(
   for (const extension of extensions) {
     for (const command of extension.commands ?? []) {
       if (command.mode === "no-view") continue;
-      // Dev-only test extensions stay hidden unless the flag is on (`raycast-mini:dev-extensions=1`).
-      if (extension.name === "command-ux-test" && localStorage.getItem("raycast-mini:dev-extensions") !== "1") continue;
+      // Dev-only test extensions stay hidden unless the flag is on: localStorage
+      // `raycast-mini:dev-extensions=1`, or the host's `--dev-extensions` / env equivalent.
+      if (extension.name === "command-ux-test" && !isDevExtensionsEnabled()) continue;
       const entry: ExtensionEntry = { kind: "extension", extension, command };
       commandSearchables.push({
         title: command.title,
@@ -641,6 +645,8 @@ export function MainWindow() {
   const popToRootTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const handleVisibility = (visible: boolean) => {
+      // The toast store mirrors host visibility: a live in-window toast migrates to the HUD.
+      setHostWindowVisible(visible);
       if (visible) {
         if (popToRootTimerRef.current) {
           clearTimeout(popToRootTimerRef.current);
@@ -681,6 +687,48 @@ export function MainWindow() {
   useEffect(() => {
     marks.marks.push("effects:installed-host-message-listener");
     installHostMessageListener();
+    const refreshExtensions = async () => {
+      const payload = (await ipc.backend("extensionHost.getInstalledNodeExtensionSummaries")) as {
+        extensions?: ExtensionSummary[];
+      };
+      setExtensions(payload.extensions ?? []);
+    };
+    // The host forwards `--dev-extensions` / RAYCAST_MINI_DEV_EXTENSIONS=1; the push can race this
+    // module's first render, so the flag is also pulled once here.
+    const pullDevFlag = async () => {
+      try {
+        const value = (await ipcRequest("window.getDevExtensions", {}, { module: "frontend" })) as {
+          enabled?: boolean;
+        } | null;
+        if (value?.enabled === true) {
+          setDevExtensions(true);
+          void refreshExtensions();
+        }
+      } catch {
+        /* best-effort: the flag stays off without a host object (browser harness) */
+      }
+    };
+    void pullDevFlag();
+    // The host push (and any later flip) refreshes the list too.
+    const offDev = onNotification("window.devExtensions", (raw) => {
+      const payload = raw as { enabled?: boolean };
+      if (payload.enabled !== true) return;
+      setDevExtensions(true);
+      void refreshExtensions().catch(() => undefined);
+    });
+    // Dev automation channel: an external driver posts a script through the pipe, the renderer
+    // turns it into a real `window.eval` host call (which logs the result for the driver).
+    const offTestScript = onNotification("window.runTestScript", (raw) => {
+      const payload = raw as { script?: string };
+      if (!payload.script || !isDevExtensionsEnabled()) return;
+      void ipcRequest("window.eval", { script: payload.script }, { module: "frontend" }).catch(
+        () => undefined,
+      );
+    });
+    return () => {
+      offDev();
+      offTestScript();
+    };
   }, []);
 
   // The Clipboard History global hotkey asks the host to reveal the launcher already pointing at that
@@ -874,6 +922,28 @@ export function MainWindow() {
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
 
+  // Dev-only automation hooks (`--dev-extensions`), driven through the host's `window.eval`.
+  useEffect(() => {
+    if (!isDevExtensionsEnabled()) return;
+    installTestHooks({
+      openCommand: (query) => {
+        const q = query.toLowerCase();
+        const match = entries.find(
+          (entry) => entry.kind === "extension" && entry.command.title.toLowerCase().includes(q),
+        );
+        if (!match || match.kind !== "extension") return null;
+        setSelected(match);
+        return { title: match.command.title };
+      },
+      rootSearch: (query) => {
+        setSelected(null);
+        setSearchText(query);
+      },
+      press: () => false,
+      state: () => ({ view: "root", entries: entries.length, search: searchText }),
+    });
+  }, [entries, searchText]);
+
   const selectedEntry = entries[selectedIndex];
   panelOpenRef.current = openApplication !== null || commandPanelEntry !== null;
 
@@ -1006,7 +1076,9 @@ export function MainWindow() {
   // selection and scroll-follow the list no matter where focus is — Raycast's root search behaves
   // the same way whether you click the input or a row. Also handles Ctrl+K (action panel) and Enter.
   useEffect(() => {
-    if (panelOpenRef.current) return;
+    // A running command owns the keyboard (CommandViewKeyboard); the root list must not also
+    // react to the same keystroke or arrows/Enter "leak" into the search page underneath.
+    if (panelOpenRef.current || selected) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key;
       if (key === "Escape") return; // dedicated Escape handler below
@@ -1665,14 +1737,64 @@ function CommandSession({
   }, [command.sessionId, popToRoot, setSearchText]);
 
   const body = topPage(pages)?.body;
+  // Effective selection: the keyboard, the action groups and the test hooks operate on the row
+  // that is actually highlighted — a fresh page has no stored selection, and Raycast's fallback
+  // is the first item. Without this, the first ArrowDown only "fills in" the already-highlighted
+  // first row and looks like a dead key.
+  const bodyItems = useMemo(() => (body ? flatItems(body) : []), [body]);
+  const effectiveSelectedId = useMemo(() => {
+    if (selectedItemId && bodyItems.some((item) => item.id === selectedItemId)) return selectedItemId;
+    return bodyItems[0]?.id ?? null;
+  }, [selectedItemId, bodyItems]);
+
   const groups: ActionGroup[] = useMemo(() => {
     if (entry.kind !== "extension" || !body) return [];
-    const itemActions = flatItems(body)
-      .filter((item) => item.id === selectedItemId)
+    const itemActions = bodyItems
+      .filter((item) => item.id === effectiveSelectedId)
       .flatMap((item) => item.actions ?? []);
     const models = [...(body.actions ?? []), ...itemActions];
     return models.length ? [{ name: "actions", actions: models }] : [];
-  }, [entry, body, selectedItemId]);
+  }, [entry, body, bodyItems, effectiveSelectedId]);
+
+  // Dev-only automation hooks for the running command (see testHooks.ts).
+  useEffect(() => {
+    if (!isDevExtensionsEnabled() || entry.kind !== "extension") return;
+    const runPrimary = () => {
+      if (!body) return false;
+      const items = bodyItems;
+      const selected = items.find((item) => item.id === effectiveSelectedId) ?? items[0];
+      const primary = selected?.actions?.[0] ?? body.actions?.[0];
+      if (!primary) return false;
+      void command.createCallback(primary.id)({ itemId: primary.itemId });
+      return true;
+    };
+    overrideTestHooks({
+      press: (key) => {
+        if (key === "enter") return runPrimary();
+        if (key === "pop") {
+          popOne();
+          return true;
+        }
+        if (key === "popToRoot") {
+          popToRoot();
+          return true;
+        }
+        if (key === "escape") {
+          onBack();
+          return true;
+        }
+        return false;
+      },
+      state: () => ({
+        view: "command",
+        command: entry.command.title,
+        pages: pages.pages.length,
+        kind: body?.kind ?? null,
+        selectedItemId,
+        searchText,
+      }),
+    });
+  });
 
   if (entry.kind === "clipboard") {
     return (
@@ -1703,12 +1825,14 @@ function CommandSession({
           </svg>
         </button>
         <div className="searchbar">
+          {/* Raycast's single search bar: the command view's input doubles as the List/Grid search
+              (placeholder + accessory come from the current page's body) — never a second input. */}
           <input
             ref={searchInputRef}
             className="searchbar__input"
             autoFocus
             value={searchText}
-            placeholder={`Filter ${entry.command.title}…`}
+            placeholder={body?.searchBarPlaceholder ?? `Filter ${entry.command.title}…`}
             onChange={(event) => setSearchText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key.toLowerCase() === "k" && (event.ctrlKey || event.metaKey)) {
@@ -1729,6 +1853,9 @@ function CommandSession({
               }
             }}
           />
+          {body?.searchBarAccessory && "sections" in body.searchBarAccessory ? (
+            <SearchBarDropdown accessory={body.searchBarAccessory} createCallback={command.createCallback} />
+          ) : null}
         </div>
         <button
           type="button"
@@ -1762,7 +1889,7 @@ function CommandSession({
         ) : body ? (
           <CommandViewKeyboard
             body={body}
-            selectedItemId={selectedItemId}
+            selectedItemId={effectiveSelectedId}
             onSelectionChange={setSelectedItemId}
             onPopOne={popOne}
             onPopToRoot={popToRoot}
@@ -1772,7 +1899,6 @@ function CommandSession({
           >
             <RenderedView
               page={topPage(pages)!}
-              onSearchTextChange={setSearchText}
               onSelectionChange={setSelectedItemId}
               createCallback={command.createCallback}
               onLoadMore={() => {
@@ -1882,7 +2008,9 @@ function CommandViewKeyboard({
         }
         return;
       }
-      if (event.key === "Enter" && !inSearch) {
+      if (event.key === "Enter") {
+        // Enter runs the selected item's primary action from anywhere in the command view —
+        // including the search input, which keeps focus by design (keepSearchFocus).
         const selected = items.find((item) => item.id === selectedItemId) ?? items[0];
         const primary = selected?.actions?.[0];
         if (primary) {

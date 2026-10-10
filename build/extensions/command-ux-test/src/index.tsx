@@ -10,7 +10,7 @@
 //   6. grid              — sections with per-section columns/aspect/fit/inset, empty view with actions
 //   7. list              — accessories, sections, empty view with actions, dropdown, detail pane, pagination
 
-import { Action, ActionPanel, Alert, confirmAlert, Detail, Form, Grid, Icon, List, showToast, Toast, useNavigation } from "@raycast/api";
+import { Action, ActionPanel, Alert, closeMainWindow, confirmAlert, Detail, Form, Grid, Icon, List, showToast, Toast, useNavigation } from "@raycast/api";
 import { useState } from "react";
 
 const DETAIL_MARKDOWN = [
@@ -281,6 +281,23 @@ function ToastsPage() {
                   secondaryAction: { title: "Report", onAction: () => showToast({ title: "Reported" }) },
                 })
               }
+            />
+          </ActionPanel>
+        }
+      />
+      <List.Item
+        id="hidden-hud"
+        title="HUD toast (closes window)"
+        subtitle="toast fired while the launcher is hidden"
+        actions={
+          <ActionPanel>
+            <Action
+              title="Close and toast"
+              onAction={async () => {
+                await closeMainWindow();
+                await new Promise((resolve) => setTimeout(resolve, 250));
+                await showToast({ title: "Saved in background", message: "HUD while hidden" });
+              }}
             />
           </ActionPanel>
         }
