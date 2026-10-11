@@ -1,8 +1,9 @@
 // Inline sections for Raycast root search
-// Calculator, Quicklinks, Snippets, Web Search Suggestions
+// Calculator, Snippets, Web Search Suggestions.
+// (Quicklinks moved to the real internal extension — see docs/quicklinks-spec.md.)
 
 export interface InlineSectionResult {
-  type: "calculator" | "quicklink" | "snippet" | "web-search";
+  type: "calculator" | "snippet" | "web-search";
   title: string;
   subtitle: string;
   action: (query: string, closeWindow?: () => void) => void;
@@ -223,66 +224,6 @@ export function evaluateCalculator(query: string): InlineSectionResult | null {
   return null;
 }
 
-// Quicklinks section - user-defined quicklinks
-export interface Quicklink {
-  id: string;
-  title: string;
-  url: string;
-  description?: string;
-}
-
-const DEFAULT_QUICKLINKS: Quicklink[] = [
-  { id: "github", title: "GitHub", url: "https://github.com", description: "Code hosting platform" },
-  { id: "stackoverflow", title: "Stack Overflow", url: "https://stackoverflow.com", description: "Q&A for programmers" },
-  { id: "mdn", title: "MDN Web Docs", url: "https://developer.mozilla.org", description: "Web technology documentation" },
-];
-
-export function loadQuicklinks(): Quicklink[] {
-  try {
-    const stored = localStorage.getItem("raycast-mini:quicklinks");
-    if (stored) {
-      return JSON.parse(stored) as Quicklink[];
-    }
-  } catch {
-    // Ignore errors
-  }
-  return DEFAULT_QUICKLINKS;
-}
-
-export function saveQuicklinks(quicklinks: Quicklink[]): void {
-  try {
-    localStorage.setItem("raycast-mini:quicklinks", JSON.stringify(quicklinks));
-  } catch {
-    // Ignore errors
-  }
-}
-
-export function searchQuicklinks(query: string): InlineSectionResult[] {
-  const trimmed = query.trim().toLowerCase();
-  if (trimmed.length === 0) return [];
-
-  const quicklinks = loadQuicklinks();
-  const results: InlineSectionResult[] = [];
-
-  for (const link of quicklinks) {
-    const titleMatch = link.title.toLowerCase().includes(trimmed);
-    const descMatch = link.description?.toLowerCase().includes(trimmed) ?? false;
-    const urlMatch = link.url.toLowerCase().includes(trimmed);
-
-    if (titleMatch || descMatch || urlMatch) {
-      results.push({
-        type: "quicklink",
-        title: link.title,
-        subtitle: link.description ?? link.url,
-        action: () => window.open(link.url, "_blank", "noopener"),
-        keywords: [link.title.toLowerCase(), link.description?.toLowerCase() ?? "", link.url.toLowerCase()].filter(Boolean),
-      });
-    }
-  }
-
-  return results;
-}
-
 // Snippets section - user-defined text snippets
 export interface Snippet {
   id: string;
@@ -394,9 +335,6 @@ export function getInlineSectionResults(query: string): InlineSectionResult[] {
   const calc = evaluateCalculator(query);
   if (calc) results.push(calc);
 
-  // Quicklinks
-  results.push(...searchQuicklinks(query));
-
   // Snippets
   results.push(...searchSnippets(query));
 
@@ -409,14 +347,12 @@ export function getInlineSectionResults(query: string): InlineSectionResult[] {
 // Settings for inline sections
 export interface InlineSectionSettings {
   calculator: boolean;
-  quicklinks: boolean;
   snippets: boolean;
   webSearch: boolean;
 }
 
 export const DEFAULT_INLINE_SECTION_SETTINGS: InlineSectionSettings = {
   calculator: true,
-  quicklinks: true,
   snippets: true,
   webSearch: true,
 };

@@ -425,6 +425,35 @@ const PAGES: readonly PageDefinition[] = [
     sections: [],
   },
   {
+    id: "quicklinks",
+    title: "Quicklinks",
+    description: "Configure Quicklinks behavior and command settings.",
+    icon: "link",
+    keywords: [
+      "quicklinks", "link previews", "tabs", "quicklinks", "selected text", "argument", "hotkey", "quick search",
+    ],
+    sections: [
+      {
+        id: "quicklinks",
+        rows: [
+          {
+            id: "quicklinks-pass-selected-text",
+            title: "Pass Selected Text as Argument",
+            description:
+              "When enabled, Raycast will automatically pass selected text from the active application to Quicklinks with a single argument when invoked via hotkey.",
+            control: "switch",
+          },
+          {
+            id: "quicklinks-warn-before-delete",
+            title: "Show Warning Before Deleting Quicklinks",
+            description: "Ask for confirmation before a quicklink is deleted.",
+            control: "switch",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "clipboard-history",
     title: "Clipboard History",
     description:
@@ -658,6 +687,7 @@ const SIDEBAR_PAGE_IDS = [
   "launcher",
   "shortcuts",
   "keyboard",
+  "quicklinks",
   "clipboard-history",
   "cloud-sync",
   "advanced",
@@ -692,6 +722,8 @@ const CLIPBOARD_ROW_IDS = new Set([
   "clipboard-add-newline-after-paste",
   "clipboard-paste-sequence-timeout",
 ]);
+
+const QUICKLINKS_ROW_IDS = new Set(["quicklinks-pass-selected-text", "quicklinks-warn-before-delete"]);
 
 const DEFAULTS: SettingsMap = {
   "follow-system-appearance": true,
@@ -1412,6 +1444,33 @@ export function Settings() {
     }
   }, []);
 
+  // Quicklinks preferences: the selected-text pref lives in the backend store, the delete warning
+  // is the renderer-side flag the quicklinks view reads.
+  useEffect(() => {
+    ipc
+      .backend("quicklinks.getPreferences", {}, { module: "backend" })
+      .then((response) => {
+        const preferences = response as { passSelectedTextAsArgument?: boolean };
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "quicklinks-pass-selected-text": Boolean(preferences.passSelectedTextAsArgument),
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+    const warn = localStorage.getItem("raycast-mini:quicklinks-warn-delete") !== "0";
+    setValues((current) => {
+      const merged = { ...current, "quicklinks-warn-before-delete": warn };
+      persistSettings(merged);
+      return merged;
+    });
+  }, []);
+
   const setValue = useCallback((id: string, next: SettingsValue) => {
     setValues((current) => {
       const merged = { ...current, [id]: next };
@@ -1419,6 +1478,20 @@ export function Settings() {
       return merged;
     });
 
+    if (QUICKLINKS_ROW_IDS.has(id)) {
+      if (id === "quicklinks-pass-selected-text") {
+        void ipc
+          .backend(
+            "quicklinks.setPreference",
+            { key: "passSelectedTextAsArgument", value: Boolean(next) },
+            { module: "backend" },
+          )
+          .catch(() => undefined);
+      } else if (id === "quicklinks-warn-before-delete") {
+        localStorage.setItem("raycast-mini:quicklinks-warn-delete", next ? "1" : "0");
+      }
+      return;
+    }
     if (!CLIPBOARD_ROW_IDS.has(id)) {
       if (id === "root-search-sensitivity") {
         const sensitivity = SENSITIVITY_MAP[String(next)] ?? "medium";

@@ -26,6 +26,7 @@
 const path = require("node:path");
 const { createBackend } = require("./backend");
 const { createClipboardHistory } = require("./clipboard-history");
+const { createQuicklinks } = require("./quicklinks");
 const { createFileIndexer } = require("./file-indexer");
 const { createUsageTracker } = require("./usage-tracker");
 
@@ -58,9 +59,17 @@ const clipboard = createClipboardHistory({
 });
 backend.registerClipboardHandler(clipboard.handlers);
 
-  // File indexer
-  const fileIndexer = createFileIndexer({});
-  backend.registerFileIndexerHandler(fileIndexer.handlers);
+// Quicklinks is likewise an internal extension persisted in this process (`quicklinks.*`). Links
+// resolve through the shared placeholder engine before the host opens them.
+const quicklinks = createQuicklinks({
+  dispatch: (method, data) => backend.dispatch("backend", method, data),
+  pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+});
+backend.registerQuicklinksHandler(quicklinks.handlers);
+
+// File indexer
+const fileIndexer = createFileIndexer({});
+backend.registerFileIndexerHandler(fileIndexer.handlers);
 
   // Usage tracker
   const usageTracker = createUsageTracker({});

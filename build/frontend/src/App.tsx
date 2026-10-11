@@ -93,6 +93,8 @@ import {
   useApplicationGroups,
 } from "./applications";
 import { ClipboardHistoryView } from "./ClipboardHistoryView";
+import { ArgsForm as QuicklinkArgsForm, QuicklinksView, type ArgsState as QuicklinkArgsState } from "./QuicklinksView";
+import { isLikelyUrl, openQuicklink, setPendingCreateLink, useQuicklinks, type QuicklinkEntry } from "./quicklinks";
 import {
   CLIPBOARD_AREA,
   plainTextOf,
@@ -150,6 +152,28 @@ interface ClipboardEntryResult {
   commandId: string;
 }
 
+/** The Quicklinks internal extension: the search view plus one root row per stored quicklink. */
+interface QuicklinksCommandEntry {
+  kind: "quicklinks";
+  commandId: string;
+}
+
+interface QuicklinkRowEntry {
+  kind: "quicklink";
+  quicklink: QuicklinkEntry;
+}
+
+/** `createWithURL`: offered while the search term itself is a URL. */
+interface QuicklinkCreateEntry {
+  kind: "quicklink-create";
+  link: string;
+}
+
+const QUICKLINKS_COMMAND: QuicklinksCommandEntry = {
+  kind: "quicklinks",
+  commandId: "quicklinks/search",
+};
+
 /**
  * Fallback command entry - shown when no results match the search query.
  */
@@ -174,7 +198,7 @@ interface InlineEntry {
   result: InlineSectionResult;
 }
 
-type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | FallbackCommandEntry | FileEntry | InlineEntry;
+type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | QuicklinksCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | InlineEntry;
 
 interface SearchableEntry {
   title: string;
@@ -217,7 +241,8 @@ function buildSections(
   usageScores: Map<string, number>,
   fallbackCommands: FallbackCommand[],
   fileResults: FileSearchResult[],
-  inlineResults: InlineSectionResult[]
+  inlineResults: InlineSectionResult[],
+  quicklinkRows: QuicklinkEntry[]
 ): RootSection[] {
   // Build searchable entries for all applications
   const appSearchables: SearchableEntry[] = applications.map((app) => ({
@@ -234,6 +259,22 @@ function buildSections(
     keywords: ["clipboard history clipboard"],
     rootEntry: CLIPBOARD_COMMAND,
   };
+
+  const quicklinksCommandSearchable: SearchableEntry = {
+    title: "Search Quicklinks",
+    subtitle: "Search all your quicklinks.",
+    keywords: ["quicklinks"],
+    rootEntry: QUICKLINKS_COMMAND,
+  };
+
+  // Dynamic quicklink rows: title = name, keywords include the `quicklink` tag (Raycast's
+  // `dynamicCommands.quicklink`).
+  const quicklinkSearchables: SearchableEntry[] = quicklinkRows.map((entry) => ({
+    title: entry.name,
+    subtitle: entry.link,
+    keywords: ["quicklink", ...entry.tags.map((tag) => tag.toLowerCase())],
+    rootEntry: { kind: "quicklink" as const, quicklink: entry },
+  }));
 
   // Build searchable entries for extension commands
   const commandSearchables: SearchableEntry[] = [];
@@ -254,7 +295,7 @@ function buildSections(
   }
 
   // Combine all searchable entries
-  const allSearchables = [...appSearchables, clipboardSearchable, ...commandSearchables];
+  const allSearchables = [...appSearchables, clipboardSearchable, quicklinksCommandSearchable, ...commandSearchables, ...quicklinkSearchables];
 
   // Rank all entries using the full Raycast algorithm with fallback support
   const { results: ranked, showFallbacks } = rankEntriesWithFallbacks(
@@ -309,6 +350,9 @@ function buildSections(
   const clipboardEntries = favorites.includes(CLIPBOARD_FAVORITE_KEY)
     ? []
     : regularResults.filter((r) => r.entry.rootEntry.kind === "clipboard").map((r) => r.entry.rootEntry);
+  const quicklinksCommandEntries = regularResults
+    .filter((r) => r.entry.rootEntry.kind === "quicklinks")
+    .map((r) => r.entry.rootEntry);
   const commands = regularResults
     .filter((r) => r.entry.rootEntry.kind === "extension")
     .map((r) => r.entry.rootEntry);
@@ -325,9 +369,9 @@ function buildSections(
   const calculatorEntries = inlineResults
     .filter((r) => r.type === "calculator")
     .map((result) => ({ kind: "inline" as const, result }));
-  const quicklinkEntries = inlineResults
-    .filter((r) => r.type === "quicklink")
-    .map((result) => ({ kind: "inline" as const, result }));
+  const quicklinkCreateEntries: QuicklinkCreateEntry[] = isLikelyUrl(query)
+    ? [{ kind: "quicklink-create", link: query.trim() }]
+    : [];
   const snippetEntries = inlineResults
     .filter((r) => r.type === "snippet")
     .map((result) => ({ kind: "inline" as const, result }));
@@ -350,13 +394,18 @@ function buildSections(
   }
 
   // Commands section
-  if (clipboardEntries.length > 0 || commands.length > 0) {
-    sections.push({ id: "commands", title: "Commands", icon: "Blocks", entries: [...clipboardEntries, ...commands] });
+  if (clipboardEntries.length > 0 || quicklinksCommandEntries.length > 0 || commands.length > 0) {
+    sections.push({ id: "commands", title: "Commands", icon: "Blocks", entries: [...clipboardEntries, ...quicklinksCommandEntries, ...commands] });
   }
 
-  // Quicklinks section
-  if (quicklinkEntries.length > 0) {
-    sections.push({ id: "quicklinks", title: "Quicklinks", icon: "link", entries: quicklinkEntries });
+  // Quicklinks section: the createWithURL entry, then dynamic quicklink rows. Dynamic rows only
+  // show while searching — Raycast's dynamic quicklink commands are searchable, not always visible.
+  const searching = query.trim().length > 0;
+  const quicklinkRowsShown = searching
+    ? regularResults.filter((r) => r.entry.rootEntry.kind === "quicklink").map((r) => r.entry.rootEntry)
+    : [];
+  if (quicklinkCreateEntries.length > 0 || quicklinkRowsShown.length > 0) {
+    sections.push({ id: "quicklinks", title: "Quicklinks", icon: "link", entries: [...quicklinkCreateEntries, ...quicklinkRowsShown] });
   }
 
   // Snippets section
@@ -475,6 +524,10 @@ export function MainWindow() {
   const [fileUsageScores, setFileUsageScores] = useState(() => loadFileUsageScores());
   const [inlineSectionSettings, setInlineSectionSettings] = useState(() => loadInlineSectionSettings());
   const [inlineResults, setInlineResults] = useState<InlineSectionResult[]>([]);
+  // Quicklinks: one root row per stored quicklink, refreshed on `quicklinks.updated`.
+  const { quicklinks: quicklinkRows } = useQuicklinks();
+  const [quicklinkArgs, setQuicklinkArgs] = useState<QuicklinkEntry | null>(null);
+  const [quicklinkCreateLink, setQuicklinkCreateLink] = useState<string | null>(null);
   // Argument input state
   const [argumentEntry, setArgumentEntry] = useState<ExtensionEntry | null>(null);
   const [argumentValues, setArgumentValues] = useState<ArgumentValues>({});
@@ -611,7 +664,6 @@ export function MainWindow() {
     
     const results = getInlineSectionResults(searchText).filter((r) => {
       if (r.type === "calculator" && !inlineSectionSettings.calculator) return false;
-      if (r.type === "quicklink" && !inlineSectionSettings.quicklinks) return false;
       if (r.type === "snippet" && !inlineSectionSettings.snippets) return false;
       if (r.type === "web-search" && !inlineSectionSettings.webSearch) return false;
       return true;
@@ -916,8 +968,8 @@ export function MainWindow() {
   // Root Search renders Favorites / Applications / Commands as named sections, exactly like
   // Raycast's root search, and the flat selection index walks all of them in order.
   const sections = useMemo(
-    () => buildSections(searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults),
-    [searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults],
+    () => buildSections(searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows),
+    [searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows],
   );
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
@@ -986,8 +1038,30 @@ export function MainWindow() {
     if (entry.kind === "application") setOpenApplication(entry.application);
     // Extension commands AND the Clipboard History entry get the command action panel —
     // Ctrl+K must never run the command directly.
-    else if (entry.kind !== "fallback" && entry.kind !== "file" && entry.kind !== "inline") setCommandPanelEntry(entry);
+    else if (entry.kind === "quicklinks" || entry.kind === "quicklink-create") setSelected(entry);
+    else if (entry.kind !== "fallback" && entry.kind !== "file" && entry.kind !== "inline" && entry.kind !== "quicklink") setCommandPanelEntry(entry);
   }, []);
+
+  // Opening a quicklink from root search: required placeholders collect their values through the
+  // shared argument form first (Raycast's `/snippets/argument-form`), then the backend resolves the
+  // link and the host opens it.
+  const openQuicklinkRow = useCallback(
+    (entry: QuicklinkEntry) => {
+      if (entry.argsError) {
+        showToast("Unable to open quicklink", entry.argsError);
+        return;
+      }
+      if (entry.args.some((arg) => arg.required && !arg.value)) {
+        setQuicklinkArgs(entry);
+        return;
+      }
+      closeMainWindow();
+      void openQuicklink(entry.id, entry.args.map((arg) => arg.value)).catch((error) => {
+        showToast("Unable to open quicklink", error instanceof Error ? error.message : String(error));
+      });
+    },
+    [closeMainWindow, showToast],
+  );
 
 
 // Argument input helpers
@@ -1078,7 +1152,7 @@ export function MainWindow() {
   useEffect(() => {
     // A running command owns the keyboard (CommandViewKeyboard); the root list must not also
     // react to the same keystroke or arrows/Enter "leak" into the search page underneath.
-    if (panelOpenRef.current || selected) return;
+    if (panelOpenRef.current || selected || quicklinkArgs) return;
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key;
       if (key === "Escape") return; // dedicated Escape handler below
@@ -1114,6 +1188,13 @@ export function MainWindow() {
           });
         }
         if (entry.kind === "application") openApplicationEntry(entry.application);
+        else if (entry.kind === "quicklink") openQuicklinkRow(entry.quicklink);
+        else if (entry.kind === "quicklinks") setSelected(entry);
+        else if (entry.kind === "quicklink-create") {
+          setQuicklinkCreateLink(entry.link);
+          setPendingCreateLink(entry.link);
+          setSelected(QUICKLINKS_COMMAND);
+        }
         else if (entry.kind === "extension" && hasArguments(entry.command)) {
           // Show argument input UI
           const args = getCommandArguments(entry.command);
@@ -1132,7 +1213,7 @@ export function MainWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, openRootActionPanel]);
+  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel]);
 
   // Escape closes the launcher, matching Raycast: the window hides and the global hotkey brings it
   // back. While the action panel is open it owns Escape (capture handler + stopPropagation), and a
@@ -1201,6 +1282,9 @@ export function MainWindow() {
           onBack={() => setSelected(null)}
           showToast={showToast}
           closeMainWindow={closeMainWindow}
+          applications={applications}
+          createLink={quicklinkCreateLink}
+          onConsumeCreateLink={() => setQuicklinkCreateLink(null)}
         />
         <AlertHost />
       </>
@@ -1364,6 +1448,21 @@ export function MainWindow() {
         </div>
       )}
 
+      {quicklinkArgs ? (
+        <QuicklinkArgsForm
+          state={{ entry: quicklinkArgs, values: quicklinkArgs.args.map((arg) => arg.value), error: null } satisfies QuicklinkArgsState}
+          onCancel={() => setQuicklinkArgs(null)}
+          onSubmit={async (values) => {
+            const entry = quicklinkArgs;
+            setQuicklinkArgs(null);
+            closeMainWindow();
+            await openQuicklink(entry.id, values).catch((error) => {
+              showToast("Unable to open quicklink", error instanceof Error ? error.message : String(error));
+            });
+          }}
+        />
+      ) : null}
+
       <main className="window__body" ref={bodyRef}>
         {hostError || applicationsError ? (
           <div className="state">
@@ -1462,6 +1561,76 @@ export function MainWindow() {
                             </span>
                           </button>
                         </li>
+                      ) : entry.kind === "quicklink" ? (
+                        <li key={`quicklink:${entry.quicklink.id}`}>
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => openQuicklinkRow(entry.quicklink)}
+                          >
+                            <span className="icon" aria-hidden>
+                              <RaycastIcon name="link" size={16} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">{entry.quicklink.name}</span>
+                              <span className="list__subtitle">{entry.quicklink.link}</span>
+                            </span>
+                            <span className="list__accessory">
+                              {entry.quicklink.args.length > 0 ? (
+                                <span className="pill">{entry.quicklink.args.length} args</span>
+                              ) : null}
+                              <span className="pill">Quicklink</span>
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "quicklink-create" ? (
+                        <li key="quicklink:create-with-url">
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => {
+                              setQuicklinkCreateLink(entry.link);
+                              setPendingCreateLink(entry.link);
+                              setSelected(QUICKLINKS_COMMAND);
+                            }}
+                          >
+                            <span className="icon" aria-hidden>
+                              <RaycastIcon name="plus" size={16} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">Create Quicklink</span>
+                              <span className="list__subtitle">{entry.link}</span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="pill">Quicklink</span>
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "quicklinks" ? (
+                        <li key={`quicklinks:${entry.commandId}`}>
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => setSelected(entry)}
+                          >
+                            <span className="icon" aria-hidden>
+                              <RaycastIcon name="link" size={16} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">Search Quicklinks</span>
+                              <span className="list__subtitle">Search all your quicklinks.</span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="pill">view</span>
+                            </span>
+                          </button>
+                        </li>
                       ) : entry.kind === "fallback" ? (
                         <li key={`fallback:${entry.command.id}`}>
                           <button
@@ -1496,7 +1665,6 @@ export function MainWindow() {
                           >
                             <span className="icon" aria-hidden>
                               {entry.result.type === "calculator" && <RaycastIcon name="calculator" size={16} />}
-                              {entry.result.type === "quicklink" && <RaycastIcon name="link" size={16} />}
                               {entry.result.type === "snippet" && <RaycastIcon name="copy" size={16} />}
                               {entry.result.type === "web-search" && entry.result.icon && (
                                 <span className="web-search-icon" dangerouslySetInnerHTML={{ __html: entry.result.icon }} />
@@ -1651,11 +1819,17 @@ function CommandSession({
   onBack,
   showToast,
   closeMainWindow: closeWindow,
+  applications,
+  createLink,
+  onConsumeCreateLink,
 }: {
   entry: RootEntry;
   onBack: () => void;
   showToast: (title: string, message?: string) => void;
   closeMainWindow: () => void;
+  applications: ApplicationCommand[];
+  createLink?: string | null;
+  onConsumeCreateLink?: () => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const toastGroups = useToastActionGroups();
@@ -1807,6 +1981,21 @@ function CommandSession({
         runEntryAction={runClipboardEntryAction}
         closeMainWindow={closeWindow}
         openUrl={openClipboardUrl}
+      />
+    );
+  }
+
+  if (entry.kind === "quicklinks") {
+    return (
+      <QuicklinksView
+        searchText={searchText}
+        onSearchTextChange={setSearchText}
+        showToast={showToast}
+        onBack={onBack}
+        closeMainWindow={closeWindow}
+        applications={applications}
+        createLink={createLink}
+        onConsumeCreateLink={onConsumeCreateLink}
       />
     );
   }

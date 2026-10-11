@@ -50,6 +50,7 @@ function createBackend(options) {
   const pushSubscribers = new Set();
   // `clipboard.<method>` + `clipboardHistory.<method>`; installed by `index.js`.
   let clipboardHandlers = {};
+  let quicklinksHandlers = {};
   let fileIndexerHandlers = {};
   let usageTrackerHandlers = {};
 
@@ -653,6 +654,13 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
+      // Quicklinks (`ipc.backend.quicklinks.*`)
+      if (method.startsWith("quicklinks.")) {
+        const name = method.slice(method.indexOf(".") + 1);
+        const handler = quicklinksHandlers[name];
+        if (handler) return handler(data ?? {});
+      }
+
       // Usage tracker (`ipc.backend.usage.*`)
       if (method.startsWith("usage.")) {
         const name = method.slice(method.indexOf(".") + 1);
@@ -706,6 +714,10 @@ function createBackend(options) {
     /** Install the clipboard-history handler table (Raycast's `handler::clipboard-history`). */
     registerClipboardHandler(handlers) {
       clipboardHandlers = handlers ?? {};
+    },
+    /** Install the quicklinks handler table. */
+    registerQuicklinksHandler(handlers) {
+      quicklinksHandlers = handlers ?? {};
     },
     /** Install the file indexer handler table. */
     registerFileIndexerHandler(handlers) {
