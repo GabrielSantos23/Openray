@@ -1,0 +1,358 @@
+/* ---- Translator (docs/translator-spec.md) ---- */
+
+.command-tile--translator {
+  background: linear-gradient(140deg, #6fd7e4 0%, #2b9fb5 100%);
+}
+
+.calc-row.translate-row .calc-row__answer.translate-row__pending {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* The shipped Translate view: top bar with the two language selectors over side-by-side source
+   and result panes, a hairline divider, and the swap button floating bottom-center. The blue
+   glow at the top mirrors the shipped window's gradient. */
+
+.translate-window {
+  background:
+    radial-gradient(90% 55% at 50% -8%, rgba(59, 108, 212, 0.2), transparent 62%),
+    var(--color-window-bg);
+}
+
+.translate-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.translate-topbar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  height: var(--window-header-height);
+  min-height: var(--window-header-height);
+}
+
+.translate-back {
+  position: absolute;
+  left: var(--space-12);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.translate-topbar__pane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.translate-language {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: var(--font-weight-500);
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.translate-language:hover {
+  background: var(--color-surface-list-hover);
+}
+
+.translate-language svg {
+  color: var(--color-text-secondary);
+  flex: none;
+}
+
+.translate-language__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.translate-panes {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+}
+
+.translate-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-12) var(--space-24) var(--space-40);
+}
+
+.translate-pane__input {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 22px;
+  font-weight: var(--font-weight-400);
+  line-height: 1.45;
+  font-family: inherit;
+}
+
+.translate-pane__input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.translate-divider {
+  background: var(--color-border-separator);
+}
+
+.translate-pane__output {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  color: var(--color-text-primary);
+  font-size: 22px;
+  font-weight: var(--font-weight-400);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.translate-pane__output:empty::before {
+  content: "Translation";
+  color: var(--color-text-placeholder);
+}
+
+.translate-pane__output--pending {
+  color: var(--color-text-secondary);
+}
+
+.translate-pane__output--failed {
+  color: var(--color-text-placeholder);
+  font-style: italic;
+}
+
+.translate-swap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--color-border-secondary);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-control);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.translate-swap:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-list-hover);
+}
+
+.translate-counters {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  margin-right: var(--space-8);
+}
+
+/* The language dropdown: the app's standard .settings-menu popover, anchored centered under
+   the selector (the separate `translate` property composes with the open animation's scale). */
+
+.translate-language-anchor {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.translate-menu.settings-menu {
+  left: 50%;
+  right: auto;
+  translate: -50% 0;
+  min-width: 230px;
+  max-width: 300px;
+  max-height: 46vh;
+}
+
+.translate-menu__group {
+  padding: var(--space-8) var(--space-8) var(--space-6);
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.translate-menu__item {
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  border-radius: var(--radius-6);
+  margin: 1px 0;
+}
+
+.translate-menu__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.translate-menu__item svg {
+  flex: none;
+  color: var(--color-text-secondary);
+}
+
+/* ---- Settings: translator custom commands ---- */
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.settings-overlay__panel {
+  position: relative;
+  z-index: 1;
+  min-width: 320px;
+  max-width: 460px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--space-16);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 12px;
+  background: var(--color-settings-popover);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+.translator-command-form__title {
+  margin-bottom: var(--space-12);
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: var(--font-weight-600);
+}
+
+.translator-command-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--space-12);
+}
+
+.translator-command-form__label {
+  color: var(--color-text-primary);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-500);
+}
+
+.translator-command-form__hint {
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+}
+
+.translator-command-form__select,
+.translator-command-form__input {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 7px;
+  background: var(--color-surface-input-field);
+  color: var(--color-text-primary);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.translator-command-form__input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.translator-command-form__error {
+  color: #ff8a80;
+  font-size: 11px;
+}
+
+.translator-command-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
+}
+
+.settings-button--primary {
+  background: var(--color-brand-red);
+  border-color: transparent;
+  color: #fff;
+}
+
+.settings-button--danger {
+  background: #d64545;
+  border-color: transparent;
+  color: #fff;
+}
+
+.translator-menu {
+  min-width: 220px;
+  padding: 6px;
+}
+
+.translator-menu__title {
+  padding: 6px 10px 8px;
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.translator-menu__item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.translator-menu__item:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.translator-menu__item--destructive {
+  color: #ff8a80;
+}
+
+.translator-confirm__body {
+  margin-bottom: var(--space-8);
+  color: var(--color-text-secondary);
+  font-size: 12.5px;
+}

@@ -1,0 +1,768 @@
+/* ==========================================================================================
+   Window frame — Raycast's `--radius-window: 8px` + `--shadow-panel` for Windows.
+   ========================================================================================== */
+
+.window {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-radius: var(--radius-window);
+  background: var(--color-window-bg);
+  box-shadow: var(--shadow-panel);
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.window::before {
+  /* Raycast's frosted panel: backdrop-filter with the Windows blur ramp. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--color-window-base);
+  opacity: 0.92;
+  backdrop-filter: blur(var(--blur-2)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-2)) saturate(180%);
+}
+
+/* ==========================================================================================
+   Header: Raycast logo + search field.
+   ========================================================================================== */
+
+.window__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--window-header-height);
+  min-height: var(--window-header-height);
+  padding: 0 var(--space-12);
+  border-bottom: 1px solid var(--color-border-separator);
+  /* Mirrors `navigation-bar-ui__root`: the loader is clipped to the header's box. */
+  position: relative;
+  overflow: hidden;
+}
+
+/* Raycast's `navigation-bar-ui__loaderClassic`: a 1px gradient bar pinned to the bottom edge of
+   the navigation bar that sweeps left/right while a command or the root search is loading. */
+.loader-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  pointer-events: none;
+  background-image: linear-gradient(
+    to right,
+    var(--loader-0) 25%,
+    var(--loader),
+    var(--loader-0) 75%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+  animation: loader-bar-sweep 1.5s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.loader-bar[data-state='loading'] {
+  opacity: 1;
+  animation-play-state: running;
+}
+
+@keyframes loader-bar-sweep {
+  0%,
+  100% {
+    transform: translate(-35%);
+  }
+  50% {
+    transform: translate(35%);
+  }
+}
+
+.raycast-mark {
+  display: grid;
+  place-items: center;
+  width: var(--space-24);
+  height: var(--space-24);
+  color: var(--color-brand-red);
+  flex: none;
+}
+
+.searchbar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.searchbar__input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-400);
+}
+
+.searchbar__input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.searchbar__icon {
+  flex: none;
+  color: var(--color-text-tertiary);
+  display: grid;
+  place-items: center;
+}
+
+/* ==========================================================================================
+   Results list — Raycast's root-search list rows.
+   ========================================================================================== */
+
+.window__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+  padding: var(--space-6);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Root Search sections: Raycast draws a small header (icon + name + count) above each group. */
+.list__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.list__sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--space-24);
+  padding: 0 var(--space-12);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-600);
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.list__sectionIcon {
+  display: inline-flex;
+}
+
+.list__sectionTitle {
+  flex: 1;
+  min-width: 0;
+}
+
+.list__sectionCount {
+  color: var(--color-text-quaternary);
+  font-variant-numeric: tabular-nums;
+}
+
+.list__sectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list__favorite {
+  display: inline-flex;
+  color: var(--yellow);
+}
+
+.list__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-12);
+  width: 100%;
+  padding: var(--space-6) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-8);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms var(--easing-ease-out-expo);
+}
+
+.list__row:hover {
+  background: var(--color-surface-list-hover);
+}
+
+.list__row[data-selected="true"] {
+  background: var(--color-surface-list-selection);
+}
+
+.list__row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-border-focus-ring);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: var(--radius-6);
+  background: var(--fg-10);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  overflow: hidden;
+}
+
+.icon--plain {
+  background: transparent;
+}
+
+/* Extracted shell icons fill the tile; a real icon replaces the tinted glyph background. */
+.icon__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.icon:has(> .icon__img) {
+  background: transparent;
+}
+
+.icon:has(> .web-search-icon) {
+  background: transparent;
+  padding: 0;
+}
+
+.web-search-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.list__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.list__title {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.list__subtitle {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-400);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.list__accessory {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-11);
+}
+
+.pill {
+  padding: 1px var(--space-6);
+  border-radius: var(--radius-full);
+  background: var(--fg-5);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-8);
+  font-weight: var(--font-weight-500);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================================
+   Footer: Raycast's keyboard-hint pills.
+   ========================================================================================== */
+
+.window__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  height: var(--window-footer-height);
+  min-height: var(--window-footer-height);
+  padding: 0 var(--space-12);
+  border-top: 1px solid var(--color-border-separator);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+.hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-11);
+}
+
+.kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-4);
+  background: var(--fg-10);
+  box-shadow: inset 0 0 0 1px var(--fg-20);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-11);
+  font-family: inherit;
+}
+
+.footer__spacer {
+  flex: 1;
+}
+
+/* Left-aligned footer button (opens Settings). */
+.footer-icon-button {
+  display: grid;
+  place-items: center;
+  width: var(--space-24);
+  height: var(--space-24);
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-6);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color 120ms var(--easing-ease-out-expo),
+    color 120ms var(--easing-ease-out-expo);
+}
+
+.footer-icon-button:hover,
+.footer-icon-button[data-state="open"] {
+  background: var(--fg-10);
+  color: var(--color-text-primary);
+}
+
+.footer-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex: none;
+  padding: var(--space-2) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-6);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-11);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms var(--easing-ease-out-expo),
+    color 120ms var(--easing-ease-out-expo);
+}
+
+.footer-action:hover {
+  background: var(--fg-10);
+  color: var(--color-text-primary);
+}
+
+.footer-action--kbd {
+  gap: var(--space-4);
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.footer-action--kbd .kbd {
+  min-width: 16px;
+  height: 16px;
+}
+
+/* ==========================================================================================
+   Empty / error / loading states.
+   ========================================================================================== */
+
+.state {
+  display: grid;
+  place-content: center;
+  gap: var(--space-8);
+  height: 100%;
+  padding: var(--space-40);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.state__title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-500);
+}
+
+.state__message {
+  font-size: var(--font-size-11);
+  max-width: 44ch;
+}
+
+/* ==========================================================================================
+   A rendered extension view — Raycast's own components, re-created from the render model.
+   ========================================================================================== */
+
+.command-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.command-view__search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--space-32);
+  padding: 0 var(--space-8);
+  border-bottom: 1px solid var(--color-border-separator);
+}
+
+.command-view__search input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.command-view__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+  padding: var(--space-6);
+}
+
+.command-view__navigationTitle {
+  padding: var(--space-4) var(--space-8) 0;
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-600);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-6);
+  background: var(--color-surface-action-bar);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-11);
+  cursor: pointer;
+  transition: background-color 120ms var(--easing-ease-out-expo);
+}
+
+.action:hover {
+  background: var(--fg-20);
+}
+
+.action--destructive {
+  color: var(--red);
+}
+
+.action .kbd {
+  min-width: 16px;
+  height: 16px;
+}
+
+.grid {
+  display: grid;
+  gap: var(--space-8);
+  padding: var(--space-2);
+}
+
+.grid__cell {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-8);
+  border-radius: var(--radius-8);
+  background: var(--fg-5);
+  text-align: center;
+  transition: background-color 120ms var(--easing-ease-out-expo);
+}
+
+.grid__cell:hover {
+  background: var(--fg-10);
+}
+
+.markdown {
+  display: grid;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  font-size: var(--font-size-13);
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  margin: 0;
+}
+
+.markdown h1 {
+  font-size: var(--font-size-24);
+  font-weight: var(--font-weight-600);
+}
+
+.markdown h2 {
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-600);
+}
+
+.markdown h3 {
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-500);
+}
+
+.markdown p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-12);
+  padding: var(--space-12);
+}
+
+.form__field {
+  display: grid;
+  gap: var(--space-4);
+  font-size: var(--font-size-11);
+  color: var(--color-text-secondary);
+}
+
+.form__field input {
+  border: 0;
+  border-radius: var(--radius-6);
+  background: var(--color-surface-input-field);
+  box-shadow: inset 0 0 0 1px var(--color-border-field);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-13);
+  padding: var(--space-6) var(--space-8);
+}
+
+.form__field input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus-ring);
+}
+
+/* ==========================================================================================
+   Action bar + Action Panel (`actionBarButton`, `align: "end"`, `rootMenuModel`).
+   ========================================================================================== */
+
+.action-bar-button {
+  display: grid;
+  place-items: center;
+  width: var(--space-24);
+  height: var(--space-24);
+  flex: none;
+  margin-right: calc(-1 * var(--space-4));
+  border: 0;
+  border-radius: var(--radius-6);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color 120ms var(--easing-ease-out-expo),
+    color 120ms var(--easing-ease-out-expo);
+}
+
+.action-bar-button:hover,
+.action-bar-button[data-state="open"] {
+  background: var(--fg-10);
+  color: var(--color-text-primary);
+}
+
+.action-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+}
+
+.action-panel__backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.action-panel__popover {
+  position: absolute;
+  /* Raycast anchors the action panel above the footer's Actions button, bottom-right. */
+  bottom: calc(var(--window-footer-height) + var(--space-2));
+  right: var(--space-6);
+  width: 340px; /* Raycast's `addMenuWidth: 350` */
+  max-height: min(460px, calc(100% - var(--window-header-height) - var(--window-footer-height) - var(--space-16)));
+  overflow: hidden auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-12);
+  background: var(--color-panel-backdrop);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(var(--blur-3)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-3)) saturate(180%);
+  animation: action-panel-in 180ms var(--easing-ease-out-expo);
+}
+
+@keyframes action-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.action-panel__filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-2) var(--space-6);
+  color: var(--color-text-tertiary);
+}
+
+.action-panel__filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-13);
+}
+
+.action-panel__scroll {
+  overflow: hidden auto;
+  margin: 0 calc(-1 * var(--space-6));
+  padding: 0 var(--space-6);
+}
+
+.action-panel__empty {
+  padding: var(--space-12) var(--space-6);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+.action-panel__title {
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-600);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-panel__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.action-panel__groupLabel {
+  padding: var(--space-4) var(--space-6) var(--space-2);
+  font-size: var(--font-size-8);
+  font-weight: var(--font-weight-500);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.action-panel__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-6);
+  border: 0;
+  border-radius: var(--radius-6);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-panel__item:hover {
+  background: var(--fg-5);
+}
+
+.action-panel__item[data-selected="true"] {
+  background: var(--color-surface-list-selection);
+}
+
+.action-panel__icon {
+  display: grid;
+  place-items: center;
+  width: var(--space-16);
+  height: var(--space-16);
+  color: var(--color-text-secondary);
+}
+
+.action-panel__icon--destructive {
+  color: var(--red);
+}
+
+.action-panel__shortcut {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+.dot {
+  position: absolute;
+  left: -1px;
+  bottom: -1px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--fg-40);
+  border: 1px solid var(--bg);
+}
+
+.icon-wrap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}

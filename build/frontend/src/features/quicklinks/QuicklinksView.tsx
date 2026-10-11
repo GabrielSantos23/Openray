@@ -8,12 +8,12 @@
 // command views host their dialogs.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionPanel, type ActionGroup } from "./ActionPanel";
-import { ipc } from "./ipc";
-import { RaycastIcon } from "./icons";
-import { rankEntries } from "./matching";
-import type { ApplicationCommand } from "./applications";
-import { CommandFooter, CommandTile, type InternalArea } from "./commandChrome";
+import { ActionPanel, type ActionGroup } from "../../ActionPanel";
+import { ipc } from "../../ipc";
+import { RaycastIcon } from "../../icons";
+import { rankEntries } from "../../matching";
+import type { ApplicationCommand } from "../../applications";
+import { CommandFooter, CommandTile, type InternalArea } from "../../commandChrome";
 import {
   FEATURED_LIBRARY,
   isFileLink,
@@ -25,7 +25,7 @@ import {
   type ImportEntry,
   type QuicklinkArg,
   type QuicklinkEntry,
-} from "./quicklinks";
+} from "../../quicklinks";
 
 export type QuicklinksCommandName = "search" | "create" | "import" | "export";
 

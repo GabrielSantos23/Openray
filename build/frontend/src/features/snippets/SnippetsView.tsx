@@ -7,11 +7,11 @@
 // in the native hook.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionPanel, type ActionGroup } from "./ActionPanel";
-import { ipc } from "./ipc";
-import { RaycastIcon } from "./icons";
-import { rankEntries } from "./matching";
-import { CommandFooter, CommandTile } from "./commandChrome";
+import { ActionPanel, type ActionGroup } from "../../ActionPanel";
+import { ipc } from "../../ipc";
+import { RaycastIcon } from "../../icons";
+import { rankEntries } from "../../matching";
+import { CommandFooter, CommandTile } from "../../commandChrome";
 import {
   parseImportPayload,
   primaryAction,
@@ -20,7 +20,7 @@ import {
   warnBeforeDelete,
   type SnippetEntry,
   type SnippetImportEntry,
-} from "./snippets";
+} from "../../snippets";
 
 export type SnippetsCommandName = "search" | "create" | "import" | "export";
 

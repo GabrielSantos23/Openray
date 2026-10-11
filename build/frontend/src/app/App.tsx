@@ -4,8 +4,10 @@
 // Mirrors `Raycast.WebView.MainWindow` + the `NodeCommand` component tree in Raycast's
 // `main-window-*.js` bundle. Section ordering follows the shipped manifest:
 // `rootSearch: { section: "apps" }` puts applications first.
+// The entry model lives in ./entries, the section ranking in ./buildSections, the shared helpers
+// in ./rootHelpers and the command session in ./CommandSession.
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   closeMainWindow,
   ipc,
@@ -13,22 +15,12 @@ import {
   installHostMessageListener,
   onNotification,
   openSettings,
-} from "./ipc";
-import { ExtensionCommand, useExtensionCommand, type ViewAction, type ViewBody } from "./useExtensionCommand";
-import { RenderedView, SearchBarDropdown, flatItems, gridRowWidths, selectableIds } from "./RenderedView";
-import {
-  applyRender,
-  emptyPages,
-  popPage,
-  popToRootPages,
-  topPage,
-  updateTop,
-  type CommandPagesState,
-} from "./commandPages";
-import { alertStore, type ExtensionAlertPayload } from "./alertStore";
-import AlertHost from "./AlertHost";
-import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "./testHooks";
-import { ActionPanel, type ActionGroup } from "./ActionPanel";
+} from "../ipc";
+import { useExtensionCommand } from "../useExtensionCommand";
+import { alertStore, type ExtensionAlertPayload } from "../alertStore";
+import AlertHost from "../AlertHost";
+import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "../testHooks";
+import { ActionPanel, type ActionGroup } from "../ActionPanel";
 import {
   hudStore,
   setHostWindowVisible,
@@ -37,95 +29,35 @@ import {
   type ExtensionHudPayload,
   type ExtensionToastPayload,
   type ToastState,
-} from "./toastStore";
-
-function nextToastId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `toast_${Math.random().toString(36).slice(2)}`;
-}
-
-/** `Updated ${relativeTime}` third line on currency rows — the shipped row's relative label. */
-function formatRelativeTime(timestamp: number): string {
-  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-
-/** `Hne`: after the window closes, the HUD is what remains — command icon at 22px in Raycast. */
-function hudStoreOpenForExtension(title: string) {
-  hudStore.open({ id: nextToastId(), title, variant: "default" }, { durationMs: 1200 });
-}
-
-/** `getToastActions()` — primary/secondary surface in the open action panel while the toast lives. */
-function useToastActionGroups(): ActionGroup[] {
-  const toast = useSyncExternalStore(
-    toastStore.subscribe.bind(toastStore),
-    toastStore.get.bind(toastStore),
-  );
-  return useMemo(() => {
-    const actions = [toast?.primaryAction, toast?.secondaryAction].filter(Boolean);
-    if (actions.length === 0) return [];
-    return [
-      {
-        name: "toast",
-        actions: actions.map((action, index) => ({
-          id: index === 0 ? "toast:primary" : "toast:secondary",
-          title: action!.title,
-          shortcut: action!.shortcut,
-        })),
-      },
-    ];
-  }, [toast]);
-}
-
-/** Runs a toast action from the panel; returns false when the action is not a toast action. */
-async function runToastAction(actionId: string): Promise<boolean> {
-  if (actionId !== "toast:primary" && actionId !== "toast:secondary") return false;
-  const toast = toastStore.get();
-  const action =
-    actionId === "toast:primary" ? toast?.primaryAction : toast?.secondaryAction;
-  if (!action) return false;
-  await action.action();
-  toastStore.closeIfCurrent(toast ?? null);
-  return true;
-}
-import { RaycastIcon } from "./icons";
-import { applicationFavoriteKey, commandFavoriteKey, useFavorites } from "./favorites";
+} from "../toastStore";
+import { RaycastIcon } from "../icons";
+import { applicationFavoriteKey, commandFavoriteKey, useFavorites } from "../favorites";
 import {
-  APPLICATION_AREA_KEYS,
-  ApplicationCommand,
+  type ApplicationCommand,
   runApplicationAction,
   useApplications,
   useApplicationGroups,
-} from "./applications";
-import { ClipboardHistoryView } from "./ClipboardHistoryView";
-import { ArgsForm as QuicklinkArgsForm, QuicklinksView, type ArgsState as QuicklinkArgsState, type QuicklinksCommandName } from "./QuicklinksView";
-import { isLikelyUrl, openQuicklink, setPendingCreateLink, useQuicklinks, type QuicklinkEntry } from "./quicklinks";
-import { SnippetsView, type SnippetsCommandName } from "./SnippetsView";
-import { CalculatorHistoryView } from "./CalculatorHistoryView";
-import { useSnippets } from "./snippets";
+} from "../applications";
+import { ArgsForm as QuicklinkArgsForm, type ArgsState as QuicklinkArgsState, type QuicklinksCommandName } from "../features/quicklinks/QuicklinksView";
+import { openQuicklink, setPendingCreateLink, useQuicklinks, type QuicklinkEntry } from "../quicklinks";
+import { LoadingBar } from "../LoadingBar";
+import type { TranslateSeed } from "../features/translator/TranslateView";
+import { useSnippets } from "../snippets";
 import {
-  CLIPBOARD_AREA,
   plainTextOf,
   type ClipboardEntry,
   type ClipboardEntryAction,
-} from "./clipboardHistory";
+} from "../clipboardHistory";
 import {
   rankEntries,
-  rankEntriesWithFallbacks,
   type RankedEntry,
   type Sensitivity,
   type FallbackCommand,
   type FileSearchResult,
   generateKeywords,
-} from "./matching";
-import { searchFiles, loadFileSearchConfig, loadFileUsageScores, trackFileUsage } from "./fileSearch";
-import { getInlineSectionResults, loadInlineSectionSettings, type InlineSectionResult, type InlineSectionSettings } from "./inlineSections";
+} from "../matching";
+import { searchFiles, loadFileSearchConfig, loadFileUsageScores, trackFileUsage } from "../fileSearch";
+import { getInlineSectionResults, loadInlineSectionSettings, type InlineSectionResult, type InlineSectionSettings } from "../inlineSections";
 import {
   getCommandArguments,
   validateArguments,
@@ -135,443 +67,39 @@ import {
   getArgumentSuggestions,
   type ArgumentDefinition,
   type ArgumentValues,
-} from "./arguments";
-
-interface ExtensionSummary {
-  uuid: string;
-  name: string;
-  title: string;
-  description?: string;
-  commands: Array<{ name: string; title: string; description?: string; mode?: "view" | "no-view" | "menu-bar" }>;
-}
-
-interface ExtensionEntry {
-  kind: "extension";
-  extension: ExtensionSummary;
-  command: ExtensionSummary["commands"][number];
-}
-
-interface ApplicationEntry {
-  kind: "application";
-  application: ApplicationCommand;
-}
-
-/**
- * Raycast's internal `clipboard-history` extension is not a Node extension, so it is not part of the
- * installed-extension list. It is modelled here exactly like the internal Applications area: a
- * synthetic entry that opens a native view.
- */
-interface ClipboardEntryResult {
-  kind: "clipboard";
-  commandId: string;
-}
-
-/**
- * Internal extensions expose one root-search row per command, exactly like installed extensions:
- * four Quicklinks commands (create/export/import/search) and four Snippets commands, each opening
- * its own view.
- */
-type InternalArea = "quicklinks" | "snippets" | "calculator";
-type InternalCommandName = "search" | "create" | "import" | "export" | "history";
-
-interface InternalCommandEntry {
-  kind: "internal";
-  area: InternalArea;
-  command: InternalCommandName;
-  commandId: string;
-}
-
-interface QuicklinkRowEntry {
-  kind: "quicklink";
-  quicklink: QuicklinkEntry;
-}
-
-/** `createWithURL`: offered while the search term itself is a URL. */
-interface QuicklinkCreateEntry {
-  kind: "quicklink-create";
-  link: string;
-}
-
-const INTERNAL_EXTENSION_META: Record<InternalArea, { title: string; icon: string; tile: string }> = {
-  quicklinks: { title: "Quicklinks", icon: "link", tile: "command-tile--quicklinks" },
-  snippets: { title: "Snippets", icon: "text", tile: "command-tile--snippets" },
-  calculator: { title: "Calculator", icon: "calculator", tile: "command-tile--calculator" },
-};
-
-const INTERNAL_COMMANDS: ReadonlyArray<{
-  area: InternalArea;
-  command: InternalCommandName;
-  title: string;
-  keywords: string[];
-}> = [
-  { area: "quicklinks", command: "create", title: "Create Quicklink", keywords: ["quicklinks", "new quicklink"] },
-  { area: "quicklinks", command: "export", title: "Export Quicklinks", keywords: ["quicklinks"] },
-  { area: "quicklinks", command: "import", title: "Import Quicklinks", keywords: ["quicklinks"] },
-  { area: "quicklinks", command: "search", title: "Search Quicklinks", keywords: ["quicklinks"] },
-  { area: "snippets", command: "create", title: "Create Snippet", keywords: ["snippets", "new snippet"] },
-  { area: "snippets", command: "export", title: "Export Snippets", keywords: ["snippets"] },
-  { area: "snippets", command: "import", title: "Import Snippets", keywords: ["snippets"] },
-  { area: "snippets", command: "search", title: "Search Snippets", keywords: ["snippets"] },
-];
-
-function internalCommandEntry(area: InternalArea, command: InternalCommandName): InternalCommandEntry {
-  return { kind: "internal", area, command, commandId: `${area}/${command}` };
-}
-
-/**
- * Fallback command entry - shown when no results match the search query.
- */
-interface FallbackCommandEntry {
-  kind: "fallback";
-  command: FallbackCommand;
-}
-
-/**
- * File search result entry.
- */
-interface FileEntry {
-  kind: "file";
-  file: FileSearchResult;
-}
-
-/**
- * Inline section result entry (quicklinks, snippets, web search).
- */
-interface InlineEntry {
-  kind: "inline";
-  result: InlineSectionResult;
-}
-
-/** The backend engine's evaluation (docs/calculator-spec.md — the split row payload). */
-interface CalculatorEvaluation {
-  answer: string;
-  unformatted: string;
-  category: "math" | "unitConversion";
-  evaluationType: string;
-  metadataType: string;
-  unitFrom: string | null;
-  unitTo: string | null;
-  currencyFrom: string | null;
-  currencyTo: string | null;
-  swappedExpression: string | null;
-}
-
-interface CalculatorRatesMeta {
-  fetchedAt: number;
-  stale: boolean;
-}
-
-/** The ephemeral root-search row: `rootSearch:{section:'calculator', matching:'always'}`. */
-interface CalculatorEntry {
-  kind: "calculator";
-  expression: string;
-  evaluation: CalculatorEvaluation;
-  rates: CalculatorRatesMeta | null;
-}
-
-type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | InlineEntry | CalculatorEntry;
-
-interface SearchableEntry {
-  title: string;
-  subtitle: string | null;
-  keywords: string[];
-  rootEntry: RootEntry;
-}
-
-const CLIPBOARD_COMMAND: ClipboardEntryResult = {
-  kind: "clipboard",
-  commandId: `${CLIPBOARD_AREA}/history`,
-};
-
-const CLIPBOARD_FAVORITE_KEY = commandFavoriteKey(CLIPBOARD_AREA, "history");
-
-interface MiniMarks {
-  marks: string[];
-}
-
-/**
- * Raycast's Root Search splits its results into named sections and renders a header above each
- * one: `Favorites`, then the pinned `Applications` area, then the installed `Commands`. The
- * section shapes come from the shipped `rootSearch.section` values on the internal commands.
- */
-type RootSectionId = "favorites" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "quicklinks" | "snippets" | "web-search";
-
-interface RootSection {
-  id: RootSectionId;
-  title: string;
-  icon: string;
-  entries: RootEntry[];
-}
-
-function buildSections(
-  query: string,
-  applications: ApplicationCommand[],
-  extensions: ExtensionSummary[],
-  favorites: string[],
-  sensitivity: Sensitivity,
-  usageScores: Map<string, number>,
-  fallbackCommands: FallbackCommand[],
-  fileResults: FileSearchResult[],
-  inlineResults: InlineSectionResult[],
-  quicklinkRows: QuicklinkEntry[],
-  calculatorEntry: CalculatorEntry | null
-): RootSection[] {  // Build searchable entries for all applications
-  const appSearchables: SearchableEntry[] = applications.map((app) => ({
-    title: app.title,
-    subtitle: app.subtitle,
-    keywords: app.keywords,
-    rootEntry: { kind: "application" as const, application: app },
-  }));
-
-  // Build searchable entries for clipboard history
-  const clipboardSearchable: SearchableEntry = {
-    title: "Clipboard History",
-    subtitle: "Search for text, images, links and colors you copied earlier and paste it again.",
-    keywords: ["clipboard history clipboard"],
-    rootEntry: CLIPBOARD_COMMAND,
-  };
-
-  // Internal extension commands: one root row per command, rendered like installed commands.
-  const internalCommandSearchables: SearchableEntry[] = INTERNAL_COMMANDS.map((definition) => ({
-    title: definition.title,
-    subtitle: INTERNAL_EXTENSION_META[definition.area].title,
-    keywords: definition.keywords,
-    rootEntry: internalCommandEntry(definition.area, definition.command),
-  }));
-
-  // Dynamic quicklink rows: title = name, keywords include the `quicklink` tag (Raycast's
-  // `dynamicCommands.quicklink`).
-  const quicklinkSearchables: SearchableEntry[] = quicklinkRows.map((entry) => ({
-    title: entry.name,
-    subtitle: entry.link,
-    keywords: ["quicklink", ...entry.tags.map((tag) => tag.toLowerCase())],
-    rootEntry: { kind: "quicklink" as const, quicklink: entry },
-  }));
-
-  // Build searchable entries for extension commands
-  const commandSearchables: SearchableEntry[] = [];
-  for (const extension of extensions) {
-    for (const command of extension.commands ?? []) {
-      if (command.mode === "no-view") continue;
-      // Dev-only test extensions stay hidden unless the flag is on: localStorage
-      // `raycast-mini:dev-extensions=1`, or the host's `--dev-extensions` / env equivalent.
-      if (extension.name === "command-ux-test" && !isDevExtensionsEnabled()) continue;
-      const entry: ExtensionEntry = { kind: "extension", extension, command };
-      commandSearchables.push({
-        title: command.title,
-        subtitle: command.description ?? extension.title,
-        keywords: generateKeywords(`${extension.title} ${command.title}`, command.description ?? ""),
-        rootEntry: entry,
-      });
-    }
-  }
-
-  // Combine all searchable entries
-  const allSearchables = [...appSearchables, clipboardSearchable, ...internalCommandSearchables, ...commandSearchables, ...quicklinkSearchables];
-
-  // Rank all entries using the full Raycast algorithm with fallback support
-  const { results: ranked, showFallbacks } = rankEntriesWithFallbacks(
-    allSearchables,
-    query,
-    sensitivity,
-    usageScores,
-    fallbackCommands
-  );
-
-  // Separate favorites from regular results
-  const favoriteRows = new Set<RootEntry>();
-  for (const key of favorites) {
-    const entry = ranked.find((r) => {
-      const re = r.entry.rootEntry;
-      if (re.kind === "application") {
-        return applicationFavoriteKey(re.application.payload.id) === key;
-      } else if (re.kind === "clipboard") {
-        return CLIPBOARD_FAVORITE_KEY === key;
-      } else if (re.kind === "extension") {
-        return commandFavoriteKey(re.extension.uuid, re.command.name) === key;
-      }
-      return false;
-    });
-    if (entry) favoriteRows.add(entry.entry.rootEntry);
-  }
-
-  const favoriteEntries = favorites
-    .map((key) => {
-      const rankedEntry = ranked.find((r) => {
-        const re = r.entry.rootEntry;
-        if (re.kind === "application") {
-          return applicationFavoriteKey(re.application.payload.id) === key;
-        } else if (re.kind === "clipboard") {
-          return CLIPBOARD_FAVORITE_KEY === key;
-        } else if (re.kind === "extension") {
-          return commandFavoriteKey(re.extension.uuid, re.command.name) === key;
-        }
-        return false;
-      });
-      return rankedEntry?.entry.rootEntry;
-    })
-    .filter((e): e is RootEntry => e !== undefined);
-
-  // Filter out favorites from regular results
-  const regularResults = ranked.filter((r) => !favoriteRows.has(r.entry.rootEntry));
-
-  // Separate by type
-  const apps = regularResults
-    .filter((r) => r.entry.rootEntry.kind === "application")
-    .map((r) => r.entry.rootEntry);
-  const clipboardEntries = favorites.includes(CLIPBOARD_FAVORITE_KEY)
-    ? []
-    : regularResults.filter((r) => r.entry.rootEntry.kind === "clipboard").map((r) => r.entry.rootEntry);
-  const internalCommandEntries = regularResults
-    .filter((r) => r.entry.rootEntry.kind === "internal")
-    .map((r) => r.entry.rootEntry);
-  const commands = regularResults
-    .filter((r) => r.entry.rootEntry.kind === "extension")
-    .map((r) => r.entry.rootEntry);
-
-  // Handle fallback commands - they appear as a separate section when shown
-  const fallbackEntries = showFallbacks
-    ? fallbackCommands.map((cmd) => ({ kind: "fallback" as const, command: cmd }))
-    : [];
-
-  // File search results
-  const fileEntries = fileResults.map((file) => ({ kind: "file" as const, file }));
-
-  // Inline section results - group by type
-  const quicklinkCreateEntries: QuicklinkCreateEntry[] = isLikelyUrl(query)
-    ? [{ kind: "quicklink-create", link: query.trim() }]
-    : [];
-  const snippetEntries = inlineResults
-    .filter((r) => r.type === "snippet")
-    .map((result) => ({ kind: "inline" as const, result }));
-  const webSearchEntries = inlineResults
-    .filter((r) => r.type === "web-search")
-    .map((result) => ({ kind: "inline" as const, result }));
-
-  const sections: RootSection[] = [
-    { id: "favorites", title: "Favorites", icon: "star", entries: favoriteEntries },
-  ];
-
-  // Calculator section (highest priority) - the ephemeral row appears whenever the search term
-  // evaluates; it is not a searchable command (rootSearch matching:'always').
-  const calculatorEntries: RootEntry[] = calculatorEntry ? [calculatorEntry] : [];
-  if (calculatorEntries.length > 0) {
-    sections.push({ id: "calculator", title: "Calculator", icon: "calculator", entries: calculatorEntries });
-  }
-
-  // Applications section
-  if (apps.length > 0) {
-    sections.push({ id: "applications", title: "Applications", icon: "app-window-list", entries: apps });
-  }
-
-  // Commands section
-  if (clipboardEntries.length > 0 || internalCommandEntries.length > 0 || commands.length > 0) {
-    sections.push({ id: "commands", title: "Commands", icon: "Blocks", entries: [...clipboardEntries, ...internalCommandEntries, ...commands] });
-  }
-
-  // Quicklinks section: the createWithURL entry, then dynamic quicklink rows. Dynamic rows only
-  // show while searching — Raycast's dynamic quicklink commands are searchable, not always visible.
-  const searching = query.trim().length > 0;
-  const quicklinkRowsShown = searching
-    ? regularResults.filter((r) => r.entry.rootEntry.kind === "quicklink").map((r) => r.entry.rootEntry)
-    : [];
-  if (quicklinkCreateEntries.length > 0 || quicklinkRowsShown.length > 0) {
-    sections.push({ id: "quicklinks", title: "Quicklinks", icon: "link", entries: [...quicklinkCreateEntries, ...quicklinkRowsShown] });
-  }
-
-  // Snippets section
-  if (snippetEntries.length > 0) {
-    sections.push({ id: "snippets", title: "Snippets", icon: "copy", entries: snippetEntries });
-  }
-
-  // Files section (after commands, before fallback)
-  if (fileEntries.length > 0) {
-    sections.push({ id: "files", title: "Files", icon: "file-text", entries: fileEntries });
-  }
-
-  // Web search suggestions (lowest priority)
-  if (webSearchEntries.length > 0) {
-    sections.push({ id: "web-search", title: "Search Web", icon: "globe", entries: webSearchEntries });
-  }
-
-  if (showFallbacks && fallbackEntries.length > 0) {
-    sections.push({ id: "fallback-commands", title: "Fallback Commands", icon: "Blocks", entries: fallbackEntries });
-  }
-
-  return sections;
-}
-
-const ROOT_SECTION_ICON_SIZE = 15;
-
-// Ordered breadcrumbs the host can read back with ExecuteScriptAsync, so a UI that renders but
-// never issues IPC is diagnosable from launcher.log.
-const marks: MiniMarks = {
-  marks: ["app-module-evaluated", `exported-application-area-keys=${APPLICATION_AREA_KEYS.join(",")}`],
-};
-(window as unknown as { __raycastMiniMarks: MiniMarks }).__raycastMiniMarks = marks;
-
-/**
- * Raycast's live refresh: the clipboard view subscribes to `clipboard.stateChanged`, which the Node
- * backend emits whenever the store mutates (`ipcNotification.clipboard.subscribeStateChanged`).
- */
-function subscribeClipboardStateChanged(handler: () => void): () => void {
-  return onNotification("clipboard.stateChanged", () => handler());
-}
-
-/** Paste/Copy for a clipboard row: the host writes the entry and hands focus back to the app. */
-async function runClipboardEntryAction(
-  entry: ClipboardEntry,
-  action: ClipboardEntryAction,
-): Promise<void> {
-  if (action === "copy" || action === "pasteAndKeepOpen") {
-    const method = action === "copy" ? "clipboard.copy" : "clipboard.paste";
-    await ipc.backend(
-      method,
-      { id: entry.id, shouldCloseWindow: action === "copy", keepWindowOpen: action !== "copy" },
-      { module: "backend" },
-    );
-    return;
-  }
-  if (action === "paste") {
-    await ipc.backend("clipboard.paste", { id: entry.id, shouldCloseWindow: true }, { module: "backend" });
-    return;
-  }
-  const text = plainTextOf(entry);
-  await ipc.backend(
-    "clipboard.paste",
-    { text: text ?? "", sourceEntryId: entry.id, shouldCloseWindow: true },
-    { module: "backend" },
-  );
-}
-
-async function openClipboardUrl(url: string): Promise<void> {
-  await ipc.backend("clipboard.openUrl", { url }, { module: "backend" });
-}
-
-// Raycast's navigation-bar loading indicator: shown only after `isLoading` has been true for
-// 300ms, then fades in/out, exactly like `NavigationBarUI.Root` in the shipped bundle.
-function LoadingBar({ isLoading }: { isLoading: boolean }) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    if (isLoading) {
-      const timer = setTimeout(() => setVisible(true), 300);
-      return () => clearTimeout(timer);
-    }
-    setVisible(false);
-  }, [isLoading]);
-  return <div className="loader-bar" data-state={visible ? "loading" : undefined} />;
-}
-
-/**
- * Raycast keeps the root search field focused at all times: clicking a row, the footer or the
- * window body never moves focus out of the input. `preventDefault` on mousedown stops the
- * browser from moving focus while leaving the click (selection, buttons) fully functional.
- */
-function keepSearchFocus(event: MouseEvent<HTMLDivElement>): void {
-  const target = event.target as HTMLElement | null;
-  if (target?.closest(".searchbar, .action-panel__filter")) return;
-  event.preventDefault();
-}
+} from "../arguments";
+import {
+  type CalculatorEvaluation,
+  type CalculatorRatesMeta,
+  CLIPBOARD_COMMAND,
+  CLIPBOARD_FAVORITE_KEY,
+  type ClipboardEntryResult,
+  type ExtensionEntry,
+  type ExtensionSummary,
+  INTERNAL_EXTENSION_META,
+  INTERNAL_COMMANDS,
+  internalCommandEntry,
+  type CalculatorEntry,
+  type RootEntry,
+  type SearchableEntry,
+  type TranslateEntry,
+  type TranslatorCustomCommand,
+} from "./entries";
+import { buildSections } from "./buildSections";
+import {
+  formatRelativeTime,
+  nextToastId,
+  hudStoreOpenForExtension,
+  keepSearchFocus,
+  marks,
+  openClipboardUrl,
+  runClipboardEntryAction,
+  runToastAction,
+  subscribeClipboardStateChanged,
+  useToastActionGroups,
+  ROOT_SECTION_ICON_SIZE,
+} from "./rootHelpers";
+import { CommandSession } from "./CommandSession";
 
 export function MainWindow() {
   const [extensions, setExtensions] = useState<ExtensionSummary[]>([]);
@@ -597,6 +125,11 @@ export function MainWindow() {
   const [inlineResults, setInlineResults] = useState<InlineSectionResult[]>([]);
   // Action panel for the ephemeral calculator row (Ctrl+K on the split row).
   const [calculatorPanel, setCalculatorPanel] = useState<CalculatorEntry | null>(null);
+  // Translator: saved custom commands (dynamic root rows) and the seed the quick row passes to
+  // the Translate view when "Open in Translator" runs.
+  const [customTranslateCommands, setCustomTranslateCommands] = useState<TranslatorCustomCommand[]>([]);
+  const [translatePanel, setTranslatePanel] = useState<TranslateEntry | null>(null);
+  const [translatorSeed, setTranslatorSeed] = useState<TranslateSeed | null>(null);
   // Quicklinks: one root row per stored quicklink, refreshed on `quicklinks.updated`.
   const { quicklinks: quicklinkRows } = useQuicklinks();
   const [quicklinkArgs, setQuicklinkArgs] = useState<QuicklinkEntry | null>(null);
@@ -776,6 +309,90 @@ export function MainWindow() {
       clearTimeout(timer);
     };
   }, [searchText, inlineSectionSettings.calculator]);
+
+  // The quick-translate row runs the backend's confirmed parser (`in|into <language>`, ≥ 3 chars,
+  // prefix match) with the confirmed 150 ms debounce. Row states pending/failed/ready: the row
+  // flips to pending the moment the term parses and settles on the provider response.
+  const [translateEntry, setTranslateEntry] = useState<TranslateEntry | null>(null);
+  useEffect(() => {
+    const query = searchText.trim();
+    if (!query || !inlineSectionSettings.translate) {
+      setTranslateEntry(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void ipc
+        .backend("translator.parseQuickTranslate", { term: query }, { module: "backend" })
+        .then((raw) => {
+          const match = raw as { matched: boolean; sourceText?: string; target?: string; targetLabel?: string };
+          if (cancelled || !match.matched) {
+            if (!cancelled) setTranslateEntry(null);
+            return null;
+          }
+          setTranslateEntry({
+            kind: "translate",
+            row: {
+              status: "pending",
+              sourceText: match.sourceText ?? "",
+              target: match.target ?? "",
+              targetLabel: match.targetLabel ?? "",
+              sourceLabel: null,
+              translatedText: null,
+            },
+          });
+          return ipc.backend(
+            "translator.translate",
+            { text: match.sourceText, source: "auto", target: match.target },
+            { module: "backend" },
+          );
+        })
+        .then((raw) => {
+          if (cancelled || !raw) return;
+          const payload = raw as {
+            status: "ready" | "failed";
+            translatedText?: string;
+            detectedSourceLanguage?: string | null;
+            sourceLabel?: string | null;
+            targetLabel?: string | null;
+          };
+          setTranslateEntry((current) => {
+            if (!current) return null;
+            return {
+              kind: "translate",
+              row: {
+                ...current.row,
+                status: payload.status,
+                translatedText: payload.status === "ready" ? payload.translatedText ?? "" : null,
+                sourceLabel: payload.sourceLabel ?? null,
+              },
+            };
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setTranslateEntry(null);
+        });
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchText, inlineSectionSettings.translate]);
+
+  // Saved custom translate commands power the dynamic root rows; the store pushes
+  // `translator.customCommandsUpdated` on every mutation (settings dialogs included).
+  const refreshCustomTranslateCommands = useCallback(() => {
+    void ipc.backend("translator.getAllTranslateCustomCommands", {}, { module: "backend" })
+      .then((raw) => {
+        const commands = ((raw as { commands?: TranslatorCustomCommand[] }).commands ?? []) as TranslatorCustomCommand[];
+        setCustomTranslateCommands(commands.filter((command) => command.enabled));
+      })
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    refreshCustomTranslateCommands();
+    return onNotification("translator.customCommandsUpdated", refreshCustomTranslateCommands);
+  }, [refreshCustomTranslateCommands]);
 
   // Listen for file search config changes from Settings
   useEffect(() => {
@@ -1073,8 +690,8 @@ export function MainWindow() {
   // Root Search renders Favorites / Applications / Commands as named sections, exactly like
   // Raycast's root search, and the flat selection index walks all of them in order.
   const sections = useMemo(
-    () => buildSections(searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry),
-    [searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry],
+    () => buildSections(searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands),
+    [searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands],
   );
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
@@ -1102,7 +719,7 @@ export function MainWindow() {
   }, [entries, searchText]);
 
   const selectedEntry = entries[selectedIndex];
-  panelOpenRef.current = openApplication !== null || commandPanelEntry !== null || calculatorPanel !== null;
+  panelOpenRef.current = openApplication !== null || commandPanelEntry !== null || calculatorPanel !== null || translatePanel !== null;
 
   // Hooks must run before any early return, so the action source is resolved here.
   const panelApp = openApplication?.payload ?? null;
@@ -1145,6 +762,10 @@ export function MainWindow() {
     // Ctrl+K must never run the command directly.
     else if (entry.kind === "internal" || entry.kind === "quicklink-create") setSelected(entry);
     else if (entry.kind === "calculator") setCalculatorPanel(entry);
+    else if (entry.kind === "translate") setTranslatePanel(entry);
+    // A custom translate command's primary action IS opening the view; the panel would add
+    // nothing, so Ctrl+K opens the prefilled Translate view directly.
+    else if (entry.kind === "translator-command") setSelected(entry);
     else if (entry.kind !== "fallback" && entry.kind !== "file" && entry.kind !== "inline" && entry.kind !== "quicklink") setCommandPanelEntry(entry);
   }, []);
 
@@ -1218,6 +839,62 @@ export function MainWindow() {
     }
     return [{ name: "actions", actions }];
   }, [calculatorPanel]);
+
+  // --- Translator actions (docs/translator-spec.md — quick row and view action set) -----------
+
+  const copyTranslation = useCallback(
+    (entry: TranslateEntry) => {
+      if (entry.row.status !== "ready" || !entry.row.translatedText) return;
+      void ipc.backend("clipboard.write", { content: entry.row.translatedText }, { module: "backend" })
+        .then(() => {
+          showToast("Copied translation to clipboard");
+          closeMainWindow();
+        })
+        .catch(() => showToast("Failed copying translation"));
+    },
+    [showToast, closeMainWindow],
+  );
+
+  const copySourceText = useCallback(
+    (entry: TranslateEntry) => {
+      if (!entry.row.sourceText) return;
+      void ipc.backend("clipboard.write", { content: entry.row.sourceText }, { module: "backend" })
+        .then(() => {
+          showToast("Copied source text to clipboard");
+          closeMainWindow();
+        })
+        .catch(() => showToast("Failed copying source text"));
+    },
+    [showToast, closeMainWindow],
+  );
+
+  /** "Open in Translator": the view prefills the source phrase and the row's languages. */
+  const openInTranslator = useCallback(
+    (entry: TranslateEntry) => {
+      setTranslatorSeed({
+        id: `quick-${Date.now()}`,
+        sourceText: entry.row.sourceText,
+        source: "auto",
+        target: entry.row.target,
+      });
+      setSelected(internalCommandEntry("translator", "translate"));
+    },
+    [],
+  );
+
+  const translatePanelGroups = useMemo<ActionGroup[]>(() => {
+    if (!translatePanel) return [];
+    return [
+      {
+        name: "actions",
+        actions: [
+          { id: "tr:copyTranslation", title: "Copy Translation", itemId: "translator" },
+          { id: "tr:copySourceText", title: "Copy Source Text", itemId: "translator" },
+          { id: "tr:openInTranslator", title: "Open in Translator", itemId: "translator" },
+        ],
+      },
+    ];
+  }, [translatePanel]);
 
   // Opening a quicklink from root search: required placeholders collect their values through the
   // shared argument form first (Raycast's `/snippets/argument-form`), then the backend resolves the
@@ -1386,6 +1063,9 @@ export function MainWindow() {
         } else if (entry.kind === "calculator") {
           // Enter = primary action = Copy Answer (confirmed).
           copyCalculatorAnswer(entry);
+        } else if (entry.kind === "translate") {
+          // Enter = primary action = Copy Translation (confirmed for the quick row).
+          copyTranslation(entry);
         } else {
           setSelected(entry);
         }
@@ -1393,7 +1073,7 @@ export function MainWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer]);
+  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation]);
 
   // Escape closes the launcher, matching Raycast: the window hides and the global hotkey brings it
   // back. While the action panel is open it owns Escape (capture handler + stopPropagation), and a
@@ -1459,12 +1139,18 @@ export function MainWindow() {
       <>
         <CommandSession
           entry={selected}
-          onBack={() => setSelected(null)}
+          onBack={() => {
+            // The seed is consumed on mount; clearing it here keeps a later plain "Translate"
+            // open from silently reusing a quick row's phrase.
+            setTranslatorSeed(null);
+            setSelected(null);
+          }}
           showToast={showToast}
           closeMainWindow={closeMainWindow}
           applications={applications}
           createLink={quicklinkCreateLink}
           onConsumeCreateLink={() => setQuicklinkCreateLink(null)}
+          translatorSeed={translatorSeed}
         />
         <AlertHost />
       </>
@@ -1867,6 +1553,65 @@ export function MainWindow() {
                             </span>
                           </button>
                         </li>
+                      ) : entry.kind === "translate" ? (
+                        <li key="translate:quick-row">
+                          <button
+                            type="button"
+                            className="list__row calc-row translate-row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => (entry.row.status === "ready" ? copyTranslation(entry) : openInTranslator(entry))}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              openRootActionPanel(entry);
+                            }}
+                          >
+                            <span className="calc-row__left">
+                              <span className="calc-row__expression">{entry.row.sourceText}</span>
+                              <span className="calc-row__badge">
+                                {entry.row.sourceLabel ?? "Original"}
+                              </span>
+                            </span>
+                            <span className="calc-row__divider" aria-hidden>
+                              <RaycastIcon name="chevron-right" size={14} />
+                            </span>
+                            <span className="calc-row__right">
+                              <span className={`calc-row__answer${entry.row.status !== "ready" ? " translate-row__pending" : ""}`}>
+                                {entry.row.status === "pending"
+                                  ? "Translating…"
+                                  : entry.row.status === "failed"
+                                    ? "Translation unavailable"
+                                    : entry.row.translatedText}
+                              </span>
+                              <span className="calc-row__badge">{entry.row.targetLabel}</span>
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "translator-command" ? (
+                        <li key={`translator-command:${entry.command.id}`}>
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => setSelected(entry)}
+                          >
+                            <span className={`icon-wrap command-tile ${INTERNAL_EXTENSION_META.translator.tile}`} aria-hidden>
+                              <RaycastIcon name={INTERNAL_EXTENSION_META.translator.icon} size={13} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">{entry.command.name}</span>
+                              <span className="list__subtitle">
+                                {entry.command.sourceLabel
+                                  ? `Translate ${entry.command.sourceLabel} to ${entry.command.targetLabel}`
+                                  : `Translate to ${entry.command.targetLabel}`}
+                              </span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="pill">Translator</span>
+                            </span>
+                          </button>
+                        </li>
                       ) : entry.kind === "inline" ? (
                         <li key={`inline:${entry.result.type}:${entry.result.title}`}>
                           <button
@@ -2081,475 +1826,36 @@ export function MainWindow() {
         }}
       />
 
+      <ActionPanel
+        open={translatePanel !== null}
+        title="Translate"
+        groups={[...translatePanelGroups, ...toastGroups]}
+        onClose={() => setTranslatePanel(null)}
+        onRun={async (action) => {
+          const entry = translatePanel;
+          if (!entry) return;
+          if (await runToastAction(action.id)) {
+            setTranslatePanel(null);
+            return;
+          }
+          setTranslatePanel(null);
+          switch (action.id) {
+            case "tr:copyTranslation":
+              copyTranslation(entry);
+              break;
+            case "tr:copySourceText":
+              copySourceText(entry);
+              break;
+            case "tr:openInTranslator":
+              openInTranslator(entry);
+              break;
+          }
+        }}
+      />
+
       <AlertHost />
 
     </div>
   );
 }
 
-function CommandSession({
-  entry,
-  onBack,
-  showToast,
-  closeMainWindow: closeWindow,
-  applications,
-  createLink,
-  onConsumeCreateLink,
-}: {
-  entry: RootEntry;
-  onBack: () => void;
-  showToast: (title: string, message?: string) => void;
-  closeMainWindow: () => void;
-  applications: ApplicationCommand[];
-  createLink?: string | null;
-  onConsumeCreateLink?: () => void;
-}) {
-  const [panelOpen, setPanelOpen] = useState(false);
-  const toastGroups = useToastActionGroups();
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // The command's filter field is always-focused, like the root search: when the action panel
-  // closes, focus comes straight back here.
-  useEffect(() => {
-    if (!panelOpen) searchInputRef.current?.focus();
-  }, [panelOpen]);
-
-  const command = useExtensionCommand(
-    entry.kind === "extension" ? entry.extension : null,
-    entry.kind === "extension" ? entry.command : null,
-  );
-
-  // The renderer-side page stack (Raycast's `z.mainRouter.context.nodeExtensionStack`): pushed
-  // pages stay in the stack with their own filter text/selection so popping restores them.
-  const [pages, setPages] = useState<CommandPagesState>(emptyPages);
-  const lastLocalPopId = useRef<string | null>(null);
-
-  useEffect(() => {
-    const tree = command.renderTree;
-    if (!tree?.navigationStack) return;
-    setPages((previous) => applyRender(previous, tree));
-  }, [command.renderTree]);
-
-  const searchText = topPage(pages)?.searchText ?? "";
-  const setSearchText = useCallback((value: string) => {
-    setPages((previous) => updateTop(previous, { searchText: value }));
-  }, []);
-
-  const selectedItemId = topPage(pages)?.selectedItemId ?? null;
-  const setSelectedItemId = useCallback((itemId: string | null) => {
-    setPages((previous) => updateTop(previous, { selectedItemId: itemId }));
-  }, []);
-
-  // Local pop (Escape / Ctrl+[): drop the top page here, then notify the extension through its
-  // `navigationStack.onPop` callback — its reply carries the same pop id and `applyRender` updates
-  // the top page in place (Raycast's `localPop` dedupe).
-  const popOne = useCallback(() => {
-    const popId = `localpop_${Math.random().toString(36).slice(2, 10)}`;
-    let popped = false;
-    setPages((previous) => {
-      const next = popPage(previous, popId);
-      popped = next.popped;
-      return next.state;
-    });
-    const onPop = command.renderTree?.navigationStack?.onPop;
-    if (popped && onPop) {
-      lastLocalPopId.current = popId;
-      void command.createCallback(onPop)(popId);
-    }
-  }, [command]);
-
-  const popToRoot = useCallback(() => {
-    setPages((previous) => popToRootPages(previous));
-  }, []);
-
-  useEffect(() => {
-    const handler = (event: Event) => {
-      setSearchText((event as CustomEvent<string>).detail);
-      setPanelOpen(false);
-    };
-    window.addEventListener("raycast-mini:search", handler);
-    return () => window.removeEventListener("raycast-mini:search", handler);
-  }, [setSearchText]);
-
-  // `extensionHost.popToRoot` (`Fne`): unwind every page, optionally clearing the search bar.
-  useEffect(() => {
-    if (!command.sessionId) return;
-    return onNotification("extensionHost.popToRoot", (raw) => {
-      const payload = raw as { sessionId?: string; clearSearchBar?: boolean };
-      if (payload.sessionId && payload.sessionId !== command.sessionId) return;
-      popToRoot();
-      if (payload.clearSearchBar) setSearchText("");
-      setPanelOpen(false);
-    });
-  }, [command.sessionId, popToRoot, setSearchText]);
-
-  const body = topPage(pages)?.body;
-  // Effective selection: the keyboard, the action groups and the test hooks operate on the row
-  // that is actually highlighted — a fresh page has no stored selection, and Raycast's fallback
-  // is the first item. Without this, the first ArrowDown only "fills in" the already-highlighted
-  // first row and looks like a dead key.
-  const bodyItems = useMemo(() => (body ? flatItems(body) : []), [body]);
-  const effectiveSelectedId = useMemo(() => {
-    if (selectedItemId && bodyItems.some((item) => item.id === selectedItemId)) return selectedItemId;
-    return bodyItems[0]?.id ?? null;
-  }, [selectedItemId, bodyItems]);
-
-  const groups: ActionGroup[] = useMemo(() => {
-    if (entry.kind !== "extension" || !body) return [];
-    const itemActions = bodyItems
-      .filter((item) => item.id === effectiveSelectedId)
-      .flatMap((item) => item.actions ?? []);
-    const models = [...(body.actions ?? []), ...itemActions];
-    return models.length ? [{ name: "actions", actions: models }] : [];
-  }, [entry, body, bodyItems, effectiveSelectedId]);
-
-  // Dev-only automation hooks for the running command (see testHooks.ts).
-  useEffect(() => {
-    if (!isDevExtensionsEnabled() || entry.kind !== "extension") return;
-    const runPrimary = () => {
-      if (!body) return false;
-      const items = bodyItems;
-      const selected = items.find((item) => item.id === effectiveSelectedId) ?? items[0];
-      const primary = selected?.actions?.[0] ?? body.actions?.[0];
-      if (!primary) return false;
-      void command.createCallback(primary.id)({ itemId: primary.itemId });
-      return true;
-    };
-    overrideTestHooks({
-      press: (key) => {
-        if (key === "enter") return runPrimary();
-        if (key === "pop") {
-          popOne();
-          return true;
-        }
-        if (key === "popToRoot") {
-          popToRoot();
-          return true;
-        }
-        if (key === "escape") {
-          onBack();
-          return true;
-        }
-        return false;
-      },
-      state: () => ({
-        view: "command",
-        command: entry.command.title,
-        pages: pages.pages.length,
-        kind: body?.kind ?? null,
-        selectedItemId,
-        searchText,
-      }),
-    });
-  });
-
-  if (entry.kind === "clipboard") {
-    return (
-      <ClipboardHistoryView
-        searchText={searchText}
-        onSearchTextChange={setSearchText}
-        subscribeStateChanged={subscribeClipboardStateChanged}
-        showToast={showToast}
-        onBack={onBack}
-        runEntryAction={runClipboardEntryAction}
-        closeMainWindow={closeWindow}
-        openUrl={openClipboardUrl}
-      />
-    );
-  }
-
-  if (entry.kind === "internal") {
-    if (entry.area === "quicklinks") {
-      // The InternalCommandEntry type is a product of area × command; only the four quicklinks
-      // commands are ever filed under this area (INTERNAL_COMMANDS is the single source).
-      return (
-        <QuicklinksView
-          command={entry.command as QuicklinksCommandName}
-          searchText={searchText}
-          onSearchTextChange={setSearchText}
-          showToast={showToast}
-          onBack={onBack}
-          closeMainWindow={closeWindow}
-          applications={applications}
-          createLink={createLink}
-          onConsumeCreateLink={onConsumeCreateLink}
-        />
-      );
-    }
-    if (entry.area === "calculator") {
-      // Only reachable through the calculator row's `Show History` action — the calculator is an
-      // ephemeral root-search section, not a searchable command.
-      return (
-        <CalculatorHistoryView
-          command="history"
-          searchText={searchText}
-          onSearchTextChange={setSearchText}
-          showToast={showToast}
-          onBack={onBack}
-          closeMainWindow={closeWindow}
-        />
-      );
-    }
-    return (
-      <SnippetsView
-        command={entry.command as SnippetsCommandName}
-        searchText={searchText}
-        onSearchTextChange={setSearchText}
-        showToast={showToast}
-        onBack={onBack}
-        closeMainWindow={closeWindow}
-      />
-    );
-  }
-
-  if (entry.kind !== "extension") {
-    // Applications are handled natively; this keeps the type narrow.
-    return null;
-  }
-
-  return (
-    <div className="window" onMouseDown={keepSearchFocus}>
-      <header className="window__header">
-        <button type="button" className="icon icon--plain" onClick={pages.pages.length > 1 ? popOne : onBack} aria-label="Back">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <div className="searchbar">
-          {/* Raycast's single search bar: the command view's input doubles as the List/Grid search
-              (placeholder + accessory come from the current page's body) — never a second input. */}
-          <input
-            ref={searchInputRef}
-            className="searchbar__input"
-            autoFocus
-            value={searchText}
-            placeholder={body?.searchBarPlaceholder ?? `Filter ${entry.command.title}…`}
-            onChange={(event) => setSearchText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key.toLowerCase() === "k" && (event.ctrlKey || event.metaKey)) {
-                event.preventDefault();
-                setPanelOpen((open) => !open);
-              } else if (event.key === "[" && (event.ctrlKey || event.metaKey)) {
-                event.preventDefault();
-                if (pages.pages.length > 1) popOne();
-                else onBack();
-              } else if (event.key === "Escape") {
-                if (searchText) setSearchText("");
-                else if (panelOpen) setPanelOpen(false);
-                else if (pages.pages.length > 1) popOne();
-                else onBack();
-              } else if (event.key === "Enter" && event.shiftKey) {
-                // Shift+Enter toggles the action panel, like Raycast's action-bar button.
-                setPanelOpen((open) => !open);
-              }
-            }}
-          />
-          {body?.searchBarAccessory && "sections" in body.searchBarAccessory ? (
-            <SearchBarDropdown accessory={body.searchBarAccessory} createCallback={command.createCallback} />
-          ) : null}
-        </div>
-        <button
-          type="button"
-          className="action-bar-button"
-          aria-label="Actions"
-          data-state={panelOpen ? "open" : "closed"}
-          onClick={() => setPanelOpen((open) => !open)}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 7h16M4 12h10M4 17h7" strokeLinecap="round" />
-          </svg>
-        </button>
-
-        <LoadingBar isLoading={command.isLoading || command.phase === "loading"} />
-      </header>
-
-      <main className="window__body" style={{ padding: 0 }}>
-        {command.isLoading || command.phase === "loading" ? (
-          <div className="state">
-            <div className="state__title">Loading…</div>
-          </div>
-        ) : command.error ? (
-          <div className="state">
-            <div className="state__title">Command failed</div>
-            <div className="state__message">{command.error.message}</div>
-          </div>
-        ) : command.suspended ? (
-          <div className="state">
-            <div className="state__title">Preparing view…</div>
-          </div>
-        ) : body ? (
-          <CommandViewKeyboard
-            body={body}
-            selectedItemId={effectiveSelectedId}
-            onSelectionChange={setSelectedItemId}
-            onPopOne={popOne}
-            onPopToRoot={popToRoot}
-            onRunPrimary={(action) => {
-              void command.createCallback(action.id)({ itemId: action.itemId });
-            }}
-          >
-            <RenderedView
-              page={topPage(pages)!}
-              onSelectionChange={setSelectedItemId}
-              createCallback={command.createCallback}
-              onLoadMore={() => {
-                const onLoadMore = body.pagination?.onLoadMore;
-                if (onLoadMore) void command.createCallback(onLoadMore)({});
-              }}
-            />
-          </CommandViewKeyboard>
-        ) : (
-          <div className="state">
-            <div className="state__title">Preparing view…</div>
-          </div>
-        )}
-      </main>
-
-      <footer className="window__footer">
-        <button
-          type="button"
-          className="footer-icon-button"
-          aria-label="Settings"
-          onClick={openSettings}
-        >
-          <RaycastIcon name="cog" size={16} />
-        </button>
-        <span className="footer__spacer" />
-        <button
-          type="button"
-          className="footer-action footer-action--kbd"
-          onClick={() => setPanelOpen((open) => !open)}
-        >
-          Actions <span className="kbd">Ctrl</span>
-          <span className="kbd">K</span>
-        </button>
-      </footer>
-
-      <ActionPanel
-        open={panelOpen}
-        title="Actions"
-        groups={[...groups, ...toastGroups]}
-        onClose={() => setPanelOpen(false)}
-        onRun={async (action) => {
-          if (await runToastAction(action.id)) {
-            setPanelOpen(false);
-            return;
-          }
-          command.createCallback(action.id)({ itemId: action.itemId });
-          setPanelOpen(false);
-        }}
-      />
-    </div>
-  );
-}
-
-/**
- * Window-level keyboard for a running command view: arrows move the selection (1D lists and 2D
- * grids), Enter runs the selected item's primary action, Escape/Ctrl+[ pop, Shift+Escape pops to
- * root — Raycast's `goBack`/`popToRoot` shortcuts (`shortcuts-C1kqjDmf.js`). Delegated to a child so
- * the key map can read the current page's items.
- */
-function CommandViewKeyboard({
-  body,
-  selectedItemId,
-  onSelectionChange,
-  onPopOne,
-  onPopToRoot,
-  onRunPrimary,
-  children,
-}: {
-  body: ViewBody;
-  selectedItemId: string | null;
-  onSelectionChange: (id: string | null) => void;
-  onPopOne: () => void;
-  onPopToRoot: () => void;
-  onRunPrimary: (action: ViewAction) => void;
-  children: ReactNode;
-}) {
-  const ids = useMemo(() => selectableIds(body.sections, flatItems(body)), [body]);
-  const rowWidths = useMemo(() => (body.kind === "Grid" ? gridRowWidths(body) : null), [body]);
-  const items = useMemo(() => flatItems(body), [body]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const inSearch = target?.classList?.contains("searchbar__input") ?? false;
-      if (event.key === "Escape" && event.shiftKey) {
-        event.preventDefault();
-        onPopToRoot();
-        return;
-      }
-      if (event.key === "[" && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
-        onPopOne();
-        return;
-      }
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.key === "Escape") return; // the search input and the session handle Escape
-      if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        if (ids.length === 0) return;
-        event.preventDefault();
-        const index = selectedItemId ? ids.indexOf(selectedItemId) : -1;
-        if (rowWidths) {
-          onSelectionChange(moveInGrid(ids, rowWidths, index, event.key));
-        } else if (event.key === "ArrowDown") {
-          onSelectionChange(ids[Math.min(index + 1, ids.length - 1)]);
-        } else if (event.key === "ArrowUp") {
-          onSelectionChange(ids[Math.max(index - 1, 0)]);
-        }
-        return;
-      }
-      if (event.key === "Enter") {
-        // Enter runs the selected item's primary action from anywhere in the command view —
-        // including the search input, which keeps focus by design (keepSearchFocus).
-        const selected = items.find((item) => item.id === selectedItemId) ?? items[0];
-        const primary = selected?.actions?.[0];
-        if (primary) {
-          event.preventDefault();
-          onRunPrimary(primary);
-        }
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [ids, rowWidths, items, selectedItemId, onSelectionChange, onPopOne, onPopToRoot, onRunPrimary]);
-
-  return <>{children}</>;
-}
-
-/** 2D movement over ragged grid rows (`rowWidths` per row). */
-export function moveInGrid(ids: string[], rowWidths: number[], currentIndex: number, key: string): string {
-  if (ids.length === 0) return ids[0] ?? null as unknown as string;
-  if (currentIndex < 0) return ids[0];
-  // Build row offset table.
-  const rowStarts: number[] = [];
-  let offset = 0;
-  for (const width of rowWidths) {
-    rowStarts.push(offset);
-    offset += width;
-  }
-  let row = rowStarts.findIndex((start, rowIndex) => currentIndex >= start && currentIndex < start + rowWidths[rowIndex]);
-  if (row < 0) row = 0;
-  const column = currentIndex - rowStarts[row];
-  if (key === "ArrowRight") {
-    const next = currentIndex + 1;
-    return next < ids.length ? ids[next] : ids[currentIndex];
-  }
-  if (key === "ArrowLeft") {
-    const previous = currentIndex - 1;
-    return previous >= 0 ? ids[previous] : ids[currentIndex];
-  }
-  if (key === "ArrowDown") {
-    const nextRow = row + 1;
-    if (nextRow >= rowWidths.length) return ids[currentIndex];
-    const targetColumn = Math.min(column, rowWidths[nextRow] - 1);
-    return ids[rowStarts[nextRow] + targetColumn];
-  }
-  // ArrowUp
-  const previousRow = row - 1;
-  if (previousRow < 0) return ids[currentIndex];
-  const targetColumn = Math.min(column, rowWidths[previousRow] - 1);
-  return ids[rowStarts[previousRow] + targetColumn];
-}
-
-void APPLICATION_AREA_KEYS;

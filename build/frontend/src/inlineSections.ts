@@ -130,12 +130,14 @@ export function getInlineSectionResults(query: string): InlineSectionResult[] {
 // Settings for inline sections
 export interface InlineSectionSettings {
   calculator: boolean;
+  translate: boolean;
   snippets: boolean;
   webSearch: boolean;
 }
 
 export const DEFAULT_INLINE_SECTION_SETTINGS: InlineSectionSettings = {
   calculator: true,
+  translate: true,
   snippets: true,
   webSearch: true,
 };

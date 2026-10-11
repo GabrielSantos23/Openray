@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { MainWindow } from "./App";
+import { MainWindow } from "./app/App";
 import { ToastLayer } from "./Toast";
 
 // Surface uncaught renderer errors to the host's diagnostics hook so a broken UI is visible in

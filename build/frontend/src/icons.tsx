@@ -35,6 +35,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  Flag,
   File,
   Folder,
   FolderOpen,
@@ -114,6 +115,7 @@ const REGISTRY: Record<string, IconComponent> = {
   "apple-logo": Bird,
   "chevron-right": ChevronRight,
   calculator: Calculator,
+  globe: Globe,
   switch: ArrowLeftRight,
 
   // ---- Clipboard history keys (main-window-*.js row icons + action icons) ----------------------
@@ -121,6 +123,7 @@ const REGISTRY: Record<string, IconComponent> = {
   "tack-disabled": PinOff,
   "at-symbol": Mail,
   "eye-dropper": Pipette,
+  flag: Flag,
   "blank-document": File,
   "bullet-points": List,
   image: ImageIcon,

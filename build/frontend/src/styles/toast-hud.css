@@ -1,0 +1,626 @@
+/* ==========================================================================================
+   Toast + HUD.
+   ========================================================================================== */
+
+/* ==========================================================================================
+   Toast + HUD — ported from Raycast's `window-shell-hosts-BjQOV-zH.css`
+   (`.toast__*`, `.in-window-toasts__*`, `.hud-primitive__*`, `.activity-indicator__*`).
+   Token mapping: --bg-40 backdrop + --blur-1 + the inset hairline border, variant gradients
+   at 26% alpha over --green/--yellow/--red, --easing-ease-out-expo transitions.
+   ========================================================================================== */
+
+/* @property makes the gradient colour animatable across a variant change (pending -> success
+ * on `updateToast`), matching Raycast's `transition: --gradient-base-color 1.2s`. */
+@property --toast-gradient-color {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
+.in-window-toasts__wrapper {
+  position: fixed;
+  left: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  padding-inline: var(--space-24);
+  pointer-events: none;
+  animation: 0.3s ease-out in-window-toasts__open;
+  z-index: 40;
+}
+
+.in-window-toasts__root {
+  pointer-events: all;
+}
+
+@keyframes in-window-toasts__open {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toast__root {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding-inline: var(--space-12);
+  padding-block: var(--space-8);
+  max-width: min(600px, 100%);
+  background-color: var(--bg-40);
+  backdrop-filter: blur(var(--blur-1));
+  -webkit-backdrop-filter: blur(var(--blur-1));
+  border-radius: var(--radius-8);
+  color: var(--color-text-primary);
+}
+
+.toast__root:has(.toast__indicator) {
+  padding-inline-start: var(--space-8);
+  padding-inline-end: var(--space-16);
+}
+
+/* Raycast's inset hairline: `inset 0 .5px 0 0 var(--fg-10), inset 0 0 0 1px var(--fg-10)`. */
+.toast__root::after,
+.hud-primitive__root::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  box-shadow: inset 0 0.5px 0 0 var(--fg-10), inset 0 0 0 1px var(--fg-10);
+}
+
+.toast__variantBackground,
+.hud-primitive__variantBackground {
+  position: absolute;
+  inset: 0;
+  --toast-gradient-color: transparent;
+  transition: --toast-gradient-color 1.2s var(--easing-ease-out-expo);
+  background-image:
+    radial-gradient(45% 30% at 50% -10%, var(--toast-gradient-color), rgb(from var(--toast-gradient-color) r g b / 0%)),
+    radial-gradient(100% 90% at 50% -15%, var(--toast-gradient-color), rgb(from var(--toast-gradient-color) r g b / 0%));
+}
+
+.toast__variantBackground[data-variant="success"],
+.hud-primitive__variantBackground[data-variant="success"] {
+  --toast-gradient-color: rgb(from var(--green) r g b / 26%);
+}
+
+.toast__variantBackground[data-variant="warning"],
+.hud-primitive__variantBackground[data-variant="warning"] {
+  --toast-gradient-color: rgb(from var(--yellow) r g b / 26%);
+}
+
+.toast__variantBackground[data-variant="failure"],
+.hud-primitive__variantBackground[data-variant="failure"] {
+  --toast-gradient-color: rgb(from var(--red) r g b / 26%);
+}
+
+.toast__details,
+.hud-primitive__details {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.toast__title,
+.hud-primitive__title {
+  margin: 0;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast__message,
+.hud-primitive__message {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-11);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast__indicator {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+/* ActivityIndicator — spinner arc while pending, glowing variant-coloured dot otherwise. */
+.activity-indicator {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.activity-indicator__spinner {
+  width: 100%;
+  height: 100%;
+  grid-area: 1 / 1;
+  transition: all 0.8s var(--easing-ease-out-expo);
+  transform: scale(calc(0.6 * var(--spinner-scaling, 1)));
+  opacity: 0;
+}
+
+.activity-indicator[data-variant="pending"] .activity-indicator__spinner {
+  transform: scale(calc(1 * var(--spinner-scaling, 1)));
+  opacity: 1;
+}
+
+.activity-indicator__spinnerBack {
+  fill: none;
+  stroke: var(--color-text-quaternary);
+  transition: all 0.8s var(--easing-ease-out-expo);
+}
+
+.activity-indicator[data-variant="success"] .activity-indicator__spinnerBack { stroke: rgb(from var(--green) r g b / 20%); }
+.activity-indicator[data-variant="warning"] .activity-indicator__spinnerBack { stroke: rgb(from var(--yellow) r g b / 20%); }
+.activity-indicator[data-variant="failure"] .activity-indicator__spinnerBack { stroke: rgb(from var(--red) r g b / 20%); }
+
+.activity-indicator__spinnerArc {
+  fill: none;
+  stroke: var(--color-text-primary);
+  transform-origin: 50%;
+  opacity: 0;
+  transition: stroke 0.5s ease-out, opacity 0.5s ease-out, stroke-dashoffset 0.1s ease-out;
+}
+
+.activity-indicator__spinnerArc[data-is-determinate="false"] {
+  stroke-dasharray: calc(var(--path-length) * 0.25) calc(var(--path-length) * 0.75);
+  stroke-dashoffset: 0;
+  animation: activity-indicator__rotate 0.8s linear infinite both;
+}
+
+.activity-indicator__spinnerArc[data-is-determinate="true"] {
+  stroke-dasharray: var(--path-length);
+  stroke-dashoffset: calc(var(--path-length) * (1 - var(--progress)));
+}
+
+.activity-indicator[data-variant="pending"] .activity-indicator__spinnerArc { opacity: 1; }
+.activity-indicator[data-variant="success"] .activity-indicator__spinnerArc { stroke: var(--green); }
+.activity-indicator[data-variant="warning"] .activity-indicator__spinnerArc { stroke: var(--yellow); }
+.activity-indicator[data-variant="failure"] .activity-indicator__spinnerArc { stroke: var(--red); }
+
+.activity-indicator__indicator {
+  width: 5px;
+  height: 5px;
+  grid-area: 1 / 1;
+  border-radius: var(--radius-full);
+  background-color: transparent;
+  box-shadow: 0 0 12px 8px transparent;
+  transition: all 0.8s var(--easing-ease-out-expo);
+}
+
+.activity-indicator[data-variant="pending"] .activity-indicator__indicator {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.activity-indicator[data-variant="success"] .activity-indicator__indicator {
+  background-color: var(--green);
+  box-shadow: 0 0 12px 8px rgb(from var(--green) r g b / 20%);
+}
+
+.activity-indicator[data-variant="warning"] .activity-indicator__indicator {
+  background-color: var(--yellow);
+  box-shadow: 0 0 12px 8px rgb(from var(--yellow) r g b / 20%);
+}
+
+.activity-indicator[data-variant="failure"] .activity-indicator__indicator {
+  background-color: var(--red);
+  box-shadow: 0 0 12px 8px rgb(from var(--red) r g b / 20%);
+}
+
+@keyframes activity-indicator__rotate {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: calc(-1 * var(--path-length));
+  }
+}
+
+/* HUD primitive (in-window "mocked native view" fallback; the real HUD lives in the host's
+ * native window). Raycast geometry: 46px tall (56px with a message), padding 12/24. */
+.hud-primitive__root {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-12);
+  padding-inline-end: var(--space-24);
+  max-width: 500px;
+  height: 46px;
+  background-color: var(--bg-40);
+  backdrop-filter: blur(var(--blur-1));
+  -webkit-backdrop-filter: blur(var(--blur-1));
+  border-radius: var(--radius-8);
+  color: var(--color-text-primary);
+}
+
+.hud-primitive__root:not(:has(.hud-primitive__iconWrapper)) {
+  padding-inline-start: var(--space-24);
+}
+
+.hud-primitive__root:has(.hud-primitive__message) {
+  height: 56px;
+}
+
+.hud-primitive__indicator {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.hud-fallback__root {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: var(--space-24);
+  z-index: 41;
+  animation: hud-fallback__open 0.3s var(--easing-ease-out-expo);
+}
+
+@keyframes hud-fallback__open {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* The HUD native window's page (hud.html): transparent, content-sized. */
+.hud-window-body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.hud-window__root {
+  position: relative;
+}
+
+/* -------------------------------------------------------------------------------------------
+ * Clipboard History
+ *
+ * Raycast renders the clipboard view as a master/detail split: the age-sectioned list on the
+ * left, `ClipboardHistoryDetails` on the right (`main-window-g1Vb1JLY.js`). The type filter is a
+ * popover button in the navigation bar, next to the search field.
+ * ---------------------------------------------------------------------------------------- */
+
+.clipboard-body {
+  padding: 0;
+}
+
+.clipboard-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.clipboard-list {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden auto;
+  padding: var(--space-6) var(--space-8);
+  border-right: 1px solid var(--color-border-tertiary);
+}
+
+.clipboard-filter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 24px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-input-field);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-11);
+  cursor: pointer;
+  transition: color 120ms var(--easing-ease-out-expo), background-color 120ms var(--easing-ease-out-expo);
+}
+
+.clipboard-filter-button:hover {
+  color: var(--color-text-primary);
+}
+
+.clipboard-filter-button[data-state="open"] {
+  background: var(--color-surface-list-selection);
+  color: var(--color-text-primary);
+}
+
+.clipboard-filter-button__label {
+  white-space: nowrap;
+}
+
+.clipboard-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden auto;
+}
+
+.clipboard-detail__preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: var(--space-12);
+  background: var(--color-surface-input-field);
+  border-bottom: 1px solid var(--color-border-tertiary);
+}
+
+.clipboard-detail__preview--text {
+  align-items: flex-start;
+  justify-content: flex-start;
+  max-height: 260px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: var(--font-size-11);
+  color: var(--color-text-primary);
+}
+
+.clipboard-detail__preview--files {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  max-height: 260px;
+}
+
+.clipboard-detail__preview img {
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: var(--radius-8);
+}
+
+.clipboard-detail__imagePlaceholder {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+.clipboard-detail__file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-11);
+}
+
+.clipboard-detail__filePath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboard-detail__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-12);
+}
+
+.clipboard-detail__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-12);
+  font-size: var(--font-size-11);
+}
+
+.clipboard-detail__key {
+  min-width: 88px;
+  color: var(--color-text-tertiary);
+}
+
+.clipboard-detail__value {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.clipboard-detail__empty {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+.clipboard-confirm__body {
+  padding: var(--space-12);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+
+.clipboard-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  padding: 0 var(--space-12) var(--space-12);
+}
+
+.settings-textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--color-settings-dropdown-border);
+  border-radius: var(--radius-8);
+  background: var(--color-settings-dropdown);
+  color: var(--color-settings-text);
+  font: inherit;
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.settings-textarea:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.settings-textarea:disabled {
+  opacity: 0.5;
+}
+
+.settings-textfield {
+  width: 96px;
+  padding: var(--space-6) var(--space-10);
+  border: 1px solid var(--color-settings-dropdown-border);
+  border-radius: var(--radius-8);
+  background: var(--color-settings-dropdown);
+  color: var(--color-settings-text);
+  font: inherit;
+  font-size: var(--font-size-13);
+  text-align: right;
+}
+
+.settings-textfield:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.settings-textfield:disabled {
+  opacity: 0.5;
+}
+
+.clipboard-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 1px var(--space-6);
+  border: 1px solid var(--fg-20);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-8);
+  white-space: nowrap;
+}
+
+.clipboard-tag__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+}
+
+.clipboard-tag__more {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-8);
+}
+
+.clipboard-filter-button__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--fg-20);
+}
+
+.clipboard-filter-button[data-state="active"] {
+  color: var(--color-text-primary);
+}
+
+.clipboard-tag-editor__field {
+  padding: var(--space-12);
+}
+
+.clipboard-tag-editor__field input {
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--color-border-field);
+  border-radius: var(--radius-8);
+  background: var(--color-surface-input-field);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-13);
+}
+
+.clipboard-tag-editor__field input:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.clipboard-tag-editor__field textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: var(--space-8);
+  border: 1px solid var(--color-border-field);
+  border-radius: var(--radius-8);
+  background: var(--color-surface-input-field);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.clipboard-tag-editor__field textarea:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.clipboard-prompt {
+  min-width: 420px;
+}
+
+.clipboard-prompt .clipboard-tag-editor__field {
+  padding-bottom: var(--space-8);
+}
+
+.action--primary {
+  color: var(--color-text-primary);
+}
+
+.action--primary:disabled {
+  opacity: 0.45;
+}
+
+.clipboard-tag-editor__chips,
+.clipboard-tag-editor__known {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  padding: 0 var(--space-12) var(--space-12);
+}
+
+.clipboard-tag-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+  padding: 0 var(--space-12) var(--space-12);
+}
+
+.clipboard-loading-more {
+  padding: var(--space-8);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  text-align: center;
+}

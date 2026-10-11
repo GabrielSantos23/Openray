@@ -7,9 +7,9 @@
 // behind Ctrl+K.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionPanel, type ActionGroup } from "./ActionPanel";
-import { ipc } from "./ipc";
-import { RaycastIcon } from "./icons";
+import { ActionPanel, type ActionGroup } from "../../ActionPanel";
+import { ipc } from "../../ipc";
+import { RaycastIcon } from "../../icons";
 import {
   CLIPBOARD_TYPE_FILTERS,
   clipboardActionGroups,
@@ -27,7 +27,7 @@ import {
   useClipboardHistory,
   useClipboardPreview,
   useClipboardSections,
-} from "./clipboardHistory";
+} from "../../clipboardHistory";
 
 /** One row of the `Paste as…` submenu: a format this entry actually holds. */
 interface PasteAsOption {

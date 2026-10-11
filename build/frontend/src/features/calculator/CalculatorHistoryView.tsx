@@ -8,10 +8,10 @@
 // Clearing the search saves the live result to history (confirmed behavior).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionPanel, type ActionGroup } from "./ActionPanel";
-import { ipc, onNotification } from "./ipc";
-import { RaycastIcon } from "./icons";
-import { CommandFooter } from "./commandChrome";
+import { ActionPanel, type ActionGroup } from "../../ActionPanel";
+import { ipc, onNotification } from "../../ipc";
+import { RaycastIcon } from "../../icons";
+import { CommandFooter } from "../../commandChrome";
 
 interface HistoryEntry {
   id: string;
