@@ -18,7 +18,9 @@ public static class NativeHost
             ? Applications.DispatchAsync(method, data)
             : method.StartsWith("clipboardHistory.", StringComparison.Ordinal)
                 ? ClipboardNative.DispatchAsync(method, data)
-                : DispatchCoreAsync(method, data);
+                : method.StartsWith("windowManagement.", StringComparison.Ordinal)
+                    ? WindowManagementNative.DispatchAsync(method, data)
+                    : DispatchCoreAsync(method, data);
 
     private static Task<object?> DispatchCoreAsync(string method, JsonElement? data) => method switch
     {

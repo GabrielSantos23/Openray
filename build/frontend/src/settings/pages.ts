@@ -1,6 +1,8 @@
 // The Settings page catalog: the model Raycast's `settings-page-definition-utils` produces and
 // the full page definitions (titles, descriptions, sections, rows, keywords) for the sidebar.
 
+import { WM_COMMANDS } from "../wm-commands";
+
 export type SettingsValue = boolean | string | number;
 export type SettingsMap = Record<string, SettingsValue>;
 
@@ -43,6 +45,11 @@ export interface SectionDefinition {
   /** Shown instead of the card when the section has no rows to render. */
   empty?: string;
 }
+
+// The confirmed Window Management option lists (the shipped `Qt`/`$t` maps and the preset menu).
+export const WM_GAP_OPTION_LABELS = ["None", "Tiny", "Small", "Medium", "Large", "Extra Large"] as const;
+export const WM_CYCLE_OPTION_LABELS = ["None", "Cycle ½, ⅔, and ⅓", "Cycle Displays"] as const;
+export const WM_PRESET_OPTION_LABELS = ["None", "Magnet", "Rectangle"] as const;
 
 export interface PageDefinition {
   id: string;
@@ -639,6 +646,76 @@ export const PAGES: readonly PageDefinition[] = [
     ],
   },
   {
+    id: "window-management",
+    title: "Window Management",
+    description: "Move and resize your application windows.",
+    icon: "app-window",
+    keywords: [
+      "window management", "windows", "gap", "gaps", "cycling", "cycle", "presets", "magnet",
+      "hotkeys", "halves", "thirds", "quarters", "sixths", "maximize", "restore", "minimize",
+      "move", "resize", "always on top",
+    ],
+    sections: [
+      {
+        id: "window-management-gaps",
+        title: "Gaps",
+        rows: [
+          {
+            id: "wm-inner-gap",
+            title: "Window Gap",
+            description: "Gap between windows",
+            control: "select",
+            options: WM_GAP_OPTION_LABELS,
+          },
+          {
+            id: "wm-outer-gap",
+            title: "Screen Gap",
+            description: "Gap from windows to the screen edge",
+            control: "select",
+            options: WM_GAP_OPTION_LABELS,
+          },
+        ],
+      },
+      {
+        id: "window-management-cycling",
+        title: "Cycling",
+        rows: [
+          {
+            id: "wm-cycle-mode",
+            title: "Cycling",
+            description: "Cycle sizes when using half commands",
+            control: "select",
+            options: WM_CYCLE_OPTION_LABELS,
+          },
+        ],
+      },
+      {
+        id: "window-management-presets",
+        title: "Presets",
+        description: "Apply hotkeys from other window management apps",
+        rows: [
+          {
+            id: "wm-preset",
+            title: "Preset",
+            description: "Rectangle ships byte-identical to Magnet in the build we reverse-engineered.",
+            control: "select",
+            options: WM_PRESET_OPTION_LABELS,
+          },
+        ],
+      },
+      {
+        id: "window-management-commands",
+        title: "Move & Resize",
+        description: "Every command also runs from root search. Preset hotkeys show on the right.",
+        rows: WM_COMMANDS.map((definition) => ({
+          id: `wm-cmd-${definition.key}`,
+          title: definition.title,
+          control: "info" as const,
+        })),
+      },
+    ],
+  },
+  {
     id: "clipboard-history",
     title: "Clipboard History",
     description:
@@ -877,6 +954,7 @@ export const SIDEBAR_PAGE_IDS = [
   "calculator",
   "translator",
   "file-search",
+  "window-management",
   "clipboard-history",
   "cloud-sync",
   "advanced",

@@ -7,6 +7,7 @@ import { applicationFavoriteKey, commandFavoriteKey } from "../favorites";
 import { isDevExtensionsEnabled } from "../testHooks";
 import { isLikelyUrl, type QuicklinkEntry } from "../quicklinks";
 import { looksLikeFilePath } from "../fileSearch";
+import { WM_COMMANDS } from "../windowManagement";
 import { generateKeywords, rankEntriesWithFallbacks, type FallbackCommand, type FileSearchResult, type Sensitivity } from "../matching";
 import type { InlineSectionResult } from "../inlineSections";
 import {
@@ -26,7 +27,7 @@ import {
   type TranslatorCustomCommand,
 } from "./entries";
 
-type RootSectionId = "favorites" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search";
+type RootSectionId = "favorites" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search" | "window-management";
 
 interface RootSection {
   id: RootSectionId;
@@ -75,6 +76,17 @@ export function buildSections(
     rootEntry: internalCommandEntry(definition.area, definition.command),
   }));
 
+  // Window Management commands: every row applies to the previously focused window; the two
+  // argument commands open the args view instead of running directly.
+  const windowManagementSearchables: SearchableEntry[] = WM_COMMANDS.map((definition) => ({
+    title: definition.title,
+    subtitle: definition.description,
+    keywords: definition.keywords,
+    rootEntry: (definition.args
+      ? { kind: "wm-args", commandKey: definition.key, title: definition.title }
+      : { kind: "wm-command", commandKey: definition.key, title: definition.title }) as RootEntry,
+  }));
+
   // Dynamic quicklink rows: title = name, keywords include the `quicklink` tag (Raycast's
   // `dynamicCommands.quicklink`).
   const quicklinkSearchables: SearchableEntry[] = quicklinkRows.map((entry) => ({
@@ -114,7 +126,7 @@ export function buildSections(
   }
 
   // Combine all searchable entries
-  const allSearchables = [...appSearchables, clipboardSearchable, ...internalCommandSearchables, ...commandSearchables, ...quicklinkSearchables, ...customTranslateSearchables];
+  const allSearchables = [...appSearchables, clipboardSearchable, ...internalCommandSearchables, ...windowManagementSearchables, ...commandSearchables, ...quicklinkSearchables, ...customTranslateSearchables];
 
   // Rank all entries using the full Raycast algorithm with fallback support
   const { results: ranked, showFallbacks } = rankEntriesWithFallbacks(
@@ -175,6 +187,9 @@ export function buildSections(
   const commands = regularResults
     .filter((r) => r.entry.rootEntry.kind === "extension")
     .map((r) => r.entry.rootEntry);
+  const windowManagementEntries = regularResults
+    .filter((r) => r.entry.rootEntry.kind === "wm-command" || r.entry.rootEntry.kind === "wm-args")
+    .map((r) => r.entry.rootEntry);
 
   // Handle fallback commands - they appear as a separate section when shown
   const fallbackEntries = showFallbacks
@@ -233,6 +248,11 @@ export function buildSections(
   // Commands section
   if (clipboardEntries.length > 0 || internalCommandEntries.length > 0 || commands.length > 0) {
     sections.push({ id: "commands", title: "Commands", icon: "Blocks", entries: [...clipboardEntries, ...internalCommandEntries, ...commands] });
+  }
+
+  // Window Management section: Raycast files the extension's commands under their product area.
+  if (windowManagementEntries.length > 0) {
+    sections.push({ id: "window-management", title: "Window Management", icon: "app-window", entries: windowManagementEntries });
   }
 
   // Quicklinks section: the createWithURL entry, then dynamic quicklink rows. Dynamic rows only

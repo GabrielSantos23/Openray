@@ -32,6 +32,7 @@ const { createCalculator } = require("./calculator");
 const { createTranslator } = require("./translator");
 const { createFileIndexer } = require("./file-indexer");
 const { createUsageTracker } = require("./usage-tracker");
+const { createWindowStates } = require("./window-states");
 
 const config = {
   // Must match host/NamedPipeBridge.cs
@@ -123,6 +124,9 @@ backend.registerFileIndexerHandler(fileIndexer.handlers);
   // Usage tracker
   const usageTracker = createUsageTracker({});
   backend.registerUsageTrackerHandler(usageTracker.handlers);
+
+// Window Management saved bounds — the store behind the `Restore` command.
+backend.registerWindowStateHandler(createWindowStates().handlers);
 
 // The Clipboard History shortcut is a per-command hotkey in Raycast, registered with the host once the
 // window exists. Re-registering is harmless if it is already in place.

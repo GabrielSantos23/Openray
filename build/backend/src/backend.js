@@ -56,6 +56,7 @@ function createBackend(options) {
   let translatorHandlers = {};
   let fileIndexerHandlers = {};
   let usageTrackerHandlers = {};
+  let windowStateHandlers = {};
 
   // ---------------------------------------------------------------------------------------------
   // Installed-extension registry.
@@ -692,6 +693,13 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
+      // Window Management saved bounds (`windowManagement.getSavedWindowState|saveWindowState`)
+      // live in this process; the remaining `windowManagement.*` verbs are native host routes.
+      if (method === "windowManagement.getSavedWindowState" || method === "windowManagement.saveWindowState") {
+        const handler = windowStateHandlers[method.slice("windowManagement.".length)];
+        if (handler) return handler(data ?? {});
+      }
+
       // Native `.NET` operations (clipboard, shell, and Raycast's internal Applications extension).
       // The clipboard-history verbs the host owns (OCR, image pixels, `Open in App`, `Save as File`,
       // capability probe) are named `clipboardHistory.*` so they are distinguishable from the raw
@@ -699,7 +707,7 @@ function createBackend(options) {
       if (method.startsWith("clipboardHistory.")) {
         return send("backend", "native", { method, data: data ?? {} });
       }
-      if (method.startsWith("clipboard.") || method.startsWith("shell.") || method.startsWith("applications.") || method.startsWith("fileSystem.")) {
+      if (method.startsWith("clipboard.") || method.startsWith("shell.") || method.startsWith("applications.") || method.startsWith("fileSystem.") || method.startsWith("windowManagement.")) {
         return send("backend", "native", { method, data: data ?? {} });
       }
 
@@ -762,6 +770,10 @@ function createBackend(options) {
     /** Install the usage tracker handler table. */
     registerUsageTrackerHandler(handlers) {
       usageTrackerHandlers = handlers ?? {};
+    },
+    /** Install the window saved-state handler table. */
+    registerWindowStateHandler(handlers) {
+      windowStateHandlers = handlers ?? {};
     },
   };
 }

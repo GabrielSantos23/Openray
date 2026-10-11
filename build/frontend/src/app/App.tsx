@@ -31,6 +31,7 @@ import {
   type ToastState,
 } from "../toastStore";
 import { RaycastIcon } from "../icons";
+import { readStoredHotkeys, reregisterStoredHotkeys, runWindowManagementCommand, wmCommandDefinition, wmCommandIcon } from "../windowManagement";
 import { applicationFavoriteKey, commandFavoriteKey, useFavorites } from "../favorites";
 import {
   type ApplicationCommand,
@@ -444,6 +445,26 @@ export function MainWindow() {
   // the document visibilitychange and the host’s explicit `window.visibilityChanged` push feed the
   // same timer — WPF Hide() does not always surface as a renderer visibility event.
   const popToRootTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Window Management: preset hotkey labels refresh when the launcher reopens (the Settings
+  // window edits them in its own document), and the host's registrations are replayed on mount.
+  const [storedWmHotkeys, setStoredWmHotkeys] = useState<Record<string, string>>(() => readStoredHotkeys());
+  useEffect(() => {
+    void reregisterStoredHotkeys().catch(() => undefined);
+    return onNotification("windowManagement.hotkey", (raw) => {
+      const payload = raw as { commandKey?: string };
+      if (!payload.commandKey) return;
+      void runWindowManagementCommand(payload.commandKey, { showToast, closeMainWindow });
+    });
+    // showToast/closeMainWindow are stable callbacks; the subscription lives for the session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const offHost = onNotification("window.visibilityChanged", (raw) => {
+      const payload = raw as { visible?: boolean };
+      if (payload.visible === true) setStoredWmHotkeys(readStoredHotkeys());
+    });
+    return offHost;
+  }, []);
   useEffect(() => {
     const handleVisibility = (visible: boolean) => {
       // The toast store mirrors host visibility: a live in-window toast migrates to the HUD.
@@ -829,11 +850,15 @@ export function MainWindow() {
     else if (entry.kind === "translate") setTranslatePanel(entry);
     else if (entry.kind === "file") setFilePanel(entry.file as FileSearchRow);
     else if (entry.kind === "open-in-explorer") openExplorerEntry(entry.path);
+    // Window Management commands have no view or action panel — running IS the only action (the
+    // `open-in-explorer` row above works the same way); the args commands open their view.
+    else if (entry.kind === "wm-command") runWindowManagementCommand(entry.commandKey, { showToast, closeMainWindow });
+    else if (entry.kind === "wm-args") setSelected(entry);
     // A custom translate command's primary action IS opening the view; the panel would add
     // nothing, so Ctrl+K opens the prefilled Translate view directly.
     else if (entry.kind === "translator-command") setSelected(entry);
     else if (entry.kind !== "fallback" && entry.kind !== "inline" && entry.kind !== "quicklink" && entry.kind !== "file-indexing") setCommandPanelEntry(entry);
-  }, []);
+  }, [showToast, closeMainWindow]);
 
   // --- File Search actions (docs/file-search-spec.md — the confirmed action set) ---------------
 
@@ -1185,6 +1210,10 @@ export function MainWindow() {
           openFileEntry(entry.file);
         } else if (entry.kind === "open-in-explorer") {
           openExplorerEntry(entry.path);
+        } else if (entry.kind === "wm-command") {
+          runWindowManagementCommand(entry.commandKey, { showToast, closeMainWindow });
+        } else if (entry.kind === "wm-args") {
+          setSelected(entry);
         } else {
           setSelected(entry);
         }
@@ -1192,7 +1221,7 @@ export function MainWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry]);
+  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry, showToast, closeMainWindow]);
 
   // Escape closes the launcher, matching Raycast: the window hides and the global hotkey brings it
   // back. While the action panel is open it owns Escape (capture handler + stopPropagation), and a
@@ -1613,6 +1642,35 @@ export function MainWindow() {
                             </span>
                             <span className="list__accessory">
                               <span className="list__command-type">Command</span>
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "wm-command" || entry.kind === "wm-args" ? (
+                        <li key={`wm:${entry.kind}:${entry.commandKey}`}>
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() =>
+                              entry.kind === "wm-args"
+                                ? setSelected(entry)
+                                : runWindowManagementCommand(entry.commandKey, { showToast, closeMainWindow })
+                            }
+                          >
+                            <span className="icon-wrap command-tile command-tile--windowmanagement" aria-hidden>
+                              <RaycastIcon name={wmCommandIcon(entry.commandKey)} size={13} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">{entry.title}</span>
+                              <span className="list__subtitle">{wmCommandDefinition(entry.commandKey)?.description}</span>
+                            </span>
+                            <span className="list__accessory">
+                              {storedWmHotkeys[entry.commandKey] ? (
+                                <span className="pill">{storedWmHotkeys[entry.commandKey]}</span>
+                              ) : entry.kind === "wm-args" ? (
+                                <span className="pill">Args</span>
+                              ) : null}
                             </span>
                           </button>
                         </li>

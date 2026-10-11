@@ -5,6 +5,7 @@
 // frontend from a virtual host mapping, exactly like Raycast's `Raycast.WebView.ResourceHandler` +
 // `<HandleWebResourceRequest>` serve `frontend/main-window.html` over a custom scheme.
 
+using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -271,6 +272,20 @@ public partial class MainWindow : Window
 
     private const int ClipboardHotkeyId = 0x1001;
 
+    /// <summary>
+    /// Whenever the launcher loses activation, the OS is handing focus to the next window —
+    /// usually the app the user will want Window Management commands to target. The delayed
+    /// capture runs once that activation landed. This covers shows that bypass the hotkey
+    /// (the launcher auto-showing at boot) and re-captures after every command.
+    /// </summary>
+    protected override void OnDeactivated(EventArgs e)
+    {
+        base.OnDeactivated(e);
+        Dispatcher.BeginInvoke(
+            new Action(WindowManagementNative.CaptureForeground),
+            System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -404,6 +419,16 @@ public partial class MainWindow : Window
                 App.OpenClipboardHistory();
                 handled = true;
             }
+            else
+            {
+                var commandKey = WindowManagementNative.MapHotkey(wParam.ToInt32());
+                if (commandKey != null)
+                {
+                    PostToRenderer("windowManagement.hotkey",
+                        System.Text.Json.JsonSerializer.SerializeToElement(new { commandKey }));
+                    handled = true;
+                }
+            }
         }
         return IntPtr.Zero;
     }
@@ -414,6 +439,7 @@ public partial class MainWindow : Window
     /// </summary>
     public void OpenClipboardHistory()
     {
+        WindowManagementNative.CaptureForeground();
         if (!IsVisible)
         {
             CenterOnScreen();
@@ -437,6 +463,7 @@ public partial class MainWindow : Window
         }
         else
         {
+            WindowManagementNative.CaptureForeground();
             CenterOnScreen();
             Show();
             Activate();
@@ -454,6 +481,7 @@ public partial class MainWindow : Window
     /// </summary>
     public void ShowMainWindow()
     {
+        WindowManagementNative.CaptureForeground();
         if (!IsVisible)
         {
             CenterOnScreen();

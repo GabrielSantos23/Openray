@@ -124,6 +124,20 @@ export interface OpenInExplorerEntry {
   path: string;
 }
 
+/** A Window Management command row — Enter applies it to the previously focused window. */
+export interface WindowManagementEntry {
+  kind: "wm-command";
+  commandKey: string;
+  title: string;
+}
+
+/** `Resize Window` / `Move Window` need argument text first — Enter opens the args view. */
+export interface WindowManagementArgsEntry {
+  kind: "wm-args";
+  commandKey: "resizeWindow" | "moveWindow";
+  title: string;
+}
+
 /**
  * Inline section result entry (quicklinks, snippets, web search).
  */
@@ -193,7 +207,7 @@ export interface TranslatorCommandEntry {
   command: TranslatorCustomCommand;
 }
 
-export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | FileIndexingEntry | OpenInExplorerEntry | InlineEntry | CalculatorEntry | TranslateEntry | TranslatorCommandEntry;
+export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | FileIndexingEntry | OpenInExplorerEntry | InlineEntry | CalculatorEntry | TranslateEntry | TranslatorCommandEntry | WindowManagementEntry | WindowManagementArgsEntry;
 
 export interface SearchableEntry {
   title: string;

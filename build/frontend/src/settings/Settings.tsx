@@ -45,6 +45,8 @@ import {
 import { Dropdown, HotkeyRecorder, RadioGroup, Switch } from "./controls";
 import { SearchField, SidebarLink, searchResults } from "./sidebar";
 import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
+import { applyPreset, readStoredHotkeys } from "../windowManagement";
+import { WM_COMMANDS } from "../wm-commands";
 
 export function Settings() {
   const [values, setValues] = useState<SettingsMap>(() => loadSettings());
@@ -333,6 +335,20 @@ export function Settings() {
       });
   }, []);
 
+  // The Move & Resize command list shows the applied preset hotkeys (empty until one is applied).
+  useEffect(() => {
+    const hotkeys = readStoredHotkeys();
+    setValues((current) => {
+      const merged = { ...current };
+      for (const definition of WM_COMMANDS) {
+        if (merged[`wm-cmd-${definition.key}`] === undefined) {
+          merged[`wm-cmd-${definition.key}`] = hotkeys[definition.key] ?? "";
+        }
+      }
+      return merged;
+    });
+  }, []);
+
   const setValue = useCallback((id: string, next: SettingsValue) => {
     setValues((current) => {
       const merged = { ...current, [id]: next };
@@ -410,6 +426,34 @@ export function Settings() {
                 message: error instanceof Error ? error.message : undefined,
               },
             }),
+          );
+        });
+      return;
+    }
+    if (id === "wm-preset") {
+      // Applying a preset registers the Magnet map with the host (Rectangle ships byte-identical
+      // to Magnet); `None` clears every command hotkey. The toast strings are the confirmed ones.
+      const preset = next === "Magnet" || next === "Rectangle" ? "Magnet" : null;
+      void applyPreset(preset)
+        .then(() => {
+          const hotkeys = readStoredHotkeys();
+          setValues((current) => {
+            const merged: SettingsMap = { ...current, [id]: next };
+            for (const definition of WM_COMMANDS) {
+              merged[`wm-cmd-${definition.key}`] = hotkeys[definition.key] ?? "";
+            }
+            persistSettings(merged);
+            return merged;
+          });
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", {
+              detail: { title: preset ? `Applied "${String(next)}" hotkeys` : "Removed hotkeys" },
+            }),
+          );
+        })
+        .catch(() => {
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", { detail: { title: "Failed to apply preset" } }),
           );
         });
       return;
@@ -828,7 +872,8 @@ function Row({
         );
       }
       case "info":
-        return <span className="settings-row__value">{row.value}</span>;
+        // The value may be dynamic (the Window Management command list shows applied hotkeys).
+        return <span className="settings-row__value">{row.value ?? (value !== undefined ? String(value) : "")}</span>;
       default:
         return null;
     }

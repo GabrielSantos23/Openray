@@ -149,6 +149,10 @@ export const DEFAULTS: SettingsMap = {
   "file-search-ignore-patterns": "",
   "file-search-include-hidden": false,
   "file-search-respect-ignore-files": true,
+  "wm-inner-gap": "None",
+  "wm-outer-gap": "None",
+  "wm-cycle-mode": "None",
+  "wm-preset": "None",
 };
 
 export const SENSITIVITY_MAP: Record<string, Sensitivity> = {

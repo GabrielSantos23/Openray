@@ -24,6 +24,7 @@ import { SnippetsView, type SnippetsCommandName } from "../features/snippets/Sni
 import { CalculatorHistoryView } from "../features/calculator/CalculatorHistoryView";
 import { TranslateView, type TranslateSeed } from "../features/translator/TranslateView";
 import { SearchFilesView } from "../features/fileSearch/SearchFilesView";
+import { WindowManagementArgsView } from "../features/windowManagement/WindowManagementArgsView";
 import { LoadingBar } from "../LoadingBar";
 import type { ApplicationCommand } from "../applications";
 import type { RootEntry } from "./entries";
@@ -287,6 +288,18 @@ export function CommandSession({
         command={entry.command as SnippetsCommandName}
         searchText={searchText}
         onSearchTextChange={setSearchText}
+        showToast={showToast}
+        onBack={onBack}
+        closeMainWindow={closeWindow}
+      />
+    );
+  }
+
+  if (entry.kind === "wm-args") {
+    // `Resize Window` / `Move Window`: the search bar becomes the argument field, Enter applies.
+    return (
+      <WindowManagementArgsView
+        commandKey={entry.commandKey}
         showToast={showToast}
         onBack={onBack}
         closeMainWindow={closeWindow}
