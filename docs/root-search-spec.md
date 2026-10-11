@@ -279,3 +279,19 @@ Based on investigation of Raycast version 2.4.0.0:
 - ✅ Arguments: **IMPLEMENTED** - Manifest schema, argument inputs in search bar, Tab/Enter navigation, required validation, values passed through argumentValues and launchContext, argument history
 - ✅ Pop to Root Search timeout: **IMPLEMENTED** - Configurable timeout (default 30s), resets on activity, clears search and selection
 - ✅ Search-history restore: **IMPLEMENTED** - Up arrow in empty search shows history (50 entries), stores in localStorage, persists across sessions
+
+## Addendum (2026-10-11): empty-target match fix and usage-key aliasing
+
+- **Empty-haystack reverse prefix (bug fix, confirmed against the shipped matcher).** Our
+  transcription of the matcher treated any target as a "reverse prefix" match when
+  `needle.startsWith(haystack)` — and the empty string is a prefix of every query. Every
+  application without a subtitle (all running apps discovered from the process walk, which carry
+  no disambiguator) therefore matched every query with score 90 and flooded the top of the
+  Applications section. The shipped `he` matcher in `menu.namespace-DEI7dAIB.js` never matches an
+  empty target (its alignment score stays at the `-2^53` sentinel, which `me` treats as
+  unmatched), so the guard is faithful to the shipped behavior. Regression tests:
+  `build/frontend/tests/matching.test.mjs`.
+- **Usage-score key aliasing (bug fix).** `usage.getAppUsage` keys counts by application id while
+  the ranker compares by title, so the usage tier never applied to applications. The launcher now
+  aliases the counts into a title-keyed map for the root ranking, so an app's open frequency
+  breaks ties inside a match tier — the confirmed `usageScore` comparator tier.

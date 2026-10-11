@@ -1,0 +1,51 @@
+/* File Search (internal extension 5): the Search Files view chrome, the metadata pane and the
+   header dropdowns. Palette variables are the shared ones from base.css. */
+
+/* The extension tile next to the command name in the footer. */
+.command-tile--filesearch {
+  background: color-mix(in srgb, #4c8bf5 18%, transparent);
+  color: #6ea3f7;
+}
+
+/* The non-interactive pinned `File Search is indexing…` row in root search. */
+.list__row--static {
+  cursor: default;
+}
+
+/* Type/sort dropdowns anchored in the view header: open downward to the right, not centered
+   like the Translate language menu. */
+.translate-menu--header {
+  left: auto;
+  right: 0;
+  translate: 0 0;
+  top: calc(100% + var(--space-4));
+}
+
+/* The Metadata pane (confirmed row labels: Name, Where, Type, Size, Created, Modified, Accessed). */
+.filesearch-metadata {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-12);
+  overflow-y: auto;
+}
+
+.filesearch-metadata__row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: var(--space-12);
+  align-items: baseline;
+}
+
+.filesearch-metadata__label {
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-11);
+}
+
+.filesearch-metadata__value {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-11);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

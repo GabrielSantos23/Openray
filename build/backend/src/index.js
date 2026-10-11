@@ -114,8 +114,10 @@ backend.registerSnippetsHandler(snippets.handlers);
 snippets.registerKeywordsWithHost();
 snippets.pushExpansionConfigToHost();
 
-// File indexer
-const fileIndexer = createFileIndexer({});
+// File indexer — indexes the user's scopes in the background and answers fileSearch.* searches.
+const fileIndexer = createFileIndexer({
+  pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+});
 backend.registerFileIndexerHandler(fileIndexer.handlers);
 
   // Usage tracker

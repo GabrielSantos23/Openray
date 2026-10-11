@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { RaycastIcon } from "../icons";
 import { ipc } from "../ipc";
 import { type Sensitivity } from "../matching";
+import type { FileSearchSettings } from "../fileSearch";
 import {
   ACCOUNT_PAGE_ID,
   PAGES,
@@ -20,6 +21,7 @@ import {
   CLIPBOARD_ROW_IDS,
   CLIPBOARD_TEXTAREA_ROW,
   DEFAULTS,
+  FILE_SEARCH_ROW_IDS,
   HISTORY_DURATION_BY_LABEL,
   QUICKLINKS_ROW_IDS,
   SENSITIVITY_MAP,
@@ -303,6 +305,34 @@ export function Settings() {
       });
   }, [translatorLanguages]);
 
+  // File Search rows live in the Node store (`file-search-settings.json`); the switches and the
+  // ignore-patterns field write straight through, the scopes row shows the backend scope count.
+  const [fileSearchSettings, setFileSearchSettings] = useState<FileSearchSettings | null>(null);
+  useEffect(() => {
+    ipc
+      .backend("fileSearch.getSettings", {}, { module: "backend" })
+      .then((response) => {
+        const settings = (response as { settings?: FileSearchSettings }).settings;
+        if (!settings) return;
+        setFileSearchSettings(settings);
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "include-files-in-root-search": settings.showInRootSearch,
+            "file-search-ignore-patterns": settings.ignore.join(", "),
+            "file-search-include-hidden": settings.includeHiddenFiles,
+            "file-search-respect-ignore-files": settings.respectIgnoreFiles,
+            "file-search-scopes": `${settings.include.length} folder${settings.include.length === 1 ? "" : "s"}`,
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+  }, []);
+
   const setValue = useCallback((id: string, next: SettingsValue) => {
     setValues((current) => {
       const merged = { ...current, [id]: next };
@@ -347,6 +377,41 @@ export function Settings() {
       } else if (id === "snippets-warn-before-delete") {
         localStorage.setItem("settings-snippets-remember-delete", next ? "1" : "0");
       }
+      return;
+    }
+    if (FILE_SEARCH_ROW_IDS.has(id)) {
+      // `file-search-scopes` and `file-search-reset` are actions handled in `runAction`; the rest
+      // write through to the store. A settings push may follow (the backend reindexes).
+      if (
+        id === "file-search-scopes" ||
+        id === "file-search-reset"
+      ) {
+        return;
+      }
+      const patch: Record<string, unknown> =
+        id === "include-files-in-root-search"
+          ? { showInRootSearch: Boolean(next) }
+          : id === "file-search-include-hidden"
+            ? { includeHiddenFiles: Boolean(next) }
+            : id === "file-search-respect-ignore-files"
+              ? { respectIgnoreFiles: Boolean(next) }
+              : { ignore: String(next).split(",").map((item) => item.trim()).filter(Boolean) };
+      void ipc
+        .backend("fileSearch.setSettings", patch, { module: "backend" })
+        .then((response) => {
+          const settings = (response as { settings?: FileSearchSettings }).settings;
+          if (settings) setFileSearchSettings(settings);
+        })
+        .catch((error: unknown) => {
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", {
+              detail: {
+                title: "Couldn't save that setting",
+                message: error instanceof Error ? error.message : undefined,
+              },
+            }),
+          );
+        });
       return;
     }
     if (CALCULATOR_ROW_IDS.has(id)) {
@@ -455,7 +520,64 @@ export function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [translatorLanguages]);
 
+  const applyFileSearchSettings = useCallback((settings: FileSearchSettings | undefined) => {
+    if (!settings) return;
+    setFileSearchSettings(settings);
+    setValues((current) => {
+      const merged = {
+        ...current,
+        "include-files-in-root-search": settings.showInRootSearch,
+        "file-search-ignore-patterns": settings.ignore.join(", "),
+        "file-search-include-hidden": settings.includeHiddenFiles,
+        "file-search-respect-ignore-files": settings.respectIgnoreFiles,
+        "file-search-scopes": `${settings.include.length} folder${settings.include.length === 1 ? "" : "s"}`,
+      };
+      persistSettings(merged);
+      return merged;
+    });
+  }, []);
+
   const runAction = useCallback((id: string) => {
+    if (id === "file-search-scopes") {
+      void ipc
+        .backend("fileSystem.showSelectFolderDialog", { title: "Add Search Scope" }, { module: "backend" })
+        .then((response) => {
+          const folder = (response as { path?: string | null }).path;
+          if (!folder) return;
+          const include = [...new Set([...(fileSearchSettings?.include ?? []), folder])];
+          return ipc
+            .backend("fileSearch.setSettings", { include }, { module: "backend" })
+            .then((response) => {
+              applyFileSearchSettings((response as { settings?: FileSearchSettings }).settings);
+              window.dispatchEvent(
+                new CustomEvent("raycast-mini:settings-toast", { detail: { title: "Indexing Files…" } }),
+              );
+            });
+        })
+        .catch((error: unknown) => {
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", {
+              detail: { title: "Couldn't add that folder", message: error instanceof Error ? error.message : undefined },
+            }),
+          );
+        });
+      return;
+    }
+    if (id === "file-search-reset") {
+      // The confirmed confirm + toast strings.
+      if (!window.confirm("Reset File Search Settings?")) return;
+      void ipc
+        .backend("fileSearch.resetToDefaults", {}, { module: "backend" })
+        .then((response) => {
+          applyFileSearchSettings((response as { settings?: FileSearchSettings }).settings);
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", {
+              detail: { title: "File Search settings reset to defaults" },
+            }),
+          );
+        });
+      return;
+    }
     if (id === "clipboard-run-maintenance") {
       void ipc
         .backend("clipboard.runMaintenance", {}, { module: "backend" })
@@ -474,7 +596,7 @@ export function Settings() {
           );
         });
     }
-  }, []);
+  }, [fileSearchSettings, applyFileSearchSettings]);
 
   const page = useMemo(() => PAGES.find((candidate) => candidate.id === route) ?? PAGES[0], [route]);
   const results = useMemo(() => searchResults(query), [query]);
@@ -670,6 +792,10 @@ function Row({
             onChange={(event) => onValueChange(event.target.value)}
           />
         );
+      case "textarea-commit":
+        // Buffers keystrokes locally and commits on blur — for values whose write triggers an
+        // expensive backend reaction (File Search's ignore patterns reindex on every change).
+        return <CommitTextarea row={row} value={String(value ?? "")} onCommit={onValueChange} />;
       case "text":
         return (
           <input
@@ -681,10 +807,12 @@ function Row({
             onChange={(event) => onValueChange(event.target.value)}
           />
         );
-      case "action":
+      case "action": {
+        // The value may be dynamic (e.g. the File Search scopes count from the backend store).
+        const actionValue = value === undefined || value === "" ? row.value : String(value);
         return (
           <span className="settings-row__actions">
-            {row.value ? <span className="settings-row__value">{row.value}</span> : null}
+            {actionValue ? <span className="settings-row__value">{actionValue}</span> : null}
             <button
               type="button"
               className="settings-button"
@@ -698,6 +826,7 @@ function Row({
             </button>
           </span>
         );
+      }
       case "info":
         return <span className="settings-row__value">{row.value}</span>;
       default:
@@ -723,6 +852,40 @@ function Row({
         {right()}
       </div>
     </div>
+  );
+}
+
+/** A textarea that only reports its value when the user leaves the field (or presses Ctrl+Enter). */
+function CommitTextarea({
+  row,
+  value,
+  onCommit,
+}: {
+  row: RowDefinition;
+  value: string;
+  onCommit: (next: SettingsValue) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft !== value) onCommit(draft);
+  };
+  return (
+    <textarea
+      className="settings-textarea"
+      aria-label={row.title}
+      placeholder={row.description}
+      value={draft}
+      disabled={row.unavailable}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          commit();
+        }
+      }}
+    />
   );
 }
 

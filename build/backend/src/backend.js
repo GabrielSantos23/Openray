@@ -699,7 +699,7 @@ function createBackend(options) {
       if (method.startsWith("clipboardHistory.")) {
         return send("backend", "native", { method, data: data ?? {} });
       }
-      if (method.startsWith("clipboard.") || method.startsWith("shell.") || method.startsWith("applications.")) {
+      if (method.startsWith("clipboard.") || method.startsWith("shell.") || method.startsWith("applications.") || method.startsWith("fileSystem.")) {
         return send("backend", "native", { method, data: data ?? {} });
       }
 

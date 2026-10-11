@@ -28,6 +28,16 @@ export const QUICKLINKS_ROW_IDS = new Set(["quicklinks-pass-selected-text", "qui
 /** The calculator page's one preference lives in the backend store (`remToPxRate`). */
 export const CALCULATOR_ROW_IDS = new Set(["calculator-rem-to-px"]);
 
+/** File Search rows persist to the Node store (`file-search-settings.json`). */
+export const FILE_SEARCH_ROW_IDS = new Set([
+  "include-files-in-root-search",
+  "file-search-scopes",
+  "file-search-ignore-patterns",
+  "file-search-include-hidden",
+  "file-search-respect-ignore-files",
+  "file-search-reset",
+]);
+
 /** Translator rows persist to the backend store (`translator-settings.json`). */
 export const TRANSLATOR_ROW_IDS = new Set([
   "translator-primary-action",
@@ -135,6 +145,10 @@ export const DEFAULTS: SettingsMap = {
   "snippets-primary-action": "Paste to Active App",
   "snippets-warn-before-delete": true,
   "calculator-rem-to-px": "16",
+  "include-files-in-root-search": true,
+  "file-search-ignore-patterns": "",
+  "file-search-include-hidden": false,
+  "file-search-respect-ignore-files": true,
 };
 
 export const SENSITIVITY_MAP: Record<string, Sensitivity> = {

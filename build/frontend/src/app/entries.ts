@@ -44,8 +44,8 @@ export interface ClipboardEntryResult {
  * four Quicklinks commands (create/export/import/search) and four Snippets commands, each opening
  * its own view.
  */
-export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator";
-export type InternalCommandName = "search" | "create" | "import" | "export" | "history" | "translate";
+export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search";
+export type InternalCommandName = "search" | "create" | "import" | "export" | "history" | "translate" | "searchFiles";
 
 export interface InternalCommandEntry {
   kind: "internal";
@@ -70,6 +70,7 @@ export const INTERNAL_EXTENSION_META: Record<InternalArea, { title: string; icon
   snippets: { title: "Snippets", icon: "text", tile: "command-tile--snippets" },
   calculator: { title: "Calculator", icon: "calculator", tile: "command-tile--calculator" },
   translator: { title: "Translator", icon: "Globe", tile: "command-tile--translator" },
+  "file-search": { title: "File Search", icon: "folder-search", tile: "command-tile--filesearch" },
 };
 
 export const INTERNAL_COMMANDS: ReadonlyArray<{
@@ -87,6 +88,7 @@ export const INTERNAL_COMMANDS: ReadonlyArray<{
   { area: "snippets", command: "import", title: "Import Snippets", keywords: ["snippets"] },
   { area: "snippets", command: "search", title: "Search Snippets", keywords: ["snippets"] },
   { area: "translator", command: "translate", title: "Translate", keywords: ["translator", "translate", "translation"] },
+  { area: "file-search", command: "searchFiles", title: "Search Files", keywords: ["file search", "find files", "explorer"] },
 ];
 
 export function internalCommandEntry(area: InternalArea, command: InternalCommandName): InternalCommandEntry {
@@ -107,6 +109,19 @@ export interface FallbackCommandEntry {
 export interface FileEntry {
   kind: "file";
   file: FileSearchResult;
+}
+
+/** The pinned `File Search is indexing…` row (`rootSearch:{section:'files', pinned:1}`). */
+export interface FileIndexingEntry {
+  kind: "file-indexing";
+  fileCount: number;
+  entriesPerSecond: number | null;
+}
+
+/** The `Open in File Explorer` ephemeral fallback for path-like queries. */
+export interface OpenInExplorerEntry {
+  kind: "open-in-explorer";
+  path: string;
 }
 
 /**
@@ -178,7 +193,7 @@ export interface TranslatorCommandEntry {
   command: TranslatorCustomCommand;
 }
 
-export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | InlineEntry | CalculatorEntry | TranslateEntry | TranslatorCommandEntry;
+export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | FileIndexingEntry | OpenInExplorerEntry | InlineEntry | CalculatorEntry | TranslateEntry | TranslatorCommandEntry;
 
 export interface SearchableEntry {
   title: string;

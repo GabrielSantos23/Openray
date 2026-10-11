@@ -6,13 +6,8 @@ import type { ApplicationCommand } from "../applications";
 import { applicationFavoriteKey, commandFavoriteKey } from "../favorites";
 import { isDevExtensionsEnabled } from "../testHooks";
 import { isLikelyUrl, type QuicklinkEntry } from "../quicklinks";
-import {
-  generateKeywords,
-  rankEntriesWithFallbacks,
-  type FallbackCommand,
-  type FileSearchResult,
-  type Sensitivity,
-} from "../matching";
+import { looksLikeFilePath } from "../fileSearch";
+import { generateKeywords, rankEntriesWithFallbacks, type FallbackCommand, type FileSearchResult, type Sensitivity } from "../matching";
 import type { InlineSectionResult } from "../inlineSections";
 import {
   CLIPBOARD_COMMAND,
@@ -23,6 +18,7 @@ import {
   type CalculatorEntry,
   type ExtensionEntry,
   type ExtensionSummary,
+  type OpenInExplorerEntry,
   type QuicklinkCreateEntry,
   type RootEntry,
   type SearchableEntry,
@@ -52,7 +48,9 @@ export function buildSections(
   quicklinkRows: QuicklinkEntry[],
   calculatorEntry: CalculatorEntry | null,
   translateEntry: TranslateEntry | null,
-  customTranslateCommands: TranslatorCustomCommand[]
+  customTranslateCommands: TranslatorCustomCommand[],
+  fileIndexState: { state: string; fileCount: number; entriesPerSecond?: number | null } | null,
+  showFilesInRoot: boolean
 ): RootSection[] {  // Build searchable entries for all applications
   const appSearchables: SearchableEntry[] = applications.map((app) => ({
     title: app.title,
@@ -183,8 +181,20 @@ export function buildSections(
     ? fallbackCommands.map((cmd) => ({ kind: "fallback" as const, command: cmd }))
     : [];
 
-  // File search results
-  const fileEntries = fileResults.map((file) => ({ kind: "file" as const, file }));
+  // File search results — plus the pinned `File Search is indexing…` row (confirmed
+  // `rootSearch:{section:'files', pinned:1}`) and the `Open in File Explorer` ephemeral fallback
+  // for path-like queries (docs/file-search-spec.md, decisions).
+  const indexing = fileIndexState?.state === "indexing";
+  const fileEntries: RootEntry[] = [
+    ...(indexing
+      ? [{ kind: "file-indexing" as const, fileCount: fileIndexState?.fileCount ?? 0, entriesPerSecond: fileIndexState?.entriesPerSecond ?? null }]
+      : []),
+    ...fileResults.map((file) => ({ kind: "file" as const, file })),
+  ];
+  const explorerEntry: OpenInExplorerEntry | null = looksLikeFilePath(query)
+    ? { kind: "open-in-explorer" as const, path: query.trim() }
+    : null;
+  if (explorerEntry) fileEntries.push(explorerEntry);
 
   // Inline section results - group by type
   const quicklinkCreateEntries: QuicklinkCreateEntry[] = isLikelyUrl(query)
@@ -248,8 +258,8 @@ export function buildSections(
     sections.push({ id: "snippets", title: "Snippets", icon: "copy", entries: snippetEntries });
   }
 
-  // Files section (after commands, before fallback)
-  if (fileEntries.length > 0) {
+  // Files section (after commands, before fallback); the indexing row keeps it visible alone.
+  if (showFilesInRoot && fileEntries.length > 0) {
     sections.push({ id: "files", title: "Files", icon: "file-text", entries: fileEntries });
   }
 

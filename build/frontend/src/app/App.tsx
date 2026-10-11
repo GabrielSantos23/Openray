@@ -56,7 +56,18 @@ import {
   type FileSearchResult,
   generateKeywords,
 } from "../matching";
-import { searchFiles, loadFileSearchConfig, loadFileUsageScores, trackFileUsage } from "../fileSearch";
+import {
+  fetchFileResults,
+  fetchFileSettings,
+  fetchIndexState,
+  fileActionGroups,
+  fileIconFor,
+  runFileAction,
+  trackFileUsage,
+  type FileIndexState,
+  type FileSearchRow,
+  type FileSearchSettings,
+} from "../fileSearch";
 import { getInlineSectionResults, loadInlineSectionSettings, type InlineSectionResult, type InlineSectionSettings } from "../inlineSections";
 import {
   getCommandArguments,
@@ -118,9 +129,13 @@ export function MainWindow() {
   const [sensitivity, setSensitivity] = useState<Sensitivity>("medium");
   const [usageScores, setUsageScores] = useState<Map<string, number>>(new Map());
   const [fallbackCommands, setFallbackCommands] = useState<FallbackCommand[]>([]);
-  const [fileSearchConfig, setFileSearchConfig] = useState(() => loadFileSearchConfig());
+  // File Search: settings and index state live in the backend; the results cache is per query.
+  const [fileSearchSettings, setFileSearchSettings] = useState<FileSearchSettings | null>(null);
+  const [fileIndexState, setFileIndexState] = useState<FileIndexState | null>(null);
   const [fileResults, setFileResults] = useState<FileSearchResult[]>([]);
-  const [fileUsageScores, setFileUsageScores] = useState(() => loadFileUsageScores());
+  const [fileSearchRefresh, setFileSearchRefresh] = useState(0);
+  // Action panel for a file result row (Ctrl+K on the Files section).
+  const [filePanel, setFilePanel] = useState<FileSearchRow | null>(null);
   const [inlineSectionSettings, setInlineSectionSettings] = useState(() => loadInlineSectionSettings());
   const [inlineResults, setInlineResults] = useState<InlineSectionResult[]>([]);
   // Action panel for the ephemeral calculator row (Ctrl+K on the split row).
@@ -249,17 +264,20 @@ export function MainWindow() {
     return () => window.removeEventListener("raycast-mini:fallback-commands-changed", handleFallbackChange as EventListener);
   }, []);
 
-  // File search - search files when query changes and file search is enabled
+  // File Search — debounced backend query while `Include Files in Root Search` is on.
   useEffect(() => {
-    if (!fileSearchConfig.enabled || searchText.trim().length === 0) {
+    if (!fileSearchSettings?.showInRootSearch || searchText.trim().length === 0) {
       setFileResults([]);
       return;
     }
-    
     const trimmed = searchText.trim();
-    const results = searchFiles(trimmed, fileSearchConfig, fileUsageScores);
-    results.then(setFileResults);
-  }, [searchText, fileSearchConfig, fileUsageScores]);
+    const timer = setTimeout(() => {
+      fetchFileResults(trimmed, { limit: 10 })
+        .then((rows) => setFileResults(rows))
+        .catch(() => setFileResults([]));
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [searchText, fileSearchSettings, fileSearchRefresh]);
 
   // Inline sections - update results when query changes
   useEffect(() => {
@@ -394,13 +412,22 @@ export function MainWindow() {
     return onNotification("translator.customCommandsUpdated", refreshCustomTranslateCommands);
   }, [refreshCustomTranslateCommands]);
 
-  // Listen for file search config changes from Settings
+  // File Search settings and index state live in the backend store; the indexer pushes
+  // `fileSearch.indexState` (live counts for the pinned indexing row) and `settingsUpdated`
+  // whenever the Settings window changes a row.
   useEffect(() => {
-    const handleConfigChange = (event: CustomEvent) => {
-      setFileSearchConfig(event.detail);
+    fetchFileSettings().then(setFileSearchSettings).catch(() => undefined);
+    fetchIndexState().then(setFileIndexState).catch(() => undefined);
+    const offState = onNotification("fileSearch.indexState", (raw) => {
+      setFileIndexState(raw as FileIndexState);
+    });
+    const offSettings = onNotification("fileSearch.settingsUpdated", (raw) => {
+      setFileSearchSettings((raw as { settings?: FileSearchSettings }).settings ?? null);
+    });
+    return () => {
+      offState();
+      offSettings();
     };
-    window.addEventListener("raycast-mini:file-search-config-changed", handleConfigChange as EventListener);
-    return () => window.removeEventListener("raycast-mini:file-search-config-changed", handleConfigChange as EventListener);
   }, []);
 
   // Listen for inline section settings changes from Settings
@@ -687,11 +714,22 @@ export function MainWindow() {
     }
   }, [applications, usageScores]);
 
+  // `usage.getAppUsage` keys counts by application id, but the root ranker compares by title —
+  // alias the counts so an app's open frequency breaks ties in its favor.
+  const rootUsageScores = useMemo(() => {
+    const map = new Map(usageScores);
+    for (const app of applications) {
+      const count = usageScores.get(app.payload.id);
+      if (count !== undefined) map.set(app.title, count);
+    }
+    return map;
+  }, [usageScores, applications]);
+
   // Root Search renders Favorites / Applications / Commands as named sections, exactly like
   // Raycast's root search, and the flat selection index walks all of them in order.
   const sections = useMemo(
-    () => buildSections(searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands),
-    [searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands],
+    () => buildSections(searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false),
+    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings],
   );
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
@@ -754,6 +792,32 @@ export function MainWindow() {
     ];
   }, [commandPanelEntry, isFavorite]);
 
+  // Opening a file hides the launcher first, like every launching action in Raycast.
+  const openFileEntry = useCallback(
+    (file: FileSearchResult) => {
+      trackFileUsage(file.path);
+      closeMainWindow();
+      void ipc.backend("fileSystem.openFile", { path: file.path }, { module: "backend" }).catch(() => {
+        showToast("Failed to open file", file.name);
+      });
+    },
+    [closeMainWindow, showToast],
+  );
+
+  // The `Open in File Explorer` fallback: trailing separator → open the directory, otherwise
+  // select the target in its parent (the confirmed `explorer /select` behavior).
+  const openExplorerEntry = useCallback(
+    (target: string) => {
+      closeMainWindow();
+      const trimmed = target.replace(/[\\/]+$/, "");
+      const isDirectory = /[\\/]$/.test(target);
+      void ipc
+        .backend(isDirectory ? "fileSystem.openFile" : "shell.revealFile", { path: trimmed }, { module: "backend" })
+        .catch(() => undefined);
+    },
+    [closeMainWindow],
+  );
+
   // Ctrl+K / right-click / footer button all funnel through here, whatever the row is.
   const openRootActionPanel = useCallback((entry: RootEntry | undefined) => {
     if (!entry) return;
@@ -763,11 +827,62 @@ export function MainWindow() {
     else if (entry.kind === "internal" || entry.kind === "quicklink-create") setSelected(entry);
     else if (entry.kind === "calculator") setCalculatorPanel(entry);
     else if (entry.kind === "translate") setTranslatePanel(entry);
+    else if (entry.kind === "file") setFilePanel(entry.file as FileSearchRow);
+    else if (entry.kind === "open-in-explorer") openExplorerEntry(entry.path);
     // A custom translate command's primary action IS opening the view; the panel would add
     // nothing, so Ctrl+K opens the prefilled Translate view directly.
     else if (entry.kind === "translator-command") setSelected(entry);
-    else if (entry.kind !== "fallback" && entry.kind !== "file" && entry.kind !== "inline" && entry.kind !== "quicklink") setCommandPanelEntry(entry);
+    else if (entry.kind !== "fallback" && entry.kind !== "inline" && entry.kind !== "quicklink" && entry.kind !== "file-indexing") setCommandPanelEntry(entry);
   }, []);
+
+  // --- File Search actions (docs/file-search-spec.md — the confirmed action set) ---------------
+
+  const refreshFileSearch = useCallback(() => setFileSearchRefresh((value) => value + 1), []);
+
+  const fileActionHandlers = useMemo(
+    () => ({
+      showToast,
+      refresh: refreshFileSearch,
+      openWith: () => undefined, // the root panel omits "Open With…" (it lives in the view)
+      saveAsQuicklink: (row: FileSearchRow) => {
+        void ipc.backend(
+          "quicklinks.save",
+          { name: row.name, link: `file:///${row.path.replace(/\\/g, "/")}`, openWith: null, icon: null, tags: ["file"] },
+          { module: "backend" },
+        )
+          .then(() => showToast("Saved as Quicklink", row.name))
+          .catch(() => showToast("Failed to save Quicklink"));
+      },
+    }),
+    [showToast, refreshFileSearch],
+  );
+
+  const filePanelGroups = useMemo<ActionGroup[]>(
+    () => (filePanel ? fileActionGroups(filePanel, { indexing: fileIndexState?.state === "indexing" }) : []),
+    [filePanel, fileIndexState],
+  );
+
+  const runFilePanelAction = useCallback(
+    async (file: FileSearchRow, actionId: string) => {
+      const verb = actionId.slice(actionId.indexOf(":") + 1);
+      setFilePanel(null);
+      if (verb === "delete") {
+        // Confirmed confirm string: `Are you sure you want to delete ${filename}?`
+        alertStore.open({
+          title: `Are you sure you want to delete ${file.name}?`,
+          primaryAction: {
+            title: "Delete",
+            style: "destructive",
+            action: () => runFileAction(file, actionId, fileActionHandlers),
+          },
+          secondaryAction: { title: "Cancel", action: () => undefined },
+        });
+        return;
+      }
+      await runFileAction(file, actionId, fileActionHandlers);
+    },
+    [fileActionHandlers],
+  );
 
   // --- Calculator actions (docs/calculator-spec.md — root row and history row action set) ------
 
@@ -1066,6 +1181,10 @@ export function MainWindow() {
         } else if (entry.kind === "translate") {
           // Enter = primary action = Copy Translation (confirmed for the quick row).
           copyTranslation(entry);
+        } else if (entry.kind === "file") {
+          openFileEntry(entry.file);
+        } else if (entry.kind === "open-in-explorer") {
+          openExplorerEntry(entry.path);
         } else {
           setSelected(entry);
         }
@@ -1073,7 +1192,7 @@ export function MainWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation]);
+  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry]);
 
   // Escape closes the launcher, matching Raycast: the window hides and the global hotkey brings it
   // back. While the action panel is open it owns Escape (capture handler + stopPropagation), and a
@@ -1644,20 +1763,60 @@ export function MainWindow() {
                             className="list__row"
                             data-selected={index === selectedIndex}
                             onMouseEnter={() => setSelectedIndex(index)}
-                            onClick={() => {
-                              trackFileUsage(entry.file.path);
-                              window.open(`file:///${entry.file.path.replace(/\\/g, "/")}`, "_blank");
+                            onClick={() => openFileEntry(entry.file)}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              openRootActionPanel(entry);
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="file-text" size={16} />
+                              <RaycastIcon name={fileIconFor(entry.file.contentType ?? "other")} size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.file.name}</span>
                               <span className="list__subtitle">{entry.file.folder}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">file</span>
+                              <span className="pill">{entry.file.contentType ?? "file"}</span>
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "file-indexing" ? (
+                        <li key="file-indexing">
+                          <div className="list__row list__row--static" data-selected={index === selectedIndex}>
+                            <span className="icon" aria-hidden>
+                              <RaycastIcon name="arrow-clockwise" size={16} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">File Search is indexing…</span>
+                              <span className="list__subtitle">
+                                Indexing {entry.fileCount} files
+                                {entry.entriesPerSecond ? ` (${entry.entriesPerSecond} entries/s)` : ""}
+                              </span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="pill">files</span>
+                            </span>
+                          </div>
+                        </li>
+                      ) : entry.kind === "open-in-explorer" ? (
+                        <li key="open-in-explorer">
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => openExplorerEntry(entry.path)}
+                          >
+                            <span className="icon" aria-hidden>
+                              <RaycastIcon name="folder" size={16} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">Open in File Explorer</span>
+                              <span className="list__subtitle">{entry.path}</span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="pill">explorer</span>
                             </span>
                           </button>
                         </li>
@@ -1762,6 +1921,19 @@ export function MainWindow() {
           } else if (verb === "configureCommand") {
             openSettings();
           }
+        }}
+      />
+
+      <ActionPanel
+        open={filePanel !== null}
+        title={filePanel?.name}
+        groups={filePanelGroups}
+        onClose={() => setFilePanel(null)}
+        onRun={async (action) => {
+          const file = filePanel;
+          if (!file) return;
+          if (action.id === "file:open") closeMainWindow();
+          await runFilePanelAction(file, action.id);
         }}
       />
 

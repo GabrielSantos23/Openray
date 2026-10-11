@@ -23,6 +23,7 @@ import { QuicklinksView, type QuicklinksCommandName } from "../features/quicklin
 import { SnippetsView, type SnippetsCommandName } from "../features/snippets/SnippetsView";
 import { CalculatorHistoryView } from "../features/calculator/CalculatorHistoryView";
 import { TranslateView, type TranslateSeed } from "../features/translator/TranslateView";
+import { SearchFilesView } from "../features/fileSearch/SearchFilesView";
 import { LoadingBar } from "../LoadingBar";
 import type { ApplicationCommand } from "../applications";
 import type { RootEntry } from "./entries";
@@ -263,6 +264,21 @@ export function CommandSession({
           showToast={showToast}
           onBack={onBack}
           closeMainWindow={closeWindow}
+        />
+      );
+    }
+    if (entry.area === "file-search") {
+      // The Search Files view: the filter IS the backend indexer query; the type/sort dropdowns
+      // and the details pane live inside the view.
+      return (
+        <SearchFilesView
+          command="searchFiles"
+          searchText={searchText}
+          onSearchTextChange={setSearchText}
+          showToast={showToast}
+          onBack={onBack}
+          closeMainWindow={closeWindow}
+          applications={applications}
         />
       );
     }

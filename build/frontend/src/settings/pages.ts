@@ -12,6 +12,7 @@ export type ControlKind =
   | "action"
   | "info"
   | "textarea"
+  | "textarea-commit"
   | "text"
   | "none";/** The version the launcher reports everywhere else, kept in one place. */
 export const VERSION = "2.4.0.0";
@@ -189,7 +190,7 @@ export const PAGES: readonly PageDefinition[] = [
         id: "customize-search",
         title: "Customize Search",
         rows: [
-          { id: "include-files-in-root-search", title: "Include Files in Root Search", control: "switch", unavailable: true },
+          { id: "include-files-in-root-search", title: "Include Files in Root Search", control: "switch" },
           {
             id: "search-file-contents-in-root-search",
             title: "Include File Content search results in Root Search",
@@ -588,6 +589,56 @@ export const PAGES: readonly PageDefinition[] = [
     ],
   },
   {
+    id: "file-search",
+    title: "File Search",
+    description: "Search for files and folders on your computer.",
+    icon: "folder-search",
+    keywords: [
+      "file search", "files", "folders", "scopes", "ignore patterns", "hidden files",
+      "ignore files", "gitignore", "index", "reset",
+    ],
+    sections: [
+      {
+        id: "file-search",
+        rows: [
+          {
+            id: "file-search-scopes",
+            title: "Search Scopes",
+            description: "Pick additional directories to be included when searching for files",
+            control: "action",
+            action: "Pick Folder",
+          },
+          {
+            id: "file-search-ignore-patterns",
+            title: "Ignore Patterns",
+            description:
+              "File Search respects .gitignore, .ignore, Git exclude files, and .rayignore by default. Add comma-separated filenames or directories here to ignore them globally in Raycast.",
+            control: "textarea-commit",
+          },
+          {
+            id: "file-search-include-hidden",
+            title: "Include Hidden Files",
+            description: "Files and folders whose names start with a dot are indexed too.",
+            control: "switch",
+          },
+          {
+            id: "file-search-respect-ignore-files",
+            title: "Use ignore files",
+            description: "Respect .gitignore and .ignore files inside the searched scopes.",
+            control: "switch",
+          },
+          {
+            id: "file-search-reset",
+            title: "Reset to Defaults",
+            description: "Scopes reset to your home directory and ignore patterns are cleared, then everything is reindexed.",
+            control: "action",
+            action: "Reset",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "clipboard-history",
     title: "Clipboard History",
     description:
@@ -825,6 +876,7 @@ export const SIDEBAR_PAGE_IDS = [
   "snippets",
   "calculator",
   "translator",
+  "file-search",
   "clipboard-history",
   "cloud-sync",
   "advanced",
