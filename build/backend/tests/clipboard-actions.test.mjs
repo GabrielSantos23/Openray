@@ -31,10 +31,16 @@ const { createClipboardStore } = require("../src/clipboard-store.js");
 
 function withStore(run) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "cb-actions-"));
+  const cleanup = () => fs.rmSync(directory, { recursive: true, force: true });
   try {
-    return run(directory);
-  } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
+    const result = run(directory);
+    // An async body cleans up when it settles, not when it returns the promise.
+    if (result instanceof Promise) return result.finally(cleanup);
+    cleanup();
+    return result;
+  } catch (error) {
+    cleanup();
+    throw error;
   }
 }
 
@@ -64,11 +70,16 @@ const textEntry = (text, extra = {}) => ({
   ...extra,
 });
 
-test("paste sequentially walks newest to oldest and restarts when the run goes quiet", () => {
-  withStore(() => {
+/** Same-millisecond adds tiebreak on the random UUID, so multi-entry tests space their adds out. */
+const tickMs = (ms = 2) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("paste sequentially walks newest to oldest and restarts when the run goes quiet", async () => {
+  await withStore(async () => {
     const store = makeStore(fs.mkdtempSync(path.join(os.tmpdir(), "cb-seq-")));
     store.add(textEntry("first"));
+    await tickMs();
     store.add(textEntry("second"));
+    await tickMs();
     store.add(textEntry("third"));
 
     const history = { store, preparedEntry: () => ({ items: [] }) };
@@ -135,10 +146,11 @@ test("paste sequentially appends the configured newline only for text-like entri
   });
 });
 
-test("paste sequentially restarts when the newest entry changes underneath the run", () => {
-  withStore(() => {
+test("paste sequentially restarts when the newest entry changes underneath the run", async () => {
+  await withStore(async () => {
     const store = makeStore(fs.mkdtempSync(path.join(os.tmpdir(), "cb-seq-top-")));
     store.add(textEntry("one"));
+    await tickMs();
     store.add(textEntry("two"));
 
     const history = { store, preparedEntry: () => ({ items: [] }) };
@@ -150,6 +162,7 @@ test("paste sequentially restarts when the newest entry changes underneath the r
     assert.equal(first.text, "two");
     assert.equal(state.offset, 1);
 
+    await tickMs();
     store.add(textEntry("three"));
     const restarted = pasteSequentiallyStep({
       history, state, sequenceTimeoutSeconds: 60, addNewLine: false,
@@ -493,6 +506,7 @@ test("resetPasteSequence clears the in-memory cursor", async () => {
   const history = createClipboardHistory({ dispatch: async () => ({}), store });
 
   store.add(textEntry("one"));
+  await tickMs();
   store.add(textEntry("two"));
   await history.handlers.pasteSequentially();
   assert.equal(history.pasteSequence.offset, 1);
