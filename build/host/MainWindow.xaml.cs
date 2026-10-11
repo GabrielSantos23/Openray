@@ -195,6 +195,12 @@ public partial class MainWindow : Window
             return null;
         }
 
+        if (method == "window.openSettings")
+        {
+            _webView.Dispatcher.Invoke(OpenSettings);
+            return null;
+        }
+
         // The toast store's floating-HUD fallback (toast while the launcher is hidden) and the
         // `showHUD` API: the host owns the HUD window, mirroring Raycast's Raycast.dll HUDs.
         if (method == "window.showHud")
