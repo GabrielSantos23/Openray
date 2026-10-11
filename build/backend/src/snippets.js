@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS snippets (
 );
 `;
 
-function createSnippets({ dispatch, pushToFrontend, dataRoot, clipboardTextAt } = {}) {
+function createSnippets({ dispatch, pushToFrontend, dataRoot, clipboardTextAt, calculate } = {}) {
   const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
   const databasePath = path.join(root, "snippets.sqlite");
   const settingsPath = path.join(root, "snippets-settings.json");
@@ -324,7 +324,7 @@ function createSnippets({ dispatch, pushToFrontend, dataRoot, clipboardTextAt } 
         arguments: Array.isArray(args) ? args : [],
         clipboard: (offset) => readClipboardText(offset ?? 0),
         selectedText: null,
-        calculate: null,
+        calculate: typeof calculate === "function" ? calculate : null,
         getSnippetById: (nestedId) => {
           const row = db.prepare("SELECT text FROM snippets WHERE id = ?").get(nestedId);
           return row ? { text: row.text } : null;

@@ -52,6 +52,7 @@ function createBackend(options) {
   let clipboardHandlers = {};
   let quicklinksHandlers = {};
   let snippetsHandlers = {};
+  let calculatorHandlers = {};
   let fileIndexerHandlers = {};
   let usageTrackerHandlers = {};
 
@@ -669,6 +670,13 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
+      // Calculator (`ipc.backend.calculator.*`) — evaluation, history store, rate cache.
+      if (method.startsWith("calculator.")) {
+        const name = method.slice(method.indexOf(".") + 1);
+        const handler = calculatorHandlers[name];
+        if (handler) return handler(data ?? {});
+      }
+
       // Usage tracker (`ipc.backend.usage.*`)
       if (method.startsWith("usage.")) {
         const name = method.slice(method.indexOf(".") + 1);
@@ -730,6 +738,10 @@ function createBackend(options) {
     /** Install the snippets handler table. */
     registerSnippetsHandler(handlers) {
       snippetsHandlers = handlers ?? {};
+    },
+    /** Install the calculator handler table. */
+    registerCalculatorHandler(handlers) {
+      calculatorHandlers = handlers ?? {};
     },
     /** Install the file indexer handler table. */
     registerFileIndexerHandler(handlers) {

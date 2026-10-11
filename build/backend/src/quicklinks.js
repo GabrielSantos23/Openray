@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS quicklinks (
 );
 `;
 
-function createQuicklinks({ dispatch, pushToFrontend, dataRoot } = {}) {
+function createQuicklinks({ dispatch, pushToFrontend, dataRoot, calculate } = {}) {
   const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
   const databasePath = path.join(root, "quicklinks.sqlite");
   const settingsPath = path.join(root, "quicklinks-settings.json");
@@ -209,6 +209,7 @@ function createQuicklinks({ dispatch, pushToFrontend, dataRoot } = {}) {
       const resolved = resolvePlaceholders(row.link, {
         context: "quicklink",
         arguments: Array.isArray(args) ? args : [],
+        calculate: typeof calculate === "function" ? calculate : null,
       });
       const target = resolved.text.trim();
       if (!target) throw new Error("Invalid URL");
@@ -225,6 +226,7 @@ function createQuicklinks({ dispatch, pushToFrontend, dataRoot } = {}) {
       const resolved = resolvePlaceholders(String(link ?? ""), {
         context: "quicklink",
         arguments: Array.isArray(args) ? args : [],
+        calculate: typeof calculate === "function" ? calculate : null,
       });
       return { link: resolved.text };
     },

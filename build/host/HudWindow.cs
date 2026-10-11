@@ -33,6 +33,7 @@ public sealed class HudWindow : Window
     private int _initState; // 0 = not started, 1 = in flight, 2 = done
     private string? _currentVariant;
     private bool _visible;
+    private bool _messageHandlerRegistered;
     // The page registers its message listener asynchronously after Navigate; a payload posted
     // before that handshake would be lost. `hud:ready` from the page opens the gate, and the
     // latest `hud:show` is held until then.
@@ -96,9 +97,6 @@ public sealed class HudWindow : Window
     {
         try
         {
-            await EnsureInitializedAsync();
-            App.Log.Write($"[hud] showHud received (pageReady={_pageReady}, pending={_pendingShowJson is not null})");
-
             var title = payload.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
             var message = payload.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
             var variant = payload.TryGetProperty("variant", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : "default";
@@ -108,8 +106,15 @@ public sealed class HudWindow : Window
             _currentVariant = variant;
             _visible = true;
 
+            // Show FIRST: WebView2 initialization cannot complete while the window has never been
+            // shown (no HWND), so waiting on init before Show() deadlocks — init waits for Show,
+            // Show waits for init. Both launcher-log incidents trace to exactly this ordering.
             PositionBottomCenter();
             if (!IsVisible) Show();
+
+            await EnsureInitializedAsync();
+            App.Log.Write($"[hud] showHud received (pageReady={_pageReady}, pending={_pendingShowJson is not null})");
+
             var json = JsonSerializer.Serialize(new
             {
                 type = "hud:show",
@@ -172,53 +177,68 @@ public sealed class HudWindow : Window
 
     private async System.Threading.Tasks.Task EnsureInitializedAsync()
     {
-        if (_initState == 2) return;
-        if (System.Threading.Interlocked.CompareExchange(ref _initState, 1, 0) != 0)
+        while (true)
         {
-            // Another init in flight: poll briefly rather than race EnsureCoreWebView2Async.
-            for (var attempt = 0; _initState != 2 && attempt < 100; attempt++)
+            if (_initState == 2) return;
+            if (System.Threading.Interlocked.CompareExchange(ref _initState, 1, 0) == 0)
+            {
+                try
+                {
+                    await InitializeCoreAsync();
+                    _initState = 2;
+                    return;
+                }
+                catch (Exception error)
+                {
+                    _initState = 0;
+                    App.Log.Write($"[hud] webview initialisation failed: {error}");
+                    throw;
+                }
+            }
+            // Another init is in flight: wait for it to settle, then loop — if it failed, this
+            // caller takes the lock and retries. The old bounded poll returned while the winner
+            // was still initializing, so a payload ShowHud queued afterwards was wiped by the
+            // winner's reset (the inconsistent first HUD toast).
+            while (System.Threading.Volatile.Read(ref _initState) == 1)
             {
                 await System.Threading.Tasks.Task.Delay(50);
             }
-            return;
         }
-        try
+    }
+
+    private async System.Threading.Tasks.Task InitializeCoreAsync()
+    {
+        // A separate user-data folder: sharing the launcher's would trip WebView2's
+        // 0x800700AA "resource in use" (the same reason `MainWindow` guards its init).
+        var environment = await CoreWebView2Environment.CreateAsync(
+            userDataFolder: Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "RaycastMini",
+                "WebView2-HUD"));
+        await _webView.EnsureCoreWebView2Async(environment);
+
+        var core = _webView.CoreWebView2;
+        core.Settings.AreDevToolsEnabled = false;
+        core.Settings.AreDefaultContextMenusEnabled = false;
+        core.Settings.IsStatusBarEnabled = false;
+        core.Settings.IsZoomControlEnabled = false;
+        core.Settings.IsWebMessageEnabled = true;
+
+        var frontend = _frontendRoot();
+        core.SetVirtualHostNameToFolderMapping(
+            "raycast.mini", frontend, CoreWebView2HostResourceAccessKind.Allow);
+        var html = Path.Combine(frontend, "dist", "hud.html");
+
+        if (!_messageHandlerRegistered)
         {
-            // A separate user-data folder: sharing the launcher's would trip WebView2's
-            // 0x800700AA "resource in use" (the same reason `MainWindow` guards its init).
-            var environment = await CoreWebView2Environment.CreateAsync(
-                userDataFolder: Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "RaycastMini",
-                    "WebView2-HUD"));
-            await _webView.EnsureCoreWebView2Async(environment);
-
-            var core = _webView.CoreWebView2;
-            core.Settings.AreDevToolsEnabled = false;
-            core.Settings.AreDefaultContextMenusEnabled = false;
-            core.Settings.IsStatusBarEnabled = false;
-            core.Settings.IsZoomControlEnabled = false;
-            core.Settings.IsWebMessageEnabled = true;
-
-            var frontend = _frontendRoot();
-            core.SetVirtualHostNameToFolderMapping(
-                "raycast.mini", frontend, CoreWebView2HostResourceAccessKind.Allow);
-            var html = Path.Combine(frontend, "dist", "hud.html");
-
             core.WebMessageReceived += OnWebMessageReceived;
-            _pageReady = false;
-            _pendingShowJson = null;
-            // Cache-busted like the launcher window: a stale hud.html would never post
-            // `hud:ready` and every pending payload would be held forever.
-            core.Navigate(File.Exists(html) ? $"https://raycast.mini/dist/hud.html?v={DateTime.UtcNow.Ticks}" : $"file:///{html}");
-            _initState = 2;
+            _messageHandlerRegistered = true;
         }
-        catch (Exception error)
-        {
-            _initState = 0;
-            App.Log.Write($"[hud] webview initialisation failed: {error}");
-            throw;
-        }
+        _pageReady = false;
+        _pendingShowJson = null;
+        // Cache-busted like the launcher window: a stale hud.html would never post
+        // `hud:ready` and every pending payload would be held forever.
+        core.Navigate(File.Exists(html) ? $"https://raycast.mini/dist/hud.html?v={DateTime.UtcNow.Ticks}" : $"file:///{html}");
     }
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs args)

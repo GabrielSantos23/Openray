@@ -1,227 +1,14 @@
-// Inline sections for Raycast root search
-// Calculator, Snippets, Web Search Suggestions.
-// (Quicklinks moved to the real internal extension — see docs/quicklinks-spec.md.)
+// Inline sections for Raycast root search: Snippets and Web Search Suggestions.
+// The calculator moved to the backend engine (`calculator.calculate` over IPC) — see
+// docs/calculator-spec.md — so the split row and its actions live in App.tsx.
 
 export interface InlineSectionResult {
-  type: "calculator" | "snippet" | "web-search";
+  type: "snippet" | "web-search";
   title: string;
   subtitle: string;
   action: (query: string, closeWindow?: () => void) => void;
   keywords: string[];
   icon?: string; // SVG icon for web search engines
-}
-
-// Safe math expression evaluator - no eval, no Function
-function evaluateMathExpression(expression: string): number | null {
-  // Simple recursive descent parser for basic arithmetic
-  const tokens = tokenize(expression);
-  let pos = 0;
-
-  function peek() {
-    return tokens[pos] ?? null;
-  }
-
-  function consume(type?: string) {
-    const token = peek();
-    if (!token) return null;
-    if (type && token.type !== type) return null;
-    pos++;
-    return token;
-  }
-
-  function parseExpression(): number {
-    let left = parseTerm();
-    while (true) {
-      const token = peek();
-      if (!token) break;
-      if (token.type === "operator" && (token.value === "+" || token.value === "-")) {
-        consume("operator");
-        const right = parseTerm();
-        left = token.value === "+" ? left + right : left - right;
-      } else {
-        break;
-      }
-    }
-    return left;
-  }
-
-  function parseTerm(): number {
-    let left = parseFactor();
-    while (true) {
-      const token = peek();
-      if (!token) break;
-      if (token.type === "operator" && (token.value === "*" || token.value === "/" || token.value === "%")) {
-        consume("operator");
-        const right = parseFactor();
-        if (token.value === "*") left = left * right;
-        else if (token.value === "/") left = right !== 0 ? left / right : Infinity;
-        else left = left % right;
-      } else {
-        break;
-      }
-    }
-    return left;
-  }
-
-  function parseFactor(): number {
-    const token = peek();
-    if (!token) return NaN;
-
-    if (token.type === "number") {
-      consume("number");
-      return Number(token.value);
-    }
-
-    if (token.type === "identifier") {
-      const name = token.value.toLowerCase();
-      consume("identifier");
-
-      // Handle constants
-      if (name === "pi" || name === "π") return Math.PI;
-      if (name === "e") return Math.E;
-
-      // Handle functions
-      if (consume("punctuation")?.value === "(") {
-        const arg = parseExpression();
-        consume("punctuation"); // consume ')'
-
-        switch (name) {
-          case "sqrt": return Math.sqrt(arg);
-          case "sin": return Math.sin(arg);
-          case "cos": return Math.cos(arg);
-          case "tan": return Math.tan(arg);
-          case "log": return Math.log(arg);
-          case "ln": return Math.log(arg);
-          case "abs": return Math.abs(arg);
-          case "floor": return Math.floor(arg);
-          case "ceil": return Math.ceil(arg);
-          case "round": return Math.round(arg);
-          case "min": return Math.min(...arguments); // Not directly supported in this simple parser
-          case "max": return Math.max(...arguments);
-          case "pow": {
-            // pow needs two args - simplified: pow(x, y) not fully supported in this simple parser
-            return NaN;
-          }
-          default: return NaN;
-        }
-      }
-
-      return NaN;
-    }
-
-    if (token.type === "punctuation" && token.value === "(") {
-      consume("punctuation");
-      const value = parseExpression();
-      consume("punctuation"); // consume ')'
-      return value;
-    }
-
-    if (token.type === "operator" && (token.value === "+" || token.value === "-")) {
-      const op = token.value;
-      consume("operator");
-      const value = parseFactor();
-      return op === "-" ? -value : value;
-    }
-
-    return NaN;
-  }
-
-  try {
-    const result = parseExpression();
-    if (pos !== tokens.length) return NaN; // Extra tokens
-    return Number.isFinite(result) ? result : NaN;
-  } catch {
-    return NaN;
-  }
-}
-
-function tokenize(expression: string): Array<{ type: string; value: string }> {
-  const tokens = [];
-  let i = 0;
-  const len = expression.length;
-
-  while (i < len) {
-    const char = expression[i];
-
-    if (/\s/.test(char)) {
-      i++;
-      continue;
-    }
-
-    if (/[\d.]/.test(char)) {
-      let num = "";
-      let hasDot = false;
-      while (i < len && (/[\d.]/.test(expression[i]))) {
-        if (expression[i] === ".") {
-          if (hasDot) break;
-          hasDot = true;
-        }
-        num += expression[i];
-        i++;
-      }
-      tokens.push({ type: "number", value: num });
-      continue;
-    }
-
-    if (/[a-zA-Zπ]/.test(expression[i])) {
-      let ident = "";
-      while (i < len && /[a-zA-Zπ]/.test(expression[i])) {
-        ident += expression[i];
-        i++;
-      }
-      tokens.push({ type: "identifier", value: ident });
-      continue;
-    }
-
-    if (/[+\-*/%()]/.test(char)) {
-      if (char === "(" || char === ")") {
-        tokens.push({ type: "punctuation", value: char });
-      } else {
-        tokens.push({ type: "operator", value: char });
-      }
-      i++;
-      continue;
-    }
-
-    // Unknown character
-    i++;
-  }
-
-  return tokens;
-}
-
-// Calculator section - evaluates mathematical expressions
-export function evaluateCalculator(query: string): InlineSectionResult | null {
-  const trimmed = query.trim();
-  if (trimmed.length === 0) return null;
-
-  // Simple check for mathematical expression
-  const hasMathChars = /[\d+\-*/().%]/.test(trimmed);
-  const hasMathFunctions = /\b(sin|cos|tan|sqrt|log|ln|pow|abs|min|max|floor|ceil|round|PI|E)\b/i.test(trimmed);
-
-  if (!hasMathChars && !hasMathFunctions) return null;
-
-  // Replace constants
-  const sanitized = trimmed
-    .replace(/π/g, "PI")
-    .replace(/e(?![a-zA-Z])/gi, "E");
-
-  const result = evaluateMathExpression(sanitized);
-
-  if (Number.isFinite(result)) {
-    return {
-      type: "calculator",
-      title: String(result),
-      subtitle: `= ${trimmed}`,
-      action: (query: string, closeWindow?: () => void) => {
-        navigator.clipboard.writeText(String(result));
-        if (closeWindow) closeWindow();
-      },
-      keywords: ["calculator", "math", "calculate"],
-    };
-  }
-
-  return null;
 }
 
 // Snippets section - user-defined text snippets
@@ -327,13 +114,9 @@ export function searchWebSuggestions(query: string): InlineSectionResult[] {
   }));
 }
 
-// Get all inline section results for a query
+// Get all inline section results for a query (the calculator evaluates over IPC in App.tsx)
 export function getInlineSectionResults(query: string): InlineSectionResult[] {
   const results: InlineSectionResult[] = [];
-
-  // Calculator (highest priority when it matches)
-  const calc = evaluateCalculator(query);
-  if (calc) results.push(calc);
 
   // Snippets
   results.push(...searchSnippets(query));

@@ -3129,6 +3129,93 @@ textarea[data-error="true"] {
   background: linear-gradient(140deg, #8f7bff 0%, #5b3ce0 100%);
 }
 
+.command-tile--calculator {
+  background: linear-gradient(140deg, #86b6ff 0%, #3f68e0 100%);
+}
+
+/* ---- Calculator split row (root search + the history view's live row) ---- */
+
+.calc-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-12);
+  height: 124px;
+  padding: var(--space-12) var(--space-16);
+}
+
+.calc-row__left,
+.calc-row__right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.calc-row__expression {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 20px;
+  font-weight: var(--font-weight-500);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calc-row__answer {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 28px;
+  font-weight: var(--font-weight-600);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.calc-row__badge {
+  padding: 1px var(--space-8);
+  border-radius: var(--radius-full);
+  background: var(--fg-10);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-500);
+  letter-spacing: 0.02em;
+}
+
+.calc-row__rates {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+.calc-row__rates[data-stale] {
+  color: var(--yellow);
+}
+
+.calc-row__divider {
+  display: inline-flex;
+  align-self: center;
+  color: var(--color-text-quaternary);
+}
+
+/* History rows: expression on the left, answer on the right, category icon up front. */
+.calc-history-row {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.calc-history-row__text {
+  display: flex;
+  min-width: 0;
+}
+
+.calc-history-row__answer {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .list__command-type {
   font-size: 12px;
   opacity: 0.45;

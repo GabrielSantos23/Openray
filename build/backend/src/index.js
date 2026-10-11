@@ -28,6 +28,7 @@ const { createBackend } = require("./backend");
 const { createClipboardHistory } = require("./clipboard-history");
 const { createQuicklinks } = require("./quicklinks");
 const { createSnippets } = require("./snippets");
+const { createCalculator } = require("./calculator");
 const { createFileIndexer } = require("./file-indexer");
 const { createUsageTracker } = require("./usage-tracker");
 
@@ -61,10 +62,19 @@ const clipboard = createClipboardHistory({
 backend.registerClipboardHandler(clipboard.handlers);
 
 // Quicklinks is likewise an internal extension persisted in this process (`quicklinks.*`). Links
-// resolve through the shared placeholder engine before the host opens them.
+// resolve through the shared placeholder engine before the host opens them. `{calculator …}`
+// placeholders evaluate against the calculator store's in-memory rate table.
+const calculator = createCalculator({
+  pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+});
+backend.registerCalculatorHandler(calculator.handlers);
+calculator.warmRates();
+calculator.purgeOldEntries();
+
 const quicklinks = createQuicklinks({
   dispatch: (method, data) => backend.dispatch("backend", method, data),
   pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+  calculate: (expression) => calculator.calculateExpression(expression),
 });
 backend.registerQuicklinksHandler(quicklinks.handlers);
 
@@ -74,6 +84,7 @@ backend.registerQuicklinksHandler(quicklinks.handlers);
 const snippets = createSnippets({
   dispatch: (method, data) => backend.dispatch("backend", method, data),
   pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+  calculate: (expression) => calculator.calculateExpression(expression),
   clipboardTextAt: (offset) => {
     const entry = clipboard.store.last(offset ?? 0);
     if (!entry) return null;

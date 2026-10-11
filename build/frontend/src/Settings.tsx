@@ -538,6 +538,27 @@ const PAGES: readonly PageDefinition[] = [
     ],
   },
   {
+    id: "calculator",
+    title: "Calculator",
+    description: "Calculate numbers and expressions.",
+    icon: "calculator",
+    keywords: ["calculator", "color", "hex", "pixels", "rem", "em", "syntax highlighting", "flight tracker"],
+    sections: [
+      {
+        id: "calculator-conversion",
+        title: "Conversion",
+        rows: [
+          {
+            id: "calculator-rem-to-px",
+            title: "REM/EM to Pixel Conversion",
+            description: "How many pixels one rem/em is worth when converting between rem/em and pixels.",
+            control: "text",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "clipboard-history",
     title: "Clipboard History",
     description:
@@ -773,6 +794,7 @@ const SIDEBAR_PAGE_IDS = [
   "keyboard",
   "quicklinks",
   "snippets",
+  "calculator",
   "clipboard-history",
   "cloud-sync",
   "advanced",
@@ -809,6 +831,9 @@ const CLIPBOARD_ROW_IDS = new Set([
 ]);
 
 const QUICKLINKS_ROW_IDS = new Set(["quicklinks-pass-selected-text", "quicklinks-warn-before-delete"]);
+
+/** The calculator page's one preference lives in the backend store (`remToPxRate`). */
+const CALCULATOR_ROW_IDS = new Set(["calculator-rem-to-px"]);
 
 /** Snippet rows persist to the Node store (expansion settings) or the renderer (command flags). */
 const SNIPPETS_ROW_IDS = new Set([
@@ -908,6 +933,7 @@ const DEFAULTS: SettingsMap = {
   "snippets-disabled-applications": "",
   "snippets-primary-action": "Paste to Active App",
   "snippets-warn-before-delete": true,
+  "calculator-rem-to-px": "16",
 };
 
 const SENSITIVITY_MAP: Record<string, Sensitivity> = {
@@ -1666,6 +1692,23 @@ export function Settings() {
     });
   }, []);
 
+  // Calculator: the pixel rate lives in the backend store and feeds the conversion engine.
+  useEffect(() => {
+    ipc
+      .backend("calculator.getPreferences", {}, { module: "backend" })
+      .then((response) => {
+        const preferences = response as { remToPxRate?: number };
+        setValues((current) => {
+          const merged = { ...current, "calculator-rem-to-px": String(preferences.remToPxRate ?? 16) };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+  }, []);
+
   const setValue = useCallback((id: string, next: SettingsValue) => {
     setValues((current) => {
       const merged = { ...current, [id]: next };
@@ -1709,6 +1752,17 @@ export function Settings() {
         localStorage.setItem("settings-snippets-primary-action", next === "Copy to Clipboard" ? "copy" : "paste");
       } else if (id === "snippets-warn-before-delete") {
         localStorage.setItem("settings-snippets-remember-delete", next ? "1" : "0");
+      }
+      return;
+    }
+    if (CALCULATOR_ROW_IDS.has(id)) {
+      if (id === "calculator-rem-to-px") {
+        const rate = Number(next);
+        if (Number.isFinite(rate) && rate >= 1) {
+          void ipc
+            .backend("calculator.setPreference", { key: "remToPxRate", value: rate }, { module: "backend" })
+            .catch(() => undefined);
+        }
       }
       return;
     }

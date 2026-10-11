@@ -82,6 +82,8 @@ import {
   HelpCircle,
   Blocks,
   Building2,
+  Calculator,
+  ArrowLeftRight,
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
@@ -111,6 +113,8 @@ const REGISTRY: Record<string, IconComponent> = {
   "magnifying-glass": Search,
   "apple-logo": Bird,
   "chevron-right": ChevronRight,
+  calculator: Calculator,
+  switch: ArrowLeftRight,
 
   // ---- Clipboard history keys (main-window-*.js row icons + action icons) ----------------------
   tack: Pin,

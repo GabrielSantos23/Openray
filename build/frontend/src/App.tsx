@@ -45,6 +45,17 @@ function nextToastId(): string {
     : `toast_${Math.random().toString(36).slice(2)}`;
 }
 
+/** `Updated ${relativeTime}` third line on currency rows — the shipped row's relative label. */
+function formatRelativeTime(timestamp: number): string {
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 /** `Hne`: after the window closes, the HUD is what remains — command icon at 22px in Raycast. */
 function hudStoreOpenForExtension(title: string) {
   hudStore.open({ id: nextToastId(), title, variant: "default" }, { durationMs: 1200 });
@@ -93,9 +104,10 @@ import {
   useApplicationGroups,
 } from "./applications";
 import { ClipboardHistoryView } from "./ClipboardHistoryView";
-import { ArgsForm as QuicklinkArgsForm, QuicklinksView, type ArgsState as QuicklinkArgsState } from "./QuicklinksView";
+import { ArgsForm as QuicklinkArgsForm, QuicklinksView, type ArgsState as QuicklinkArgsState, type QuicklinksCommandName } from "./QuicklinksView";
 import { isLikelyUrl, openQuicklink, setPendingCreateLink, useQuicklinks, type QuicklinkEntry } from "./quicklinks";
-import { SnippetsView } from "./SnippetsView";
+import { SnippetsView, type SnippetsCommandName } from "./SnippetsView";
+import { CalculatorHistoryView } from "./CalculatorHistoryView";
 import { useSnippets } from "./snippets";
 import {
   CLIPBOARD_AREA,
@@ -159,8 +171,8 @@ interface ClipboardEntryResult {
  * four Quicklinks commands (create/export/import/search) and four Snippets commands, each opening
  * its own view.
  */
-type InternalArea = "quicklinks" | "snippets";
-type InternalCommandName = "search" | "create" | "import" | "export";
+type InternalArea = "quicklinks" | "snippets" | "calculator";
+type InternalCommandName = "search" | "create" | "import" | "export" | "history";
 
 interface InternalCommandEntry {
   kind: "internal";
@@ -183,6 +195,7 @@ interface QuicklinkCreateEntry {
 const INTERNAL_EXTENSION_META: Record<InternalArea, { title: string; icon: string; tile: string }> = {
   quicklinks: { title: "Quicklinks", icon: "link", tile: "command-tile--quicklinks" },
   snippets: { title: "Snippets", icon: "text", tile: "command-tile--snippets" },
+  calculator: { title: "Calculator", icon: "calculator", tile: "command-tile--calculator" },
 };
 
 const INTERNAL_COMMANDS: ReadonlyArray<{
@@ -222,14 +235,41 @@ interface FileEntry {
 }
 
 /**
- * Inline section result entry (calculator, quicklinks, snippets, web search).
+ * Inline section result entry (quicklinks, snippets, web search).
  */
 interface InlineEntry {
   kind: "inline";
   result: InlineSectionResult;
 }
 
-type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | InlineEntry;
+/** The backend engine's evaluation (docs/calculator-spec.md — the split row payload). */
+interface CalculatorEvaluation {
+  answer: string;
+  unformatted: string;
+  category: "math" | "unitConversion";
+  evaluationType: string;
+  metadataType: string;
+  unitFrom: string | null;
+  unitTo: string | null;
+  currencyFrom: string | null;
+  currencyTo: string | null;
+  swappedExpression: string | null;
+}
+
+interface CalculatorRatesMeta {
+  fetchedAt: number;
+  stale: boolean;
+}
+
+/** The ephemeral root-search row: `rootSearch:{section:'calculator', matching:'always'}`. */
+interface CalculatorEntry {
+  kind: "calculator";
+  expression: string;
+  evaluation: CalculatorEvaluation;
+  rates: CalculatorRatesMeta | null;
+}
+
+type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | InlineEntry | CalculatorEntry;
 
 interface SearchableEntry {
   title: string;
@@ -273,7 +313,8 @@ function buildSections(
   fallbackCommands: FallbackCommand[],
   fileResults: FileSearchResult[],
   inlineResults: InlineSectionResult[],
-  quicklinkRows: QuicklinkEntry[]
+  quicklinkRows: QuicklinkEntry[],
+  calculatorEntry: CalculatorEntry | null
 ): RootSection[] {  // Build searchable entries for all applications
   const appSearchables: SearchableEntry[] = applications.map((app) => ({
     title: app.title,
@@ -397,9 +438,6 @@ function buildSections(
   const fileEntries = fileResults.map((file) => ({ kind: "file" as const, file }));
 
   // Inline section results - group by type
-  const calculatorEntries = inlineResults
-    .filter((r) => r.type === "calculator")
-    .map((result) => ({ kind: "inline" as const, result }));
   const quicklinkCreateEntries: QuicklinkCreateEntry[] = isLikelyUrl(query)
     ? [{ kind: "quicklink-create", link: query.trim() }]
     : [];
@@ -414,7 +452,9 @@ function buildSections(
     { id: "favorites", title: "Favorites", icon: "star", entries: favoriteEntries },
   ];
 
-  // Calculator section (highest priority inline section) - appears before applications
+  // Calculator section (highest priority) - the ephemeral row appears whenever the search term
+  // evaluates; it is not a searchable command (rootSearch matching:'always').
+  const calculatorEntries: RootEntry[] = calculatorEntry ? [calculatorEntry] : [];
   if (calculatorEntries.length > 0) {
     sections.push({ id: "calculator", title: "Calculator", icon: "calculator", entries: calculatorEntries });
   }
@@ -555,6 +595,8 @@ export function MainWindow() {
   const [fileUsageScores, setFileUsageScores] = useState(() => loadFileUsageScores());
   const [inlineSectionSettings, setInlineSectionSettings] = useState(() => loadInlineSectionSettings());
   const [inlineResults, setInlineResults] = useState<InlineSectionResult[]>([]);
+  // Action panel for the ephemeral calculator row (Ctrl+K on the split row).
+  const [calculatorPanel, setCalculatorPanel] = useState<CalculatorEntry | null>(null);
   // Quicklinks: one root row per stored quicklink, refreshed on `quicklinks.updated`.
   const { quicklinks: quicklinkRows } = useQuicklinks();
   const [quicklinkArgs, setQuicklinkArgs] = useState<QuicklinkEntry | null>(null);
@@ -694,7 +736,6 @@ export function MainWindow() {
     }
     
     const results = getInlineSectionResults(searchText).filter((r) => {
-      if (r.type === "calculator" && !inlineSectionSettings.calculator) return false;
       if (r.type === "snippet" && !inlineSectionSettings.snippets) return false;
       if (r.type === "web-search" && !inlineSectionSettings.webSearch) return false;
       return true;
@@ -702,6 +743,39 @@ export function MainWindow() {
     
     setInlineResults(results);
   }, [searchText, inlineSectionSettings]);
+
+  // The calculator row evaluates against the backend engine (`calculator.calculate`) — the same
+  // evaluation the `{calculator}` placeholder uses, so snippets, quicklinks and this row agree.
+  // Debounced per keystroke; only the latest query may commit.
+  const [calculatorEntry, setCalculatorEntry] = useState<CalculatorEntry | null>(null);
+  useEffect(() => {
+    const query = searchText.trim();
+    if (!query || !inlineSectionSettings.calculator) {
+      setCalculatorEntry(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void ipc
+        .backend("calculator.calculate", { expression: query }, { module: "backend" })
+        .then((raw) => {
+          if (cancelled) return;
+          const payload = raw as { result: CalculatorEvaluation | null; error?: string | null; rates?: CalculatorRatesMeta | null };
+          setCalculatorEntry(
+            payload.result
+              ? { kind: "calculator", expression: query, evaluation: payload.result, rates: payload.rates ?? null }
+              : null,
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setCalculatorEntry(null);
+        });
+    }, 100);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchText, inlineSectionSettings.calculator]);
 
   // Listen for file search config changes from Settings
   useEffect(() => {
@@ -999,8 +1073,8 @@ export function MainWindow() {
   // Root Search renders Favorites / Applications / Commands as named sections, exactly like
   // Raycast's root search, and the flat selection index walks all of them in order.
   const sections = useMemo(
-    () => buildSections(searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows),
-    [searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows],
+    () => buildSections(searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry),
+    [searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry],
   );
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
@@ -1028,7 +1102,7 @@ export function MainWindow() {
   }, [entries, searchText]);
 
   const selectedEntry = entries[selectedIndex];
-  panelOpenRef.current = openApplication !== null || commandPanelEntry !== null;
+  panelOpenRef.current = openApplication !== null || commandPanelEntry !== null || calculatorPanel !== null;
 
   // Hooks must run before any early return, so the action source is resolved here.
   const panelApp = openApplication?.payload ?? null;
@@ -1070,8 +1144,80 @@ export function MainWindow() {
     // Extension commands AND the Clipboard History entry get the command action panel —
     // Ctrl+K must never run the command directly.
     else if (entry.kind === "internal" || entry.kind === "quicklink-create") setSelected(entry);
+    else if (entry.kind === "calculator") setCalculatorPanel(entry);
     else if (entry.kind !== "fallback" && entry.kind !== "file" && entry.kind !== "inline" && entry.kind !== "quicklink") setCommandPanelEntry(entry);
   }, []);
+
+  // --- Calculator actions (docs/calculator-spec.md — root row and history row action set) ------
+
+  const upsertCalculatorHistory = useCallback((entry: CalculatorEntry) => {
+    return ipc.backend(
+      "calculator.historyUpsert",
+      { expression: entry.expression, answer: entry.evaluation.answer, category: entry.evaluation.category },
+      { module: "backend" },
+    );
+  }, []);
+
+  const copyCalculatorAnswer = useCallback(
+    (entry: CalculatorEntry) => {
+      void ipc.backend("clipboard.write", { content: entry.evaluation.answer }, { module: "backend" })
+        .then(() => upsertCalculatorHistory(entry))
+        .then(() => {
+          // Copying gets the launcher out of the way so the paste target is visible; the toast
+          // migrates to the HUD (same flow as the application actions).
+          showToast("Copied answer to clipboard");
+          closeMainWindow();
+        })
+        .catch(() => showToast("Failed copying answer"));
+    },
+    [showToast, closeMainWindow, upsertCalculatorHistory],
+  );
+
+  const pasteCalculatorAnswer = useCallback(
+    (entry: CalculatorEntry) => {
+      void upsertCalculatorHistory(entry)
+        .then(() => ipc.backend("clipboard.paste", { text: entry.evaluation.answer, shouldCloseWindow: true }, { module: "backend" }))
+        .catch(() => showToast("Failed to paste"));
+    },
+    [showToast, upsertCalculatorHistory],
+  );
+
+  const pinCalculation = useCallback(
+    (entry: CalculatorEntry) => {
+      void upsertCalculatorHistory(entry)
+        .then((created) => ipc.backend("calculator.historyPin", { id: (created as { id: string }).id }, { module: "backend" }))
+        .then(() => showToast("Pinned calculation"))
+        .catch(() => showToast("Failed to pin calculation"));
+    },
+    [showToast, upsertCalculatorHistory],
+  );
+
+  const refreshCurrencies = useCallback(() => {
+    void ipc.backend("calculator.refreshCurrencies", {}, { module: "backend" })
+      .then(() => showToast("Currencies refreshed!"))
+      .catch((error) => showToast("Failed to refresh currencies", error instanceof Error ? error.message : String(error)));
+  }, [showToast]);
+
+  const calculatorPanelGroups = useMemo<ActionGroup[]>(() => {
+    if (!calculatorPanel) return [];
+    const entry = calculatorPanel;
+    const actions: Array<{ id: string; title: string; itemId: string }> = [
+      { id: "calc:copyAnswer", title: "Copy Answer", itemId: "calculator" },
+      { id: "calc:pasteAnswer", title: "Paste Answer", itemId: "calculator" },
+      { id: "calc:copyUnformatted", title: "Copy Unformatted Answer", itemId: "calculator" },
+      { id: "calc:copyQuestionAndAnswer", title: "Copy Question and Answer", itemId: "calculator" },
+      { id: "calc:putAnswerInSearchBar", title: "Put Answer in Search Bar", itemId: "calculator" },
+      { id: "calc:pin", title: "Pin Calculation", itemId: "calculator" },
+      { id: "calc:showHistory", title: "Show History", itemId: "calculator" },
+    ];
+    if (entry.evaluation.swappedExpression) {
+      actions.splice(5, 0, { id: "calc:swapUnits", title: "Swap Units", itemId: "calculator" });
+    }
+    if (entry.evaluation.currencyTo) {
+      actions.push({ id: "calc:refreshCurrencies", title: "Refresh Currencies", itemId: "calculator" });
+    }
+    return [{ name: "actions", actions }];
+  }, [calculatorPanel]);
 
   // Opening a quicklink from root search: required placeholders collect their values through the
   // shared argument form first (Raycast's `/snippets/argument-form`), then the backend resolves the
@@ -1234,9 +1380,12 @@ export function MainWindow() {
           setArgumentFocusIndex(0);
           setArgumentEntry(entry);
         } else if (entry.kind === "inline") {
-          // Inline entries (calculator, quicklink, snippet, web-search) execute their action and stay/close
+          // Inline entries (quicklink, snippet, web-search) execute their action and stay/close
           entry.result.action(searchText, closeMainWindow);
           // Optionally close or keep open - for calculator, stay open
+        } else if (entry.kind === "calculator") {
+          // Enter = primary action = Copy Answer (confirmed).
+          copyCalculatorAnswer(entry);
         } else {
           setSelected(entry);
         }
@@ -1244,7 +1393,7 @@ export function MainWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel]);
+  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer]);
 
   // Escape closes the launcher, matching Raycast: the window hides and the global hotkey brings it
   // back. While the action panel is open it owns Escape (capture handler + stopPropagation), and a
@@ -1685,6 +1834,39 @@ export function MainWindow() {
                             </span>
                           </button>
                         </li>
+                      ) : entry.kind === "calculator" ? (
+                        <li key="calculator:root-row">
+                          <button
+                            type="button"
+                            className="list__row calc-row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => copyCalculatorAnswer(entry)}
+                          >
+                            <span className="calc-row__left">
+                              <span className="calc-row__expression">{entry.expression}</span>
+                              <span className="calc-row__badge">
+                                {entry.evaluation.unitFrom ?? entry.evaluation.currencyFrom ?? "Expression"}
+                              </span>
+                              {entry.evaluation.currencyTo && entry.rates ? (
+                                <span className="calc-row__rates" data-stale={entry.rates.stale || undefined}>
+                                  {entry.rates.stale
+                                    ? "Currency rates are out of date"
+                                    : `Updated ${formatRelativeTime(entry.rates.fetchedAt)}`}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="calc-row__divider" aria-hidden>
+                              <RaycastIcon name="chevron-right" size={14} />
+                            </span>
+                            <span className="calc-row__right">
+                              <span className="calc-row__answer">{entry.evaluation.answer}</span>
+                              <span className="calc-row__badge">
+                                {entry.evaluation.unitTo ?? entry.evaluation.currencyTo ?? "Result"}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
                       ) : entry.kind === "inline" ? (
                         <li key={`inline:${entry.result.type}:${entry.result.title}`}>
                           <button
@@ -1695,7 +1877,6 @@ export function MainWindow() {
                             onClick={() => entry.result.action(searchText, closeMainWindow)}
                           >
                             <span className="icon" aria-hidden>
-                              {entry.result.type === "calculator" && <RaycastIcon name="calculator" size={16} />}
                               {entry.result.type === "snippet" && <RaycastIcon name="copy" size={16} />}
                               {entry.result.type === "web-search" && entry.result.icon && (
                                 <span className="web-search-icon" dangerouslySetInnerHTML={{ __html: entry.result.icon }} />
@@ -1835,6 +2016,67 @@ export function MainWindow() {
             );
           } else if (verb === "configureCommand") {
             openSettings();
+          }
+        }}
+      />
+
+      <ActionPanel
+        open={calculatorPanel !== null}
+        title="Calculator"
+        groups={[...calculatorPanelGroups, ...toastGroups]}
+        onClose={() => setCalculatorPanel(null)}
+        onRun={async (action) => {
+          const entry = calculatorPanel;
+          if (!entry) return;
+          if (await runToastAction(action.id)) {
+            setCalculatorPanel(null);
+            return;
+          }
+          setCalculatorPanel(null);
+          switch (action.id) {
+            case "calc:copyAnswer":
+              copyCalculatorAnswer(entry);
+              break;
+            case "calc:pasteAnswer":
+              pasteCalculatorAnswer(entry);
+              break;
+            case "calc:copyUnformatted":
+              void ipc.backend("clipboard.write", { content: entry.evaluation.unformatted }, { module: "backend" })
+                .then(() => upsertCalculatorHistory(entry))
+                .then(() => {
+                  showToast("Copied to clipboard");
+                  closeMainWindow();
+                })
+                .catch(() => showToast("No unformatted result available"));
+              break;
+            case "calc:copyQuestionAndAnswer":
+              void ipc.backend(
+                "clipboard.write",
+                { content: `${entry.expression} = ${entry.evaluation.answer}` },
+                { module: "backend" },
+              )
+                .then(() => upsertCalculatorHistory(entry))
+                .then(() => {
+                  showToast("Copied to clipboard");
+                  closeMainWindow();
+                })
+                .catch(() => showToast("Failed copying answer"));
+              break;
+            case "calc:putAnswerInSearchBar":
+              setSearchText(entry.evaluation.answer);
+              break;
+            case "calc:swapUnits":
+              if (entry.evaluation.swappedExpression) setSearchText(entry.evaluation.swappedExpression);
+              break;
+            case "calc:pin":
+              pinCalculation(entry);
+              break;
+            case "calc:showHistory":
+              setSelected(internalCommandEntry("calculator", "history"));
+              break;
+            case "calc:refreshCurrencies":
+              refreshCurrencies();
+              break;
           }
         }}
       />
@@ -2018,9 +2260,11 @@ function CommandSession({
 
   if (entry.kind === "internal") {
     if (entry.area === "quicklinks") {
+      // The InternalCommandEntry type is a product of area × command; only the four quicklinks
+      // commands are ever filed under this area (INTERNAL_COMMANDS is the single source).
       return (
         <QuicklinksView
-          command={entry.command}
+          command={entry.command as QuicklinksCommandName}
           searchText={searchText}
           onSearchTextChange={setSearchText}
           showToast={showToast}
@@ -2032,9 +2276,23 @@ function CommandSession({
         />
       );
     }
+    if (entry.area === "calculator") {
+      // Only reachable through the calculator row's `Show History` action — the calculator is an
+      // ephemeral root-search section, not a searchable command.
+      return (
+        <CalculatorHistoryView
+          command="history"
+          searchText={searchText}
+          onSearchTextChange={setSearchText}
+          showToast={showToast}
+          onBack={onBack}
+          closeMainWindow={closeWindow}
+        />
+      );
+    }
     return (
       <SnippetsView
-        command={entry.command}
+        command={entry.command as SnippetsCommandName}
         searchText={searchText}
         onSearchTextChange={setSearchText}
         showToast={showToast}
