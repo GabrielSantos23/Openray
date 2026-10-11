@@ -291,15 +291,48 @@ public static class Applications
         }
     }
 
-    public static async Task<object?> DispatchAsync(string method, JsonElement? data)
+    /// <summary>
+    /// The user's default browser executable, resolved the way Windows itself does: the http(s)
+    /// UserChoice ProgId, then that ProgId's open command. The Open With picker matches the path
+    /// against the application list so the "Default" row carries the browser's real name and icon.
+    /// </summary>
+    private static string? GetDefaultBrowserPath()
     {
-        RaycastMini.Launcher.App.Log.Write($"[native] {method}");
+        try
+        {
+            var userChoice = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice");
+            var progId = userChoice?.GetValue("ProgId") as string;
+            if (string.IsNullOrEmpty(progId)) return null;
+            var command = Microsoft.Win32.Registry.ClassesRoot
+                .OpenSubKey($"{progId}\\shell\\open\\command")?.GetValue(null) as string;
+            if (string.IsNullOrEmpty(command)) return null;
+            if (command!.StartsWith('"'))
+            {
+                var end = command.IndexOf('"', 1);
+                return end > 0 ? command[1..end] : null;
+            }
+            var space = command.IndexOf(' ');
+            return space > 0 ? command[..space] : command;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static async Task<object?> DispatchAsync(string method, JsonElement? data)
+    {        RaycastMini.Launcher.App.Log.Write($"[native] {method}");
         switch (method)
         {
             case "applications.getAll":
             {
                 var apps = await GetAllAsync();
                 return new { value = apps.Select(ToPayload) };
+            }
+            case "applications.getDefaultBrowser":
+            {
+                return new { path = GetDefaultBrowserPath() };
             }
             case "applications.open":
             {

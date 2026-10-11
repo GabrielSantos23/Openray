@@ -95,6 +95,8 @@ import {
 import { ClipboardHistoryView } from "./ClipboardHistoryView";
 import { ArgsForm as QuicklinkArgsForm, QuicklinksView, type ArgsState as QuicklinkArgsState } from "./QuicklinksView";
 import { isLikelyUrl, openQuicklink, setPendingCreateLink, useQuicklinks, type QuicklinkEntry } from "./quicklinks";
+import { SnippetsView } from "./SnippetsView";
+import { useSnippets } from "./snippets";
 import {
   CLIPBOARD_AREA,
   plainTextOf,
@@ -152,9 +154,18 @@ interface ClipboardEntryResult {
   commandId: string;
 }
 
-/** The Quicklinks internal extension: the search view plus one root row per stored quicklink. */
-interface QuicklinksCommandEntry {
-  kind: "quicklinks";
+/**
+ * Internal extensions expose one root-search row per command, exactly like installed extensions:
+ * four Quicklinks commands (create/export/import/search) and four Snippets commands, each opening
+ * its own view.
+ */
+type InternalArea = "quicklinks" | "snippets";
+type InternalCommandName = "search" | "create" | "import" | "export";
+
+interface InternalCommandEntry {
+  kind: "internal";
+  area: InternalArea;
+  command: InternalCommandName;
   commandId: string;
 }
 
@@ -169,10 +180,30 @@ interface QuicklinkCreateEntry {
   link: string;
 }
 
-const QUICKLINKS_COMMAND: QuicklinksCommandEntry = {
-  kind: "quicklinks",
-  commandId: "quicklinks/search",
+const INTERNAL_EXTENSION_META: Record<InternalArea, { title: string; icon: string; tile: string }> = {
+  quicklinks: { title: "Quicklinks", icon: "link", tile: "command-tile--quicklinks" },
+  snippets: { title: "Snippets", icon: "text", tile: "command-tile--snippets" },
 };
+
+const INTERNAL_COMMANDS: ReadonlyArray<{
+  area: InternalArea;
+  command: InternalCommandName;
+  title: string;
+  keywords: string[];
+}> = [
+  { area: "quicklinks", command: "create", title: "Create Quicklink", keywords: ["quicklinks", "new quicklink"] },
+  { area: "quicklinks", command: "export", title: "Export Quicklinks", keywords: ["quicklinks"] },
+  { area: "quicklinks", command: "import", title: "Import Quicklinks", keywords: ["quicklinks"] },
+  { area: "quicklinks", command: "search", title: "Search Quicklinks", keywords: ["quicklinks"] },
+  { area: "snippets", command: "create", title: "Create Snippet", keywords: ["snippets", "new snippet"] },
+  { area: "snippets", command: "export", title: "Export Snippets", keywords: ["snippets"] },
+  { area: "snippets", command: "import", title: "Import Snippets", keywords: ["snippets"] },
+  { area: "snippets", command: "search", title: "Search Snippets", keywords: ["snippets"] },
+];
+
+function internalCommandEntry(area: InternalArea, command: InternalCommandName): InternalCommandEntry {
+  return { kind: "internal", area, command, commandId: `${area}/${command}` };
+}
 
 /**
  * Fallback command entry - shown when no results match the search query.
@@ -198,7 +229,7 @@ interface InlineEntry {
   result: InlineSectionResult;
 }
 
-type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | QuicklinksCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | InlineEntry;
+type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | InlineEntry;
 
 interface SearchableEntry {
   title: string;
@@ -243,8 +274,7 @@ function buildSections(
   fileResults: FileSearchResult[],
   inlineResults: InlineSectionResult[],
   quicklinkRows: QuicklinkEntry[]
-): RootSection[] {
-  // Build searchable entries for all applications
+): RootSection[] {  // Build searchable entries for all applications
   const appSearchables: SearchableEntry[] = applications.map((app) => ({
     title: app.title,
     subtitle: app.subtitle,
@@ -260,12 +290,13 @@ function buildSections(
     rootEntry: CLIPBOARD_COMMAND,
   };
 
-  const quicklinksCommandSearchable: SearchableEntry = {
-    title: "Search Quicklinks",
-    subtitle: "Search all your quicklinks.",
-    keywords: ["quicklinks"],
-    rootEntry: QUICKLINKS_COMMAND,
-  };
+  // Internal extension commands: one root row per command, rendered like installed commands.
+  const internalCommandSearchables: SearchableEntry[] = INTERNAL_COMMANDS.map((definition) => ({
+    title: definition.title,
+    subtitle: INTERNAL_EXTENSION_META[definition.area].title,
+    keywords: definition.keywords,
+    rootEntry: internalCommandEntry(definition.area, definition.command),
+  }));
 
   // Dynamic quicklink rows: title = name, keywords include the `quicklink` tag (Raycast's
   // `dynamicCommands.quicklink`).
@@ -295,7 +326,7 @@ function buildSections(
   }
 
   // Combine all searchable entries
-  const allSearchables = [...appSearchables, clipboardSearchable, quicklinksCommandSearchable, ...commandSearchables, ...quicklinkSearchables];
+  const allSearchables = [...appSearchables, clipboardSearchable, ...internalCommandSearchables, ...commandSearchables, ...quicklinkSearchables];
 
   // Rank all entries using the full Raycast algorithm with fallback support
   const { results: ranked, showFallbacks } = rankEntriesWithFallbacks(
@@ -350,8 +381,8 @@ function buildSections(
   const clipboardEntries = favorites.includes(CLIPBOARD_FAVORITE_KEY)
     ? []
     : regularResults.filter((r) => r.entry.rootEntry.kind === "clipboard").map((r) => r.entry.rootEntry);
-  const quicklinksCommandEntries = regularResults
-    .filter((r) => r.entry.rootEntry.kind === "quicklinks")
+  const internalCommandEntries = regularResults
+    .filter((r) => r.entry.rootEntry.kind === "internal")
     .map((r) => r.entry.rootEntry);
   const commands = regularResults
     .filter((r) => r.entry.rootEntry.kind === "extension")
@@ -394,8 +425,8 @@ function buildSections(
   }
 
   // Commands section
-  if (clipboardEntries.length > 0 || quicklinksCommandEntries.length > 0 || commands.length > 0) {
-    sections.push({ id: "commands", title: "Commands", icon: "Blocks", entries: [...clipboardEntries, ...quicklinksCommandEntries, ...commands] });
+  if (clipboardEntries.length > 0 || internalCommandEntries.length > 0 || commands.length > 0) {
+    sections.push({ id: "commands", title: "Commands", icon: "Blocks", entries: [...clipboardEntries, ...internalCommandEntries, ...commands] });
   }
 
   // Quicklinks section: the createWithURL entry, then dynamic quicklink rows. Dynamic rows only
@@ -1038,7 +1069,7 @@ export function MainWindow() {
     if (entry.kind === "application") setOpenApplication(entry.application);
     // Extension commands AND the Clipboard History entry get the command action panel —
     // Ctrl+K must never run the command directly.
-    else if (entry.kind === "quicklinks" || entry.kind === "quicklink-create") setSelected(entry);
+    else if (entry.kind === "internal" || entry.kind === "quicklink-create") setSelected(entry);
     else if (entry.kind !== "fallback" && entry.kind !== "file" && entry.kind !== "inline" && entry.kind !== "quicklink") setCommandPanelEntry(entry);
   }, []);
 
@@ -1189,11 +1220,11 @@ export function MainWindow() {
         }
         if (entry.kind === "application") openApplicationEntry(entry.application);
         else if (entry.kind === "quicklink") openQuicklinkRow(entry.quicklink);
-        else if (entry.kind === "quicklinks") setSelected(entry);
+        else if (entry.kind === "internal") setSelected(entry);
         else if (entry.kind === "quicklink-create") {
           setQuicklinkCreateLink(entry.link);
           setPendingCreateLink(entry.link);
-          setSelected(QUICKLINKS_COMMAND);
+          setSelected(internalCommandEntry("quicklinks", "create"));
         }
         else if (entry.kind === "extension" && hasArguments(entry.command)) {
           // Show argument input UI
@@ -1595,7 +1626,7 @@ export function MainWindow() {
                             onClick={() => {
                               setQuicklinkCreateLink(entry.link);
                               setPendingCreateLink(entry.link);
-                              setSelected(QUICKLINKS_COMMAND);
+                              setSelected(internalCommandEntry("quicklinks", "create"));
                             }}
                           >
                             <span className="icon" aria-hidden>
@@ -1610,8 +1641,8 @@ export function MainWindow() {
                             </span>
                           </button>
                         </li>
-                      ) : entry.kind === "quicklinks" ? (
-                        <li key={`quicklinks:${entry.commandId}`}>
+                      ) : entry.kind === "internal" ? (
+                        <li key={`internal:${entry.commandId}`}>
                           <button
                             type="button"
                             className="list__row"
@@ -1619,15 +1650,15 @@ export function MainWindow() {
                             onMouseEnter={() => setSelectedIndex(index)}
                             onClick={() => setSelected(entry)}
                           >
-                            <span className="icon" aria-hidden>
-                              <RaycastIcon name="link" size={16} />
+                            <span className={`icon-wrap command-tile ${INTERNAL_EXTENSION_META[entry.area].tile}`} aria-hidden>
+                              <RaycastIcon name={INTERNAL_EXTENSION_META[entry.area].icon} size={13} />
                             </span>
                             <span className="list__text">
-                              <span className="list__title">Search Quicklinks</span>
-                              <span className="list__subtitle">Search all your quicklinks.</span>
+                              <span className="list__title">{INTERNAL_COMMANDS.find((definition) => definition.area === entry.area && definition.command === entry.command)?.title}</span>
+                              <span className="list__subtitle">{INTERNAL_EXTENSION_META[entry.area].title}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">view</span>
+                              <span className="list__command-type">Command</span>
                             </span>
                           </button>
                         </li>
@@ -1985,17 +2016,30 @@ function CommandSession({
     );
   }
 
-  if (entry.kind === "quicklinks") {
+  if (entry.kind === "internal") {
+    if (entry.area === "quicklinks") {
+      return (
+        <QuicklinksView
+          command={entry.command}
+          searchText={searchText}
+          onSearchTextChange={setSearchText}
+          showToast={showToast}
+          onBack={onBack}
+          closeMainWindow={closeWindow}
+          applications={applications}
+          createLink={createLink}
+          onConsumeCreateLink={onConsumeCreateLink}
+        />
+      );
+    }
     return (
-      <QuicklinksView
+      <SnippetsView
+        command={entry.command}
         searchText={searchText}
         onSearchTextChange={setSearchText}
         showToast={showToast}
         onBack={onBack}
         closeMainWindow={closeWindow}
-        applications={applications}
-        createLink={createLink}
-        onConsumeCreateLink={onConsumeCreateLink}
       />
     );
   }

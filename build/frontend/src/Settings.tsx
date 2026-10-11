@@ -50,6 +50,8 @@ interface RowDefinition {
   /** Rendered but inert — the real Raycast feature has no equivalent here. */
   unavailable?: boolean;
   pro?: boolean;
+  /** Hidden until the predicate passes (e.g. the Injection Delay row needs the Immediately mode). */
+  visibleWhen?: (values: SettingsMap) => boolean;
 }
 
 interface SectionDefinition {
@@ -454,6 +456,88 @@ const PAGES: readonly PageDefinition[] = [
     ],
   },
   {
+    id: "snippets",
+    title: "Snippets",
+    description: "Snippets provide quick access to short snippets of text, code, etc..",
+    icon: "blank-document",
+    keywords: ["completion sound", "injection delay", "snippet expansion", "snippets"],
+    sections: [
+      {
+        id: "snippet-expansion",
+        title: "Snippet Expansion",
+        rows: [
+          {
+            id: "snippets-enable-expansion",
+            title: "Enable Snippet Expansion",
+            control: "switch",
+          },
+          {
+            id: "snippets-expansion-mode",
+            title: "Expansion Mode",
+            control: "select",
+            options: ["Immediately", "After Delimiter (keeping)", "After Delimiter (discarding)"],
+          },
+          {
+            id: "snippets-expand-within-words",
+            title: "Expand within Words",
+            description:
+              "If toggled off, a Snippet will only get expanded if the keyword is a single word. If toggled on, a Snippet keyword can be part of a wider word.",
+            control: "switch",
+          },
+          {
+            id: "snippets-injection-delay",
+            title: "Injection Delay",
+            description:
+              "Injection delays serve two purposes: It lets you write words containing a snippet keyword without expanding that snippet, and it lets you have snippets with similar prefixes. For example, you might have a snippet with keyword '@@' to expand your email and another snippet with keyword '@@p' for the email of your partner.",
+            control: "select",
+            options: ["None", "Short", "Regular", "Long", "Extra Long"],
+            visibleWhen: (values) => String(values["snippets-expansion-mode"] ?? "Immediately") === "Immediately",
+          },
+          {
+            id: "snippets-response-time",
+            title: "Response Time",
+            description:
+              "Some systems are capable of faster response times processing clipboard entries. If Raycast doesn't expand your snippets correctly, slower response times might help.",
+            control: "select",
+            options: ["Instant", "Quick", "Default", "Delayed", "Extended"],
+          },
+          {
+            id: "snippets-completion-sound",
+            title: "Completion Sound",
+            description: "Play a sound when a snippet is expanded automatically.",
+            control: "select",
+            options: ["None", "Asterisk", "Beep", "Exclamation", "Hand", "Question"],
+          },
+          {
+            id: "snippets-disabled-applications",
+            title: "Disabled Applications",
+            description: "Snippet expansion will not work in these applications.",
+            control: "textarea",
+          },
+        ],
+      },
+      {
+        id: "snippet-behaviour",
+        title: "Behaviour",
+        rows: [
+          {
+            id: "snippets-primary-action",
+            title: "Primary Action",
+            description: "What Enter does on a snippet in Search Snippets.",
+            control: "select",
+            options: ["Paste to Active App", "Copy to Clipboard"],
+          },
+          {
+            id: "snippets-warn-before-delete",
+            title: "Show Warning Before Deleting Snippets",
+            description: "Ask for confirmation before a snippet is deleted.",
+            control: "switch",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "clipboard-history",
     title: "Clipboard History",
     description:
@@ -688,6 +772,7 @@ const SIDEBAR_PAGE_IDS = [
   "shortcuts",
   "keyboard",
   "quicklinks",
+  "snippets",
   "clipboard-history",
   "cloud-sync",
   "advanced",
@@ -725,6 +810,60 @@ const CLIPBOARD_ROW_IDS = new Set([
 
 const QUICKLINKS_ROW_IDS = new Set(["quicklinks-pass-selected-text", "quicklinks-warn-before-delete"]);
 
+/** Snippet rows persist to the Node store (expansion settings) or the renderer (command flags). */
+const SNIPPETS_ROW_IDS = new Set([
+  "snippets-enable-expansion",
+  "snippets-expansion-mode",
+  "snippets-expand-within-words",
+  "snippets-injection-delay",
+  "snippets-response-time",
+  "snippets-completion-sound",
+  "snippets-disabled-applications",
+  "snippets-primary-action",
+  "snippets-warn-before-delete",
+]);
+
+/** Settings labels -> the backend preference values the snippets store understands. */
+const SNIPPETS_MODE_BY_LABEL: Record<string, string> = {
+  "Immediately": "immediately",
+  "After Delimiter (keeping)": "after-delimiter-keeping",
+  "After Delimiter (discarding)": "after-delimiter-discarding",
+};
+const SNIPPETS_MODE_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(SNIPPETS_MODE_BY_LABEL).map(([label, value]) => [value, label]),
+);
+const SNIPPETS_INJECTION_DELAY_BY_LABEL: Record<string, string> = {
+  "None": "none",
+  "Short": "short",
+  "Regular": "regular",
+  "Long": "long",
+  "Extra Long": "extra-long",
+};
+const SNIPPETS_INJECTION_DELAY_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(SNIPPETS_INJECTION_DELAY_BY_LABEL).map(([label, value]) => [value, label]),
+);
+const SNIPPETS_RESPONSE_TIME_BY_LABEL: Record<string, string> = {
+  "Instant": "instant",
+  "Quick": "quick",
+  "Default": "default",
+  "Delayed": "delayed",
+  "Extended": "extended",
+};
+const SNIPPETS_RESPONSE_TIME_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(SNIPPETS_RESPONSE_TIME_BY_LABEL).map(([label, value]) => [value, label]),
+);
+const SNIPPETS_SOUND_BY_LABEL: Record<string, string> = {
+  "None": "none",
+  "Asterisk": "asterisk",
+  "Beep": "beep",
+  "Exclamation": "exclamation",
+  "Hand": "hand",
+  "Question": "question",
+};
+const SNIPPETS_SOUND_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(SNIPPETS_SOUND_BY_LABEL).map(([label, value]) => [value, label]),
+);
+
 const DEFAULTS: SettingsMap = {
   "follow-system-appearance": true,
   "theme-dark": "Raycast Dark",
@@ -760,6 +899,15 @@ const DEFAULTS: SettingsMap = {
   "clipboard-paste-sequence-timeout": "60",
   "fallback-commands-list": "Search Web | Search the web for \"{query}\" | https://www.google.com/search?q={query}\nSearch GitHub | Search GitHub for \"{query}\" | https://github.com/search?q={query}",
   "fallback-commands-enabled": true,
+  "snippets-enable-expansion": true,
+  "snippets-expansion-mode": "Immediately",
+  "snippets-expand-within-words": false,
+  "snippets-injection-delay": "None",
+  "snippets-response-time": "Default",
+  "snippets-completion-sound": "None",
+  "snippets-disabled-applications": "",
+  "snippets-primary-action": "Paste to Active App",
+  "snippets-warn-before-delete": true,
 };
 
 const SENSITIVITY_MAP: Record<string, Sensitivity> = {
@@ -1471,6 +1619,53 @@ export function Settings() {
     });
   }, []);
 
+  // Snippets: the expansion config lives in the backend store (which pushes it to the native hook);
+  // the primary action and the delete warning are renderer-side flags.
+  useEffect(() => {
+    ipc
+      .backend("snippets.getPreferences", {}, { module: "backend" })
+      .then((response) => {
+        const preferences = response as {
+          autoExpansionEnabled?: boolean;
+          expansionMode?: string;
+          expandWithinWords?: boolean;
+          injectionDelay?: string;
+          responseTime?: string;
+          completionSound?: string;
+          disabledApplications?: string[];
+        };
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "snippets-enable-expansion": Boolean(preferences.autoExpansionEnabled),
+            "snippets-expansion-mode": SNIPPETS_MODE_LABEL[preferences.expansionMode ?? "immediately"] ?? "Immediately",
+            "snippets-expand-within-words": Boolean(preferences.expandWithinWords),
+            "snippets-injection-delay":
+              SNIPPETS_INJECTION_DELAY_LABEL[preferences.injectionDelay ?? "none"] ?? "None",
+            "snippets-response-time": SNIPPETS_RESPONSE_TIME_LABEL[preferences.responseTime ?? "default"] ?? "Default",
+            "snippets-completion-sound": SNIPPETS_SOUND_LABEL[preferences.completionSound ?? "none"] ?? "None",
+            "snippets-disabled-applications": (preferences.disabledApplications ?? []).join("\n"),
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+    const warn = localStorage.getItem("settings-snippets-remember-delete") !== "0";
+    const primary = localStorage.getItem("settings-snippets-primary-action") === "copy" ? "Copy to Clipboard" : "Paste to Active App";
+    setValues((current) => {
+      const merged = {
+        ...current,
+        "snippets-warn-before-delete": warn,
+        "snippets-primary-action": primary,
+      };
+      persistSettings(merged);
+      return merged;
+    });
+  }, []);
+
   const setValue = useCallback((id: string, next: SettingsValue) => {
     setValues((current) => {
       const merged = { ...current, [id]: next };
@@ -1489,6 +1684,31 @@ export function Settings() {
           .catch(() => undefined);
       } else if (id === "quicklinks-warn-before-delete") {
         localStorage.setItem("raycast-mini:quicklinks-warn-delete", next ? "1" : "0");
+      }
+      return;
+    }
+    if (SNIPPETS_ROW_IDS.has(id)) {
+      const setSnippetPreference = (key: string, value: unknown) => {
+        void ipc.backend("snippets.setPreference", { key, value }, { module: "backend" }).catch(() => undefined);
+      };
+      if (id === "snippets-enable-expansion") setSnippetPreference("autoExpansionEnabled", Boolean(next));
+      else if (id === "snippets-expansion-mode") setSnippetPreference("expansionMode", SNIPPETS_MODE_BY_LABEL[String(next)] ?? "immediately");
+      else if (id === "snippets-expand-within-words") setSnippetPreference("expandWithinWords", Boolean(next));
+      else if (id === "snippets-injection-delay") setSnippetPreference("injectionDelay", SNIPPETS_INJECTION_DELAY_BY_LABEL[String(next)] ?? "none");
+      else if (id === "snippets-response-time") setSnippetPreference("responseTime", SNIPPETS_RESPONSE_TIME_BY_LABEL[String(next)] ?? "default");
+      else if (id === "snippets-completion-sound") setSnippetPreference("completionSound", SNIPPETS_SOUND_BY_LABEL[String(next)] ?? "none");
+      else if (id === "snippets-disabled-applications") {
+        setSnippetPreference(
+          "disabledApplications",
+          String(next)
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean),
+        );
+      } else if (id === "snippets-primary-action") {
+        localStorage.setItem("settings-snippets-primary-action", next === "Copy to Clipboard" ? "copy" : "paste");
+      } else if (id === "snippets-warn-before-delete") {
+        localStorage.setItem("settings-snippets-remember-delete", next ? "1" : "0");
       }
       return;
     }
@@ -1684,7 +1904,9 @@ export function Settings() {
                       <p className="settings-section__description">{section.description}</p>
                     ) : null}
                     <div className="settings-section__content">
-                      {section.rows.map((row) => (
+                      {section.rows
+                        .filter((row) => !row.visibleWhen || row.visibleWhen(values))
+                        .map((row) => (
                         <Row
                           key={row.id}
                           row={row}

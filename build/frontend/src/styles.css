@@ -3083,3 +3083,505 @@ textarea[data-error="true"] {
   opacity: 0.8;
   margin-top: 8px;
 }
+
+/* Snippets view: filled keyword badge, the snippet textarea and the placeholder inserter. */
+.snippets-keyword {
+  background: #d19a66;
+  border-color: transparent;
+  color: #1b1b1f;
+}
+
+.snippets-form__textarea {
+  flex: 1;
+  resize: vertical;
+  min-height: 72px;
+  background: var(--color-surface-input-field);
+  border: none;
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  padding: 6px 8px;
+}
+
+.snippets-form__insert {
+  width: auto !important;
+  flex: none;
+}
+
+/* ---- Internal extension command chrome (Raycast-style tiles, forms, drop states, footers) ---- */
+
+.command-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 6px;
+  background: linear-gradient(140deg, #9d8cff 0%, #6c47ff 100%);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 12%);
+}
+
+.command-tile--quicklinks {
+  background: linear-gradient(140deg, #9d8cff 0%, #6c47ff 100%);
+}
+
+.command-tile--snippets {
+  background: linear-gradient(140deg, #8f7bff 0%, #5b3ce0 100%);
+}
+
+.list__command-type {
+  font-size: 12px;
+  opacity: 0.45;
+  white-space: nowrap;
+}
+
+.footer-command {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.footer-command__label {
+  font-size: 12px;
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer-primary {
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.footer-primary__return {
+  opacity: 0.7;
+}
+
+/* Full-page command forms (Create/Edit for Quicklinks and Snippets). */
+.command-page {
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.command-form {
+  width: 100%;
+  max-width: 560px;
+  padding: 24px 8px 24px;
+}
+
+.command-form__row {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.command-form__row--top {
+  align-items: flex-start;
+}
+
+.command-form__row--top .command-form__label {
+  padding-top: 12px;
+}
+
+.command-form__label {
+  font-size: 12px;
+  color: rgb(255 255 255 / 55%);
+  text-align: right;
+}
+
+.command-form__field {
+  min-width: 0;
+}
+
+/* Every field: Raycast's dark inset surface with the hairline border and soft focus ring. */
+.command-form input,
+.command-form select,
+.command-form__textarea {
+  box-sizing: border-box;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 10px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.command-form input::placeholder,
+.command-form__textarea::placeholder {
+  color: rgb(255 255 255 / 32%);
+}
+
+.command-form input:focus,
+.command-form select:focus,
+.command-form__textarea:focus {
+  border-color: rgb(255 255 255 / 30%);
+}
+
+.command-form select {
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='m1 1 4 4 4-4' stroke='%23ffffff' stroke-opacity='.55' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+.command-form select option {
+  background: #1e1e21;
+  color: #ffffff;
+}
+
+.command-form__textarea {
+  height: auto;
+  min-height: 96px;
+  padding: 12px 12px 36px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+/* The three inline tools in the textarea's bottom-right corner. */
+.command-form__textarea-wrap {
+  position: relative;
+}
+
+.command-form__textarea-tools {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.command-form__textarea-tools .icon--plain {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: rgb(255 255 255 / 45%);
+  cursor: pointer;
+  padding: 0;
+}
+
+.command-form__textarea-tools .icon--plain:hover {
+  color: rgb(255 255 255 / 90%);
+}
+
+.command-form__insert {
+  width: auto !important;
+  height: 26px;
+  padding: 0 26px 0 10px;
+  font-size: 11px;
+  border-radius: 7px;
+}
+
+.command-form__help {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgb(255 255 255 / 55%);
+  margin-top: 10px;
+}
+
+.command-form__help-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent, #4fa3f8);
+  cursor: pointer;
+}
+
+.command-form__help-link:hover {
+  text-decoration: underline;
+}
+
+.command-form__errors {
+  margin-left: 106px;
+  font-size: 12px;
+  color: var(--red, #ff6363);
+}
+
+/* Name & Icon: the input and the icon picker share one bordered container with a divider. */
+.command-form__paired {
+  display: flex;
+  align-items: stretch;
+  height: 38px;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.command-form__paired:focus-within {
+  border-color: rgb(255 255 255 / 30%);
+}
+
+.command-form__paired input {
+  flex: 1;
+  height: auto;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+.command-form__paired select {
+  height: auto;
+  width: auto !important;
+  flex: none;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  border-left: 1px solid rgb(255 255 255 / 10%);
+  padding-left: 10px;
+}
+
+.command-guide-link {
+  background: none;
+  border: none;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgb(255 255 255 / 40%);
+  cursor: pointer;
+}
+
+.command-guide-link:hover {
+  text-decoration-color: var(--fg);
+}
+
+/* Import/Export full-window states. */
+.drop-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.drop-state__icon {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.drop-state__badge {
+  position: absolute;
+  right: -6px;
+  bottom: -4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0b0b0d;
+  border: 2px solid #2c2c31;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.drop-state__title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.drop-state__subtitle {
+  font-size: 13px;
+  color: rgb(255 255 255 / 55%);
+}
+
+/* Search-bar accessories: the argument hint pill and the All Tags dropdown. */
+.searchbar__accessory {
+  flex: none;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--color-surface-input-field);
+  opacity: 0.75;
+}
+
+.header-dropdown {
+  flex: none;
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+/* Detail pane: resolved-link preview on top, information below, tags as filled pills. */
+.quicklinks-detail,
+.clipboard-detail {
+  display: flex;
+  flex-direction: column;
+}
+
+.quicklink-preview,
+.snippet-preview {
+  flex: 0 0 42%;
+  overflow: auto;
+  padding: 14px;
+  border-bottom: 1px solid var(--color-surface-input-field);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  opacity: 0.9;
+}
+
+.clipboard-detail__value--pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tag-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  background: #6c47ff;
+  color: #ffffff;
+}
+
+/* Open With picker: closed control + Raycast's popover (apps with icons, "Default" row, search
+   pinned at the bottom). */
+.openwith {
+  position: relative;
+}
+
+.command-form__picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 10px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.command-form__picker:focus {
+  border-color: rgb(255 255 255 / 30%);
+  outline: none;
+}
+
+.openwith__icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex: none;
+}
+
+.openwith__icon--blank {
+  display: inline-block;
+  background: rgb(255 255 255 / 12%);
+}
+
+.openwith__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openwith__chevron {
+  flex: none;
+  opacity: 0.6;
+}
+
+.openwith__popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow: hidden;
+  background: #1c1c1f;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 55%);
+}
+
+.openwith__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.openwith__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.openwith__row[data-selected="true"] {
+  background: rgb(255 255 255 / 8%);
+}
+
+.openwith__default {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+.openwith__empty {
+  padding: 10px;
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.command-form .openwith__search {
+  height: 36px;
+  padding: 0 12px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0;
+  color: var(--fg);
+  font-size: 12px;
+  outline: none;
+  flex: none;
+}
+
+.command-form .openwith__search::placeholder {
+  color: rgb(255 255 255 / 32%);
+}
