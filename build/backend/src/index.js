@@ -29,6 +29,7 @@ const { createClipboardHistory } = require("./clipboard-history");
 const { createQuicklinks } = require("./quicklinks");
 const { createSnippets } = require("./snippets");
 const { createCalculator } = require("./calculator");
+const { createTranslator } = require("./translator");
 const { createFileIndexer } = require("./file-indexer");
 const { createUsageTracker } = require("./usage-tracker");
 
@@ -70,6 +71,14 @@ const calculator = createCalculator({
 backend.registerCalculatorHandler(calculator.handlers);
 calculator.warmRates();
 calculator.purgeOldEntries();
+
+// Translator is the fourth internal extension (`translator.*`). It is also the second
+// network-allowed feature (docs/translator-spec.md): the provider call goes through one
+// swappable function and results are cached in memory only.
+const translator = createTranslator({
+  pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+});
+backend.registerTranslatorHandler(translator.handlers);
 
 const quicklinks = createQuicklinks({
   dispatch: (method, data) => backend.dispatch("backend", method, data),

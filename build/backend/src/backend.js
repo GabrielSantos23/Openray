@@ -53,6 +53,7 @@ function createBackend(options) {
   let quicklinksHandlers = {};
   let snippetsHandlers = {};
   let calculatorHandlers = {};
+  let translatorHandlers = {};
   let fileIndexerHandlers = {};
   let usageTrackerHandlers = {};
 
@@ -677,6 +678,13 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
+      // Translator (`ipc.backend.translator.*`) — provider call, quick-translate parser, custom commands.
+      if (method.startsWith("translator.")) {
+        const name = method.slice(method.indexOf(".") + 1);
+        const handler = translatorHandlers[name];
+        if (handler) return handler(data ?? {});
+      }
+
       // Usage tracker (`ipc.backend.usage.*`)
       if (method.startsWith("usage.")) {
         const name = method.slice(method.indexOf(".") + 1);
@@ -742,6 +750,10 @@ function createBackend(options) {
     /** Install the calculator handler table. */
     registerCalculatorHandler(handlers) {
       calculatorHandlers = handlers ?? {};
+    },
+    /** Install the translator handler table. */
+    registerTranslatorHandler(handlers) {
+      translatorHandlers = handlers ?? {};
     },
     /** Install the file indexer handler table. */
     registerFileIndexerHandler(handlers) {
