@@ -34,6 +34,9 @@ public static class NativeHost
         "fileSystem.showSaveFileDialog" => Task.FromResult(ShowSaveFileDialog(data)),
         "fileSystem.writeFile" => Task.FromResult(WriteFile(data)),
         "fileSystem.readFile" => Task.FromResult(ReadFile(data)),
+        "snippets.register" => Task.FromResult(SnippetHook.RegisterKeywords(data)),
+        "snippets.remove" => Task.FromResult(SnippetHook.RemoveKeywords(data)),
+        "snippets.setConfig" => Task.FromResult(SnippetHook.ApplyConfig(data)),
         _ => Task.FromException<object?>(new InvalidOperationException($"no native handler for {method}")),
     };
 
@@ -133,6 +136,8 @@ public static class NativeHost
         {
             if (Clipboard.ContainsText()) value = Clipboard.GetText();
         });
+        // Never log clipboard content — the length only says whether the route delivered anything.
+        App.Log.Write($"[clipboard] read route hit (text={(value is null ? "none" : $"{value.Length} chars")})");
         return new { value };
     }
 

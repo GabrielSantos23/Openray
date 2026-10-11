@@ -468,6 +468,9 @@ public partial class MainWindow : Window
     /// <summary>Tells the renderer the window was hidden/shown so it can run pop-to-root timers.</summary>
     private void PostVisibility(bool visible)
     {
+        // Expansion is paused while the launcher is on screen (Raycast pauses while its editor is
+        // open; the launcher window is the clone's whole UI, so this covers the editor case too).
+        SnippetHook.SetLauncherVisible(visible);
         try
         {
             PostToRenderer("window.visibilityChanged",

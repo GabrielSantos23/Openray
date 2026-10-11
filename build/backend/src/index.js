@@ -27,6 +27,7 @@ const path = require("node:path");
 const { createBackend } = require("./backend");
 const { createClipboardHistory } = require("./clipboard-history");
 const { createQuicklinks } = require("./quicklinks");
+const { createSnippets } = require("./snippets");
 const { createFileIndexer } = require("./file-indexer");
 const { createUsageTracker } = require("./usage-tracker");
 
@@ -66,6 +67,32 @@ const quicklinks = createQuicklinks({
   pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
 });
 backend.registerQuicklinksHandler(quicklinks.handlers);
+
+// Snippets is the third internal extension persisted in this process (`snippets.*`). The native
+// hook asks this store to resolve placeholders (`snippets.resolve`) because the backend is alive
+// while the launcher window is hidden.
+const snippets = createSnippets({
+  dispatch: (method, data) => backend.dispatch("backend", method, data),
+  pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+  clipboardTextAt: (offset) => {
+    const entry = clipboard.store.last(offset ?? 0);
+    if (!entry) return null;
+    for (const item of entry.items ?? []) {
+      for (const representation of item.representations ?? []) {
+        const base = String(representation.mimeType ?? "").split(";")[0].trim().toLowerCase();
+        if (base === "text/plain" && typeof representation.content === "string") {
+          return representation.content;
+        }
+      }
+    }
+    return null;
+  },
+});
+backend.registerSnippetsHandler(snippets.handlers);
+// Initial keyword registration and expansion config: the hook buffers both, so an early push
+// survives the host installing the hook moments later.
+snippets.registerKeywordsWithHost();
+snippets.pushExpansionConfigToHost();
 
 // File indexer
 const fileIndexer = createFileIndexer({});

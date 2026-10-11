@@ -51,6 +51,7 @@ function createBackend(options) {
   // `clipboard.<method>` + `clipboardHistory.<method>`; installed by `index.js`.
   let clipboardHandlers = {};
   let quicklinksHandlers = {};
+  let snippetsHandlers = {};
   let fileIndexerHandlers = {};
   let usageTrackerHandlers = {};
 
@@ -661,6 +662,13 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
+      // Snippets (`ipc.backend.snippets.*`; the native hook resolves through here too)
+      if (method.startsWith("snippets.")) {
+        const name = method.slice(method.indexOf(".") + 1);
+        const handler = snippetsHandlers[name];
+        if (handler) return handler(data ?? {});
+      }
+
       // Usage tracker (`ipc.backend.usage.*`)
       if (method.startsWith("usage.")) {
         const name = method.slice(method.indexOf(".") + 1);
@@ -718,6 +726,10 @@ function createBackend(options) {
     /** Install the quicklinks handler table. */
     registerQuicklinksHandler(handlers) {
       quicklinksHandlers = handlers ?? {};
+    },
+    /** Install the snippets handler table. */
+    registerSnippetsHandler(handlers) {
+      snippetsHandlers = handlers ?? {};
     },
     /** Install the file indexer handler table. */
     registerFileIndexerHandler(handlers) {

@@ -159,6 +159,12 @@ private MainWindow? _window;
         await _pipe.WaitForFirstConnectionAsync();
         Log.Write("pipe connected");
 
+        // Snippet auto-expansion installs the low-level keyboard hook on this thread (its pump
+        // delivers the callbacks). The backend pushes the keyword set and expansion config as soon
+        // as it connects; they are buffered until the hook exists.
+        SnippetHook.Install(_pipe);
+        Log.Write("snippet hook installed");
+
         // Watchdog: if the Node backend ever dies (crash, killed externally), bring it back. The pipe
         // bridge reconnects automatically, so the UI recovers instead of staying empty until restart.
         var watchdog = new System.Windows.Threading.DispatcherTimer(TimeSpan.FromSeconds(3),
@@ -289,6 +295,7 @@ _window = new MainWindow(_pipe, _backend);
 
     protected override void OnExit(ExitEventArgs e)
     {
+        SnippetHook.Uninstall();
         _singleInstanceMutex?.ReleaseMutex();
         _singleInstanceMutex?.Dispose();
         if (_clipboard is not null)
