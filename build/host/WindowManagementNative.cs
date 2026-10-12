@@ -44,8 +44,11 @@ public static class WindowManagementNative
     private const int DwmwaCloaked = 14;
 
     private static readonly object HotkeyLock = new();
-    private static readonly Dictionary<int, (IntPtr hwnd, string commandKey)> CommandHotkeys = new();
+    private static readonly Dictionary<int, (IntPtr hwnd, string commandKey, uint modifiers, ushort key)> CommandHotkeys = new();
     private static int _nextHotkeyId = FirstCommandHotkeyId;
+    // Game Mode suppression unregisters every command hotkey without forgetting it; the map keeps
+    // its entries so `RestoreCommandHotkeys` can re-register the same id/modifier/key triple.
+    private static bool _commandHotkeysSuppressed;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT
@@ -512,8 +515,37 @@ public static class WindowManagementNative
         lock (HotkeyLock) id = _nextHotkeyId++;
         if (!RegisterHotKey(handle, id, modifiers, key))
             throw new InvalidOperationException("hotkey registration failed");
-        lock (HotkeyLock) CommandHotkeys[id] = (handle, commandKey);
+        lock (HotkeyLock) CommandHotkeys[id] = (handle, commandKey, modifiers, key);
         return new { ok = true };
+    }
+
+    /// <summary>
+    /// Game Mode (docs/focus-games-taskbar-spec.md §B): while suppressed every command hotkey is
+    /// unregistered but remembered, so restoring re-registers the identical id/modifier/key triple.
+    /// </summary>
+    public static bool SetCommandHotkeysSuppressed(bool suppressed)
+    {
+        lock (HotkeyLock)
+        {
+            if (_commandHotkeysSuppressed == suppressed) return true;
+            var failed = false;
+            if (suppressed)
+            {
+                foreach (var pair in CommandHotkeys)
+                {
+                    if (!UnregisterHotKey(pair.Value.hwnd, pair.Key)) failed = true;
+                }
+            }
+            else
+            {
+                foreach (var pair in CommandHotkeys)
+                {
+                    if (!RegisterHotKey(pair.Value.hwnd, pair.Key, pair.Value.modifiers, pair.Value.key)) failed = true;
+                }
+            }
+            if (!failed) _commandHotkeysSuppressed = suppressed;
+            return !failed;
+        }
     }
 
     private static ushort VirtualKey(string key) => key switch

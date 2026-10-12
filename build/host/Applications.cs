@@ -61,9 +61,16 @@ public static class Applications
         "website", "visit ", "changelog", "faq", "release notes", "user guide", "repair",
     };
 
-    // The full scan (Start Menu .lnk resolution + MSIX PowerShell query + process walk) takes
-    // seconds, and every action call used to pay for it again. Raycast keeps its own app cache;
-    // a short TTL here gives the same effect: instant actions, fresh-enough results.
+    private static readonly HashSet<string> InternalSystemBinaries = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "svchost.exe", "csrss.exe", "lsass.exe", "smss.exe", "conhost.exe", "dwm.exe", "services.exe",
+        "wininit.exe", "winlogon.exe", "fontdrvhost.exe", "sihost.exe", "taskhostw.exe", "runtimebroker.exe",
+        "dllhost.exe", "spoolsv.exe", "ctfmon.exe", "wlanext.exe", "audiodg.exe", "explorer.exe",
+        "textinputhost.exe", "shellexperiencehost.exe", "startmenuexperiencehost.exe", "searchhost.exe"
+    };
+
+    // The full scan takes seconds, and every action call used to pay for it again.
+    // A short TTL gives instant actions and fresh results.
     private static readonly object CacheLock = new();
     private static List<ApplicationEntry>? _cache;
     private static DateTimeOffset _cacheTime;
@@ -97,11 +104,9 @@ public static class Applications
             var target = shortcut.TargetPath;
             if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(target)) continue;
             shortcuts++;
-            // An .lnk that does not resolve to an executable is a document/link shortcut, not an app.
             if (!target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) { skippedTargets++; continue; }
             if (JunkKeywords.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase))) { skippedJunk++; continue; }
 
-            // Raycast disambiguates same-named apps by their containing folder.
             var disambiguator = System.IO.Path.GetDirectoryName(target) is { } dir
                 ? dir.TrimEnd('\\')
                 : null;
@@ -109,6 +114,22 @@ public static class Applications
             var id = $"path:{target.ToLowerInvariant()}";
             found[id] = new ApplicationEntry(
                 id, name, target, AppUserModelId.ForPath(target), disambiguator, false, IsRunning(target));
+        }
+
+        foreach (var appPath in EnumerateAppPaths())
+        {
+            if (!found.ContainsKey(appPath.Id))
+            {
+                found[appPath.Id] = appPath;
+            }
+        }
+
+        foreach (var regApp in EnumerateUninstallRegistryApps())
+        {
+            if (!found.ContainsKey(regApp.Id))
+            {
+                found[regApp.Id] = regApp;
+            }
         }
 
         var msixCount = 0;
@@ -120,24 +141,31 @@ public static class Applications
         }
 
         var processCount = 0;
-        // Apps with a window but no Start Menu shortcut still show up in Raycast's root search.
         foreach (var process in Process.GetProcesses())
         {
             processCount++;
             try
             {
-                var title = process.MainWindowTitle;
                 var path = process.MainModule?.FileName;
-                if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(path)) continue;
+                if (string.IsNullOrWhiteSpace(path) || !path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
+                var fileName = System.IO.Path.GetFileName(path).ToLowerInvariant();
+                if (InternalSystemBinaries.Contains(fileName)) continue;
+
                 var id = $"path:{path.ToLowerInvariant()}";
                 if (found.ContainsKey(id)) continue;
+
+                var title = process.MainWindowTitle;
+                var name = !string.IsNullOrWhiteSpace(title)
+                    ? title
+                    : System.IO.Path.GetFileNameWithoutExtension(path);
+
                 found[id] = new ApplicationEntry(
-                    id, System.IO.Path.GetFileNameWithoutExtension(path), path,
+                    id, name, path,
                     AppUserModelId.ForPath(path), null, false, true);
             }
             catch
             {
-                /* access denied / system process */
+                /* access denied */
             }
             finally
             {
@@ -147,8 +175,6 @@ public static class Applications
 
         await Task.CompletedTask;
 
-        // One entry per name, like Raycast's root search: prefer real .exe targets, then the
-        // shortest path (the launcher copy rather than a nested one).
         var list = found.Values
             .GroupBy(app => app.Name, StringComparer.CurrentCultureIgnoreCase)
             .Select(group => group
@@ -174,12 +200,117 @@ public static class Applications
         return list;
     }
 
+    private static IEnumerable<ApplicationEntry> EnumerateAppPaths()
+    {
+        var results = new List<ApplicationEntry>();
+        var keys = new[]
+        {
+            @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
+            @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths"
+        };
+        var hives = new[] { Microsoft.Win32.Registry.LocalMachine, Microsoft.Win32.Registry.CurrentUser };
+        foreach (var hive in hives)
+        {
+            foreach (var keyPath in keys)
+            {
+                using var root = hive.OpenSubKey(keyPath);
+                if (root is null) continue;
+                foreach (var subKeyName in root.GetSubKeyNames())
+                {
+                    try
+                    {
+                        using var sub = root.OpenSubKey(subKeyName);
+                        var rawPath = sub?.GetValue(null) as string;
+                        if (string.IsNullOrWhiteSpace(rawPath)) continue;
+                        var target = rawPath.Trim('"');
+                        if (!target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(target)) continue;
+                        var name = System.IO.Path.GetFileNameWithoutExtension(target);
+                        if (JunkKeywords.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase))) continue;
+                        var id = $"path:{target.ToLowerInvariant()}";
+                        results.Add(new ApplicationEntry(id, name, target, AppUserModelId.ForPath(target), null, false, IsRunning(target)));
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+                }
+            }
+        }
+        return results;
+    }
+
+    private static IEnumerable<ApplicationEntry> EnumerateUninstallRegistryApps()
+    {
+        var results = new List<ApplicationEntry>();
+        var keys = new[]
+        {
+            @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        };
+        var hives = new[] { Microsoft.Win32.Registry.LocalMachine, Microsoft.Win32.Registry.CurrentUser };
+        foreach (var hive in hives)
+        {
+            foreach (var keyPath in keys)
+            {
+                using var root = hive.OpenSubKey(keyPath);
+                if (root is null) continue;
+                foreach (var subKeyName in root.GetSubKeyNames())
+                {
+                    try
+                    {
+                        using var sub = root.OpenSubKey(subKeyName);
+                        var displayName = sub?.GetValue("DisplayName") as string;
+                        if (string.IsNullOrWhiteSpace(displayName)) continue;
+                        if (JunkKeywords.Any(k => displayName.Contains(k, StringComparison.OrdinalIgnoreCase))) continue;
+
+                        var displayIcon = sub?.GetValue("DisplayIcon") as string;
+                        string? target = null;
+                        if (!string.IsNullOrWhiteSpace(displayIcon))
+                        {
+                            var candidate = displayIcon.Split(',')[0].Trim('"');
+                            if (candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(candidate))
+                            {
+                                target = candidate;
+                            }
+                        }
+
+                        if (target is null)
+                        {
+                            var installLocation = sub?.GetValue("InstallLocation") as string;
+                            if (!string.IsNullOrWhiteSpace(installLocation) && Directory.Exists(installLocation))
+                            {
+                                var exe = Directory.EnumerateFiles(installLocation, "*.exe", SearchOption.TopDirectoryOnly).FirstOrDefault();
+                                if (exe is not null && !JunkKeywords.Any(k => exe.Contains(k, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    target = exe;
+                                }
+                            }
+                        }
+
+                        if (target is not null)
+                        {
+                            var id = $"path:{target.ToLowerInvariant()}";
+                            results.Add(new ApplicationEntry(id, displayName, target, AppUserModelId.ForPath(target), null, false, IsRunning(target)));
+                        }
+                    }
+                    catch
+                    {
+                        /* ignore */
+                    }
+                }
+            }
+        }
+        return results;
+    }
+
     private static IEnumerable<(string Name, string TargetPath)> EnumerateStartMenuShortcuts()
     {
         var roots = new[]
         {
             Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms),
             Environment.GetFolderPath(Environment.SpecialFolder.Programs),
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
         };
 
         foreach (var root in roots.Distinct(StringComparer.OrdinalIgnoreCase))

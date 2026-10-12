@@ -122,8 +122,8 @@ export interface QuicklinksViewProps {
   onBack: () => void;
   closeMainWindow: () => void;
   applications: ApplicationCommand[];
-  /** Seed the create form (the `createWithURL` root-search entry). */
-  createLink?: string | null;
+  /** Seed the create form (the `createWithURL` root-search entry, or a note's Create Quicklink). */
+  createLink?: string | { link: string; name?: string } | null;
   onConsumeCreateLink?: () => void;
 }
 
@@ -146,7 +146,8 @@ export function QuicklinksView({
 
   useEffect(() => {
     if (createLink) {
-      setForm({ mode: "create", name: "", link: createLink, openWith: "", tags: "", icon: "" });
+      const seed = typeof createLink === "string" ? { name: "", link: createLink } : { name: createLink.name ?? "", link: createLink.link };
+      setForm({ mode: "create", ...seed, openWith: "", tags: "", icon: "" });
       onConsumeCreateLink?.();
     }
   }, [createLink, onConsumeCreateLink]);

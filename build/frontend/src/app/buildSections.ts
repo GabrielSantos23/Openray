@@ -3,6 +3,7 @@
 // Snippets, Files, Search Web, Fallback Commands) with the shipped ordering.
 
 import type { ApplicationCommand } from "../applications";
+import type { FocusSessionState } from "../focus";
 import { applicationFavoriteKey, commandFavoriteKey } from "../favorites";
 import { isDevExtensionsEnabled } from "../testHooks";
 import { isLikelyUrl, type QuicklinkEntry } from "../quicklinks";
@@ -19,6 +20,8 @@ import {
   type CalculatorEntry,
   type ExtensionEntry,
   type ExtensionSummary,
+  type FocusActionEntry,
+  type FocusViewEntry,
   type OpenInExplorerEntry,
   type QuicklinkCreateEntry,
   type RootEntry,
@@ -27,7 +30,7 @@ import {
   type TranslatorCustomCommand,
 } from "./entries";
 
-type RootSectionId = "favorites" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search" | "window-management";
+type RootSectionId = "favorites" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search" | "window-management" | "focus" | "focus-commands" | "games";
 
 interface RootSection {
   id: RootSectionId;
@@ -35,6 +38,36 @@ interface RootSection {
   icon: string;
   entries: RootEntry[];
 }
+
+/**
+ * The Focus + Games command catalogs, with the shipped titles/descriptions/keywords. Ephemeral
+ * commands (`pause`/`resume`/`complete`/`edit`) only exist while a session does; `resume` needs a
+ * paused one — the shipped manifest marks them `ephemeral` and the session row carries the same
+ * visibility rules.
+ */
+export const FOCUS_COMMANDS: ReadonlyArray<{
+  command: string;
+  title: string;
+  description: string;
+  keywords: string[];
+  view: boolean;
+  needsSession?: boolean;
+  needsPaused?: boolean;
+}> = [
+  { command: "start", title: "Start Focus Session", description: "Start a new focus session", keywords: ["focus", "session"], view: true },
+  { command: "toggle", title: "Toggle Focus Session", description: "Start with last settings or stop the current focus session", keywords: ["focus"], view: false },
+  { command: "pause", title: "Pause Focus Session", description: "Pause the current focus session", keywords: ["focus"], view: false, needsSession: true },
+  { command: "resume", title: "Resume Focus Session", description: "Resume the current focus session", keywords: ["focus"], view: false, needsSession: true, needsPaused: true },
+  { command: "complete", title: "Complete Focus Session", description: "Complete the current focus session", keywords: ["focus"], view: false, needsSession: true },
+  { command: "edit", title: "Edit Focus Session", description: "Edit the current focus session", keywords: ["focus"], view: true, needsSession: true },
+  { command: "searchCategories", title: "Search Focus Categories", description: "Search through focus categories", keywords: ["focus", "categories"], view: true },
+  { command: "createCategory", title: "Create Focus Category", description: "Create a new focus category", keywords: ["new focus category"], view: true },
+  { command: "importCategories", title: "Import Focus Categories", description: "Import focus categories from a JSON file", keywords: ["import focus categories"], view: true },
+];
+
+export const GAMES_COMMANDS: ReadonlyArray<{ command: string; title: string; description: string; keywords: string[] }> = [
+  { command: "searchGames", title: "Game Launcher", description: "Launch games from Steam, Epic, Xbox, Riot, and more.", keywords: ["game", "games"] },
+];
 
 export function buildSections(
   query: string,
@@ -51,7 +84,9 @@ export function buildSections(
   translateEntry: TranslateEntry | null,
   customTranslateCommands: TranslatorCustomCommand[],
   fileIndexState: { state: string; fileCount: number; entriesPerSecond?: number | null } | null,
-  showFilesInRoot: boolean
+  showFilesInRoot: boolean,
+  focusSession: FocusSessionState | null,
+  gameApps: ApplicationCommand[]
 ): RootSection[] {  // Build searchable entries for all applications
   const appSearchables: SearchableEntry[] = applications.map((app) => ({
     title: app.title,
@@ -85,6 +120,36 @@ export function buildSections(
     rootEntry: (definition.args
       ? { kind: "wm-args", commandKey: definition.key, title: definition.title }
       : { kind: "wm-command", commandKey: definition.key, title: definition.title }) as RootEntry,
+  }));
+
+  // Focus + Games internal extensions: view commands open their view, ephemeral session commands
+  // run directly. Ephemeral rows only exist while a session does.
+  const sessionVisible = (needsSession?: boolean, needsPaused?: boolean) =>
+    !needsSession || (focusSession !== null && (!needsPaused || focusSession.status === "paused"));
+  const focusSearchables: SearchableEntry[] = FOCUS_COMMANDS.filter((definition) =>
+    sessionVisible(definition.needsSession, definition.needsPaused),
+  ).map((definition) => ({
+    title: definition.title,
+    subtitle: definition.description,
+    keywords: definition.keywords,
+    rootEntry: (definition.view
+      ? { kind: "focus-view", command: definition.command as FocusViewEntry["command"], title: definition.title }
+      : { kind: "focus-action", action: definition.command as FocusActionEntry["action"], title: definition.title }) as RootEntry,
+  }));
+  const gamesSearchables: SearchableEntry[] = GAMES_COMMANDS.map((definition) => ({
+    title: definition.title,
+    subtitle: definition.description,
+    keywords: definition.keywords,
+    rootEntry: { kind: "games-view", command: "searchGames", title: definition.title },
+  }));
+
+  // Dynamic `game` command rows (root-search section `apps`): flagged applications, shown while
+  // searching exactly like dynamic quicklink rows.
+  const gameSearchables: SearchableEntry[] = gameApps.map((app) => ({
+    title: app.title,
+    subtitle: app.subtitle,
+    keywords: ["game", "games", ...app.keywords],
+    rootEntry: { kind: "game" as const, app: app.payload },
   }));
 
   // Dynamic quicklink rows: title = name, keywords include the `quicklink` tag (Raycast's
@@ -126,7 +191,7 @@ export function buildSections(
   }
 
   // Combine all searchable entries
-  const allSearchables = [...appSearchables, clipboardSearchable, ...internalCommandSearchables, ...windowManagementSearchables, ...commandSearchables, ...quicklinkSearchables, ...customTranslateSearchables];
+  const allSearchables = [...appSearchables, clipboardSearchable, ...internalCommandSearchables, ...windowManagementSearchables, ...focusSearchables, ...gamesSearchables, ...gameSearchables, ...commandSearchables, ...quicklinkSearchables, ...customTranslateSearchables];
 
   // Rank all entries using the full Raycast algorithm with fallback support
   const { results: ranked, showFallbacks } = rankEntriesWithFallbacks(
@@ -174,10 +239,15 @@ export function buildSections(
   // Filter out favorites from regular results
   const regularResults = ranked.filter((r) => !favoriteRows.has(r.entry.rootEntry));
 
+  const searching = query.trim().length > 0;
+
   // Separate by type
   const apps = regularResults
     .filter((r) => r.entry.rootEntry.kind === "application")
     .map((r) => r.entry.rootEntry);
+  const gameRows = searching
+    ? regularResults.filter((r) => r.entry.rootEntry.kind === "game").map((r) => r.entry.rootEntry)
+    : [];
   const clipboardEntries = favorites.includes(CLIPBOARD_FAVORITE_KEY)
     ? []
     : regularResults.filter((r) => r.entry.rootEntry.kind === "clipboard").map((r) => r.entry.rootEntry);
@@ -190,10 +260,25 @@ export function buildSections(
   const windowManagementEntries = regularResults
     .filter((r) => r.entry.rootEntry.kind === "wm-command" || r.entry.rootEntry.kind === "wm-args")
     .map((r) => r.entry.rootEntry);
+  const focusCommandEntries = regularResults
+    .filter((r) => r.entry.rootEntry.kind === "focus-view" || r.entry.rootEntry.kind === "focus-action")
+    .map((r) => r.entry.rootEntry);
+  const gamesCommandEntries = regularResults
+    .filter((r) => r.entry.rootEntry.kind === "games-view")
+    .map((r) => r.entry.rootEntry);
 
-  // Handle fallback commands - they appear as a separate section when shown
-  const fallbackEntries = showFallbacks
-    ? fallbackCommands.map((cmd) => ({ kind: "fallback" as const, command: cmd }))
+  // Handle fallback commands - they appear as a separate section when shown. Raycast Notes'
+  // `Create Note` ships `fallbackStatus: "available"`, so it leads the fallback suggestions.
+  const fallbackEntries: RootEntry[] = showFallbacks
+    ? [
+        {
+          kind: "internal" as const,
+          area: "notes",
+          command: "create" as const,
+          commandId: "notes/create",
+        },
+        ...fallbackCommands.map((cmd) => ({ kind: "fallback" as const, command: cmd })),
+      ]
     : [];
 
   // File search results — plus the pinned `File Search is indexing…` row (confirmed
@@ -240,9 +325,9 @@ export function buildSections(
     sections.push({ id: "translate", title: "Translate", icon: "Globe", entries: translateEntries });
   }
 
-  // Applications section
-  if (apps.length > 0) {
-    sections.push({ id: "applications", title: "Applications", icon: "app-window-list", entries: apps });
+  // Applications section: dynamic `game` command rows are filed under `apps` too (confirmed).
+  if (apps.length > 0 || gameRows.length > 0) {
+    sections.push({ id: "applications", title: "Applications", icon: "app-window-list", entries: [...apps, ...gameRows] });
   }
 
   // Commands section
@@ -255,9 +340,36 @@ export function buildSections(
     sections.push({ id: "window-management", title: "Window Management", icon: "app-window", entries: windowManagementEntries });
   }
 
+  // Focus section: the dynamic `session` row (rootSearch:{section:'focus',when:'empty'}) shows
+  // with an empty query while a session runs; the Focus view/ephemeral commands file under
+  // Commands. The Game Launcher command gets the same treatment under its own area.
+  if (!searching && focusSession) {
+    sections.push({
+      id: "focus",
+      title: "Focus",
+      icon: "bulls-eye",
+      entries: [
+        {
+          kind: "focus-session",
+          title: focusSession.title.trim() !== "" ? focusSession.title : "Focus Session",
+          status: focusSession.status,
+          mode: focusSession.mode,
+          remainingMs: focusSession.remainingMs,
+          targetEndAt: focusSession.targetEndAt,
+          pauseEndsAt: focusSession.pauseEndsAt,
+        },
+      ],
+    });
+  }
+  if (focusCommandEntries.length > 0) {
+    sections.push({ id: "focus-commands", title: "Focus", icon: "bulls-eye", entries: focusCommandEntries });
+  }
+  if (gamesCommandEntries.length > 0) {
+    sections.push({ id: "games", title: "Games", icon: "game-controller", entries: gamesCommandEntries });
+  }
+
   // Quicklinks section: the createWithURL entry, then dynamic quicklink rows. Dynamic rows only
   // show while searching — Raycast's dynamic quicklink commands are searchable, not always visible.
-  const searching = query.trim().length > 0;
   const quicklinkRowsShown = searching
     ? regularResults.filter((r) => r.entry.rootEntry.kind === "quicklink").map((r) => r.entry.rootEntry)
     : [];

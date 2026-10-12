@@ -1,0 +1,297 @@
+/* Focus (internal extension 6) and Games (7): the session/category form chrome, the session-row
+   tile, and the Game Launcher rows. Palette variables are the shared ones from base.css. */
+
+/* The extension tile next to Focus command names in root search. */
+.command-tile--focus {
+  background: color-mix(in srgb, #ff6363 18%, transparent);
+  color: #ff8a8a;
+}
+
+/* Focus session / category forms: label-left rows matching the shipped form. */
+.focus-body {
+  overflow-y: auto;
+}
+
+.focus-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-14, 14px);
+  width: 480px;
+  margin: var(--space-32, 32px) auto 0;
+}
+
+.focus-form__row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.focus-form__label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  text-align: right;
+}
+
+.focus-form__control {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.focus-form__input {
+  width: 100%;
+  border: 1px solid var(--color-border-field);
+  border-radius: var(--radius-8);
+  background: var(--color-surface-input-field);
+  color: var(--color-text-primary);
+  padding: var(--space-7, 7px) var(--space-10, 10px);
+  font: inherit;
+  font-size: var(--font-size-13);
+  outline: none;
+}
+
+.focus-form__input:focus {
+  border-color: var(--color-border-focus-ring);
+}
+
+.focus-form__input:disabled {
+  opacity: 0.6;
+}
+
+.focus-form__input--invalid {
+  border-color: var(--red);
+}
+
+.focus-form__input--trailing {
+  padding-right: 74px;
+}
+
+.focus-form__trailing {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  translate: 0 -50%;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  pointer-events: none;
+}
+
+.focus-form__trailing--invalid {
+  color: var(--red);
+}
+
+.focus-form__select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  width: 100%;
+  border: 1px solid var(--color-border-field);
+  border-radius: var(--radius-8);
+  background: var(--color-surface-input-field);
+  color: var(--color-text-primary);
+  padding: var(--space-7, 7px) var(--space-10, 10px);
+  font: inherit;
+  font-size: var(--font-size-13);
+  cursor: pointer;
+}
+
+.focus-form__chevron {
+  color: var(--color-text-secondary);
+  flex: none;
+}
+
+/* The Block/Allow multi-select: chips + inline filter input + chevron, one rounded field. */
+.focus-form__multi {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--color-border-field);
+  border-radius: var(--radius-8);
+  background: var(--color-surface-input-field);
+  padding: 3px var(--space-10, 10px) 3px 3px;
+  cursor: text;
+}
+
+.focus-form__multi--open {
+  border-color: var(--color-border-focus-ring);
+}
+
+.focus-form__chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.focus-form__filter-input {
+  flex: 1;
+  min-width: 120px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-13);
+  padding: var(--space-4, 4px) var(--space-6, 6px);
+  outline: none;
+}
+
+.focus-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  border: 1px solid var(--color-border-field);
+  border-radius: var(--radius-6);
+  background: var(--fg-10, #ffffff14);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-12);
+  padding: 2px var(--space-6, 6px) 2px var(--space-6, 6px);
+}
+
+.focus-chip__icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.focus-chip__label {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-chip__remove {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.focus-chip__remove:hover {
+  color: var(--color-text-primary);
+}
+
+/* Field dropdowns (duration suggestions, mode, the block picker). */
+.focus-menu {
+  position: absolute;
+  top: calc(100% + var(--space-4));
+  left: 0;
+  right: 0;
+  z-index: 30;
+}
+
+.focus-picker {
+  position: absolute;
+  top: calc(100% + var(--space-4));
+  left: 0;
+  right: 0;
+  z-index: 30;
+  border: 1px solid var(--color-border-field);
+  border-radius: var(--radius-10, 10px);
+  background: var(--color-surface-overlay, #262628);
+  box-shadow: 0 12px 32px #00000066;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.focus-picker__section {
+  padding: var(--space-6);
+}
+
+.focus-picker__title {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-11);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--space-4) var(--space-6);
+}
+
+.focus-picker__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-6);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: var(--space-6) var(--space-8);
+  cursor: pointer;
+}
+
+.focus-picker__row:hover {
+  background: var(--color-surface-list-hover);
+}
+
+.focus-picker__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-picker__detail {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-11);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-form__selection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.focus-view__title {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  padding: 0 var(--space-8);
+}
+
+/* Footer: extension indicator at the left (green mark + Raycast Focus). */
+.focus-footer__left {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.focus-footer__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
+
+.focus-footer__name {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+/* Search Focus Categories: the two accessory pills per row. */
+.list__accessory .pill + .pill {
+  margin-left: var(--space-4);
+}
+
+/* Footer action variants used by the categories view. */
+.footer-action--destructive {
+  color: var(--red, #ff6363);
+}
+
+.games-footer__label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  padding: 0 var(--space-8);
+}

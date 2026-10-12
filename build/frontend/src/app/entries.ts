@@ -3,7 +3,7 @@
 // quick-translate rows, files, inline sections) plus the internal-command catalog.
 
 import type { ExtensionCommand } from "../useExtensionCommand";
-import type { ApplicationCommand } from "../applications";
+import type { ApplicationCommand, ApplicationPayload } from "../applications";
 import { commandFavoriteKey } from "../favorites";
 import type { QuicklinkEntry } from "../quicklinks";
 import type { FallbackCommand, FileSearchResult } from "../matching";
@@ -44,8 +44,8 @@ export interface ClipboardEntryResult {
  * four Quicklinks commands (create/export/import/search) and four Snippets commands, each opening
  * its own view.
  */
-export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search";
-export type InternalCommandName = "search" | "create" | "import" | "export" | "history" | "translate" | "searchFiles";
+export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search" | "notes";
+export type InternalCommandName = "search" | "create" | "import" | "export" | "history" | "translate" | "searchFiles" | "open";
 
 export interface InternalCommandEntry {
   kind: "internal";
@@ -71,6 +71,7 @@ export const INTERNAL_EXTENSION_META: Record<InternalArea, { title: string; icon
   calculator: { title: "Calculator", icon: "calculator", tile: "command-tile--calculator" },
   translator: { title: "Translator", icon: "Globe", tile: "command-tile--translator" },
   "file-search": { title: "File Search", icon: "folder-search", tile: "command-tile--filesearch" },
+  notes: { title: "Raycast Notes", icon: "blank-document", tile: "command-tile--notes" },
 };
 
 export const INTERNAL_COMMANDS: ReadonlyArray<{
@@ -89,6 +90,9 @@ export const INTERNAL_COMMANDS: ReadonlyArray<{
   { area: "snippets", command: "search", title: "Search Snippets", keywords: ["snippets"] },
   { area: "translator", command: "translate", title: "Translate", keywords: ["translator", "translate", "translation"] },
   { area: "file-search", command: "searchFiles", title: "Search Files", keywords: ["file search", "find files", "explorer"] },
+  { area: "notes", command: "open", title: "Raycast Notes", keywords: ["notes", "note"] },
+  { area: "notes", command: "create", title: "Create Note", keywords: ["notes", "new note"] },
+  { area: "notes", command: "search", title: "Search Notes", keywords: ["notes", "search notes"] },
 ];
 
 export function internalCommandEntry(area: InternalArea, command: InternalCommandName): InternalCommandEntry {
@@ -136,6 +140,37 @@ export interface WindowManagementArgsEntry {
   kind: "wm-args";
   commandKey: "resizeWindow" | "moveWindow";
   title: string;
+}
+
+/** The Focus view commands (Start/Edit session, Search/Create/Import categories). */
+export interface FocusViewEntry {
+  kind: "focus-view";
+  command: "start" | "edit" | "searchCategories" | "createCategory" | "importCategories";
+  title: string;
+}
+
+/** The ephemeral Focus commands — Enter runs them, no view exists. */
+export interface FocusActionEntry {
+  kind: "focus-action";
+  action: "toggle" | "pause" | "resume" | "complete";
+  title: string;
+}
+
+/** The dynamic `session` command row (root-search section `focus`, shown when empty). */
+export interface FocusSessionEntry {
+  kind: "focus-session";
+  title: string;
+  status: "running" | "paused";
+  mode: "duration" | "noLimit";
+  remainingMs: number | null;
+  targetEndAt: string | null;
+  pauseEndsAt: string | null;
+}
+
+/** A dynamic `game` command row — a flagged application, filed under the apps section. */
+export interface GameEntry {
+  kind: "game";
+  app: ApplicationPayload;
 }
 
 /**
@@ -207,7 +242,14 @@ export interface TranslatorCommandEntry {
   command: TranslatorCustomCommand;
 }
 
-export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | FileIndexingEntry | OpenInExplorerEntry | InlineEntry | CalculatorEntry | TranslateEntry | TranslatorCommandEntry | WindowManagementEntry | WindowManagementArgsEntry;
+/** The Game Launcher view command. */
+export interface GamesViewEntry {
+  kind: "games-view";
+  command: "searchGames";
+  title: string;
+}
+
+export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | FileIndexingEntry | OpenInExplorerEntry | InlineEntry | CalculatorEntry | TranslateEntry | TranslatorCommandEntry | WindowManagementEntry | WindowManagementArgsEntry | FocusViewEntry | FocusActionEntry | FocusSessionEntry | GameEntry | GamesViewEntry;
 
 export interface SearchableEntry {
   title: string;

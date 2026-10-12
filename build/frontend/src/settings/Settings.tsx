@@ -14,6 +14,8 @@ import {
   type RowDefinition,
   type SettingsMap,
   type SettingsValue,
+  NOTES_ZOOM_LABEL_BY_VALUE,
+  NOTES_ZOOM_VALUE_BY_LABEL,
 } from "./pages";
 import {
   CALCULATOR_ROW_IDS,
@@ -22,7 +24,12 @@ import {
   CLIPBOARD_TEXTAREA_ROW,
   DEFAULTS,
   FILE_SEARCH_ROW_IDS,
+  FOCUS_SNOOZE_BY_LABEL,
+  FOCUS_SNOOZE_LABEL,
   HISTORY_DURATION_BY_LABEL,
+  NOTES_ESCAPE_BY_LABEL,
+  NOTES_ESCAPE_LABEL,
+  NOTES_ROW_IDS,
   QUICKLINKS_ROW_IDS,
   SENSITIVITY_MAP,
   SNIPPETS_INJECTION_DELAY_BY_LABEL,
@@ -34,6 +41,8 @@ import {
   SNIPPETS_SOUND_BY_LABEL,
   SNIPPETS_SOUND_LABEL,
   SNIPPETS_ROW_IDS,
+  TASKBAR_POSITION_BY_LABEL,
+  TASKBAR_POSITION_LABEL,
   TRANSLATOR_ROW_IDS,
   formatFilterRows,
   loadSettings,
@@ -335,6 +344,77 @@ export function Settings() {
       });
   }, []);
 
+  // Focus, Games and Taskbar rows live in their backend stores; the switches write straight
+  // through, the selects map labels onto values.
+  useEffect(() => {
+    ipc
+      .backend("focus.getSession", {}, { module: "backend" })
+      .then((response) => {
+        const preferences = (response as { preferences?: { snoozeDurationMs: number | null; playSound: boolean; restoreAppsWhenSessionEnds: boolean } }).preferences;
+        if (!preferences) return;
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "focus-snooze-duration": FOCUS_SNOOZE_LABEL[String(preferences.snoozeDurationMs ?? "null")] ?? "3 minutes",
+            "focus-play-sound": preferences.playSound !== false,
+            "focus-restore-apps": preferences.restoreAppsWhenSessionEnds === true,
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+    ipc
+      .backend("games.getSettings", {}, { module: "backend" })
+      .then((response) => {
+        const enabled = (response as { gameModeEnabled?: boolean }).gameModeEnabled === true;
+        setValues((current) => {
+          const merged = { ...current, "games-game-mode": enabled };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+    ipc
+      .backend("taskbar.getSettings", {}, { module: "backend" })
+      .then((response) => {
+        const settings = response as { showTaskbar?: boolean; position?: string };
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "taskbar-show": settings.showTaskbar === true,
+            "taskbar-position": TASKBAR_POSITION_LABEL[settings.position ?? "bottom"] ?? "Bottom",
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+    ipc
+      .backend("notes.getPreferences", {}, { module: "backend" })
+      .then((response) => {
+        const preferences = response as { zoom?: number; escapeKeyBehavior?: string };
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "notes-escape-key-behavior": NOTES_ESCAPE_LABEL[preferences.escapeKeyBehavior ?? "closesWindow"] ?? "Closes Window",
+            "notes-zoom": NOTES_ZOOM_LABEL_BY_VALUE[String(preferences.zoom ?? 1)] ?? "100%",
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+  }, []);
+
   // The Move & Resize command list shows the applied preset hotkeys (empty until one is applied).
   useEffect(() => {
     const hotkeys = readStoredHotkeys();
@@ -456,6 +536,40 @@ export function Settings() {
             new CustomEvent("raycast-mini:settings-toast", { detail: { title: "Failed to apply preset" } }),
           );
         });
+      return;
+    }
+    if (id === "focus-snooze-duration" || id === "focus-play-sound" || id === "focus-restore-apps") {
+      const setFocusPreference = (key: string, value: unknown) => {
+        void ipc.backend("focus.setPreferences", { [key]: value }, { module: "backend" }).catch(() => undefined);
+      };
+      if (id === "focus-snooze-duration") setFocusPreference("snoozeDurationMs", FOCUS_SNOOZE_BY_LABEL[String(next)] ?? null);
+      else if (id === "focus-play-sound") setFocusPreference("playSound", Boolean(next));
+      else if (id === "focus-restore-apps") setFocusPreference("restoreAppsWhenSessionEnds", Boolean(next));
+      return;
+    }
+    if (id === "games-game-mode") {
+      // Game Mode toggles the host's fullscreen hotkey suppression (docs/focus-games-taskbar-spec.md §B).
+      void ipc
+        .backend("games.setGameMode", { enabled: Boolean(next) }, { module: "backend" })
+        .catch(() => undefined);
+      return;
+    }
+    if (id === "taskbar-show" || id === "taskbar-position") {
+      const payload = id === "taskbar-show"
+        ? { key: "showTaskbar", value: Boolean(next) }
+        : { key: "position", value: TASKBAR_POSITION_BY_LABEL[String(next)] ?? "bottom" };
+      void ipc.backend("taskbar.setSetting", payload, { module: "backend" }).catch(() => undefined);
+      return;
+    }
+    if (NOTES_ROW_IDS.has(id)) {
+      const setNotePreference = (key: string, value: unknown) => {
+        void ipc.backend("notes.setPreference", { key, value }, { module: "backend" }).catch(() => undefined);
+      };
+      if (id === "notes-escape-key-behavior") {
+        setNotePreference("escapeKeyBehavior", NOTES_ESCAPE_BY_LABEL[String(next)] ?? "closesWindow");
+      } else if (id === "notes-zoom") {
+        setNotePreference("zoom", NOTES_ZOOM_VALUE_BY_LABEL[String(next)] ?? 1);
+      }
       return;
     }
     if (CALCULATOR_ROW_IDS.has(id)) {

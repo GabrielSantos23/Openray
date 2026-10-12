@@ -208,13 +208,8 @@ public sealed class HudWindow : Window
 
     private async System.Threading.Tasks.Task InitializeCoreAsync()
     {
-        // A separate user-data folder: sharing the launcher's would trip WebView2's
-        // 0x800700AA "resource in use" (the same reason `MainWindow` guards its init).
-        var environment = await CoreWebView2Environment.CreateAsync(
-            userDataFolder: Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RaycastMini",
-                "WebView2-HUD"));
+        var udir = MainWindow.GetSafeUserDataFolder("WebView2-HUD");
+        var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: udir);
         await _webView.EnsureCoreWebView2Async(environment);
 
         var core = _webView.CoreWebView2;

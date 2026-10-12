@@ -33,6 +33,10 @@ const { createTranslator } = require("./translator");
 const { createFileIndexer } = require("./file-indexer");
 const { createUsageTracker } = require("./usage-tracker");
 const { createWindowStates } = require("./window-states");
+const { createFocus } = require("./focus");
+const { createGames } = require("./games");
+const { createTaskbar } = require("./taskbar");
+const { createNotes } = require("./notes");
 
 const config = {
   // Must match host/NamedPipeBridge.cs
@@ -127,6 +131,42 @@ backend.registerFileIndexerHandler(fileIndexer.handlers);
 
 // Window Management saved bounds — the store behind the `Restore` command.
 backend.registerWindowStateHandler(createWindowStates().handlers);
+
+// Focus is the sixth internal extension (`focus.*`). The session state machine lives here and
+// re-syncs the host on every mutation; the host owns the blocking loop and the timer panel.
+// Bootstrap restores the persisted session and upserts the built-in categories.
+const focus = createFocus({
+  dispatch: (method, data) => backend.dispatch("backend", method, data),
+  pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+});
+backend.registerFocusHandler(focus.handlers);
+focus.bootstrap();
+
+// Games is the seventh (`games.*`): the isGame flag store over the host application list plus the
+// Game Mode toggle forwarded to the host's fullscreen watch.
+const games = createGames({
+  dispatch: (method, data) => backend.dispatch("backend", method, data),
+});
+backend.registerGamesHandler(games.handlers);
+games.pushSettingsToHost();
+
+// Windows Taskbar is the eighth (`taskbar.*`): strip settings persisted here, the AppBar window
+// lives in the host.
+const taskbar = createTaskbar({
+  dispatch: (method, data) => backend.dispatch("backend", method, data),
+});
+backend.registerTaskbarHandler(taskbar.handlers);
+taskbar.pushSettingsToHost();
+
+// Notes is the ninth (`notes.*`): the SQLite store, the trash with its 60-day purge and the
+// markdown conversions behind Copy As / Export live here; the window page and the launcher's
+// Search Notes view are both readers. Note text and titles never reach the logs.
+const notes = createNotes({
+  dispatch: (method, data) => backend.dispatch("backend", method, data),
+  pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+});
+backend.registerNotesHandler(notes.handlers);
+notes.bootstrap();
 
 // The Clipboard History shortcut is a per-command hotkey in Raycast, registered with the host once the
 // window exists. Re-registering is harmless if it is already in place.

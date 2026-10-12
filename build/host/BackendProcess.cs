@@ -35,7 +35,14 @@ public sealed class BackendProcess : IAsyncDisposable
     public string FrontendRoot { get; }
     public string ApiRoot { get; }
     public string ExtensionsRoot { get; }
-    public bool IsRunning => _process is { HasExited: false };
+    public bool IsRunning
+    {
+        get
+        {
+            try { return _process is { HasExited: false }; }
+            catch { return false; }
+        }
+    }
 
     public void Start()
     {
