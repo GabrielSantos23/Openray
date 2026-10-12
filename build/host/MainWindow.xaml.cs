@@ -142,6 +142,7 @@ public partial class MainWindow : Window
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: udir);
             await _webView.EnsureCoreWebView2Async(environment);
             _webViewInitState = 2;
+            WebView2Permissions.AllowClipboardRead(_webView.CoreWebView2);
         }
         catch (Exception error)
         {

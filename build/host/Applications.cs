@@ -75,12 +75,33 @@ public static class Applications
     private static List<ApplicationEntry>? _cache;
     private static DateTimeOffset _cacheTime;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
+    // Like Raycast's persistent index: the previous scan is kept on disk and served instantly on
+    // launch while a background rescan refreshes it, so the launcher never waits for a cold scan.
+    private static readonly TimeSpan SnapshotTtl = TimeSpan.FromMinutes(30);
+    private static readonly string SnapshotFile = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "RaycastMini", "applications-scan.json");
+    private static int _rescanning;
 
     public static async Task<List<ApplicationEntry>> GetAllAsync()
     {
         lock (CacheLock)
         {
             if (_cache is not null && DateTimeOffset.UtcNow - _cacheTime < CacheTtl) return _cache;
+        }
+        var snapshot = TryReadSnapshot();
+        if (snapshot is not null)
+        {
+            // Served as-is: refreshing the running badges would cost a full process pass on the
+            // critical path of every action (including `applications.open`); the delayed
+            // background rescan below corrects the badges instead.
+            lock (CacheLock)
+            {
+                _cache = snapshot;
+                _cacheTime = DateTimeOffset.UtcNow;
+            }
+            StartBackgroundRescan();
+            return snapshot;
         }
         var result = await ScanAllAsync();
         lock (CacheLock)
@@ -91,12 +112,115 @@ public static class Applications
         return result;
     }
 
+    private static HashSet<string> SnapshotRunningPaths()
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (process.MainModule?.FileName is { Length: > 0 } modulePath) paths.Add(modulePath);
+            }
+            catch
+            {
+                /* access denied */
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+        return paths;
+    }
+
+    private static List<ApplicationEntry>? TryReadSnapshot()
+    {
+        try
+        {
+            var disk = JsonSerializer.Deserialize<CachedScan>(File.ReadAllText(SnapshotFile));
+            if (disk is null || DateTimeOffset.UtcNow - disk.Time >= SnapshotTtl || disk.Packages.Count == 0) return null;
+            RaycastMini.Launcher.App.Log.Write($"[applications] snapshot hit ({disk.Packages.Count} apps, age {(DateTimeOffset.UtcNow - disk.Time).TotalSeconds:F0}s)");
+            return disk.Packages;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void WriteSnapshot(List<ApplicationEntry> apps)
+    {
+        try
+        {
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SnapshotFile)!);
+            File.WriteAllText(SnapshotFile, JsonSerializer.Serialize(new CachedScan(DateTimeOffset.UtcNow, apps)));
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
+
+    private static void StartBackgroundRescan()
+    {
+        if (Interlocked.CompareExchange(ref _rescanning, 1, 0) != 0) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Never race a user action: the first seconds after hydration are exactly when
+                // `applications.open` runs its ShellExecute, and the scan competes for CPU.
+                await Task.Delay(1500);
+
+                var fresh = await ScanAllAsync();
+                lock (CacheLock)
+                {
+                    _cache = fresh;
+                    _cacheTime = DateTimeOffset.UtcNow;
+                }
+            }
+            catch
+            {
+                /* the previous snapshot stays valid */
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _rescanning, 0);
+            }
+        });
+    }
+
+    private sealed record CachedScan(DateTimeOffset Time, List<ApplicationEntry> Packages);
+
     private static async Task<List<ApplicationEntry>> ScanAllAsync()
     {
         var found = new Dictionary<string, ApplicationEntry>(StringComparer.OrdinalIgnoreCase);
         var shortcuts = 0;
         var skippedTargets = 0;
         var skippedJunk = 0;
+        var scanStart = Stopwatch.StartNew();
+
+        // One process snapshot for the whole scan: IsRunning used to call Process.GetProcessesByName
+        // per application, which re-enumerates the process table and reads MainModule for every
+        // matched process — that dominated the scan (multi-second startup).
+        var runningPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (process.MainModule?.FileName is { Length: > 0 } modulePath) runningPaths.Add(modulePath);
+            }
+            catch
+            {
+                /* access denied */
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+        RaycastMini.Launcher.App.Log.Write(
+            $"[applications] process snapshot {runningPaths.Count} paths in {scanStart.ElapsedMilliseconds}ms");
 
         foreach (var shortcut in EnumerateStartMenuShortcuts())
         {
@@ -113,24 +237,29 @@ public static class Applications
 
             var id = $"path:{target.ToLowerInvariant()}";
             found[id] = new ApplicationEntry(
-                id, name, target, AppUserModelId.ForPath(target), disambiguator, false, IsRunning(target));
+                id, name, target, AppUserModelId.ForPath(target), disambiguator, false, runningPaths.Contains(target));
         }
+        ShortcutTargetCache.Flush();
+        RaycastMini.Launcher.App.Log.Write($"[applications] shortcut cache {ShortcutTargetCache.Counters}");
+        var shortcutsMs = scanStart.ElapsedMilliseconds;
 
-        foreach (var appPath in EnumerateAppPaths())
+        foreach (var appPath in EnumerateAppPaths(runningPaths))
         {
             if (!found.ContainsKey(appPath.Id))
             {
                 found[appPath.Id] = appPath;
             }
         }
+        var appPathsMs = scanStart.ElapsedMilliseconds;
 
-        foreach (var regApp in EnumerateUninstallRegistryApps())
+        foreach (var regApp in EnumerateUninstallRegistryApps(runningPaths))
         {
             if (!found.ContainsKey(regApp.Id))
             {
                 found[regApp.Id] = regApp;
             }
         }
+        var registryMs = scanStart.ElapsedMilliseconds;
 
         var msixCount = 0;
         foreach (var msix in EnumerateMsixPackages())
@@ -139,6 +268,7 @@ public static class Applications
             if (found.ContainsKey(msix.Id)) continue;
             found[msix.Id] = msix;
         }
+        var msixMs = scanStart.ElapsedMilliseconds;
 
         var processCount = 0;
         foreach (var process in Process.GetProcesses())
@@ -194,13 +324,18 @@ public static class Applications
             }
         }
 
+        var iconsMs = scanStart.ElapsedMilliseconds;
+
+        WriteSnapshot(list);
         RaycastMini.Launcher.App.Log.Write(
             $"[applications] shortcuts={shortcuts} skippedNotExe={skippedTargets} skippedJunk={skippedJunk} " +
-            $"msix={msixCount} running={processCount} unique={found.Count}");
+            $"msix={msixCount} running={processCount} unique={found.Count} timing: snapshot≈0 shortcuts={shortcutsMs} " +
+            $"appPaths={appPathsMs - shortcutsMs} registry={registryMs - appPathsMs} msix={msixMs - registryMs} " +
+            $"icons={iconsMs - msixMs} total={iconsMs}ms");
         return list;
     }
 
-    private static IEnumerable<ApplicationEntry> EnumerateAppPaths()
+    private static IEnumerable<ApplicationEntry> EnumerateAppPaths(HashSet<string> runningPaths)
     {
         var results = new List<ApplicationEntry>();
         var keys = new[]
@@ -227,7 +362,7 @@ public static class Applications
                         var name = System.IO.Path.GetFileNameWithoutExtension(target);
                         if (JunkKeywords.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase))) continue;
                         var id = $"path:{target.ToLowerInvariant()}";
-                        results.Add(new ApplicationEntry(id, name, target, AppUserModelId.ForPath(target), null, false, IsRunning(target)));
+                        results.Add(new ApplicationEntry(id, name, target, AppUserModelId.ForPath(target), null, false, runningPaths.Contains(target)));
                     }
                     catch
                     {
@@ -239,7 +374,7 @@ public static class Applications
         return results;
     }
 
-    private static IEnumerable<ApplicationEntry> EnumerateUninstallRegistryApps()
+    private static IEnumerable<ApplicationEntry> EnumerateUninstallRegistryApps(HashSet<string> runningPaths)
     {
         var results = new List<ApplicationEntry>();
         var keys = new[]
@@ -290,7 +425,7 @@ public static class Applications
                         if (target is not null)
                         {
                             var id = $"path:{target.ToLowerInvariant()}";
-                            results.Add(new ApplicationEntry(id, displayName, target, AppUserModelId.ForPath(target), null, false, IsRunning(target)));
+                            results.Add(new ApplicationEntry(id, displayName, target, AppUserModelId.ForPath(target), null, false, runningPaths.Contains(target)));
                         }
                     }
                     catch
@@ -319,7 +454,7 @@ public static class Applications
             foreach (var file in Directory.EnumerateFiles(root, "*.lnk", SearchOption.AllDirectories))
             {
                 var name = System.IO.Path.GetFileNameWithoutExtension(file);
-                var target = ShortcutTarget.Resolve(file) ?? file;
+                var target = ShortcutTargetCache.Resolve(file);
                 yield return (name, target);
             }
         }
@@ -332,16 +467,17 @@ public static class Applications
     /// </summary>
     private static IEnumerable<ApplicationEntry> EnumerateMsixPackages()
     {
-        List<ApplicationEntry> packages;
+        List<ApplicationEntry>? packages;
         try
         {
-            packages = QueryAppx();
+            packages = MsixCache.Get();
         }
         catch (Exception error)
         {
-            Debug.WriteLine($"[applications] MSIX enumeration failed: {error.Message}");
+            RaycastMini.Launcher.App.Log.Write($"[applications] MSIX enumeration failed: {error.Message}");
             yield break;
         }
+        if (packages is null) yield break;
 
         foreach (var package in packages)
         {
@@ -352,75 +488,6 @@ public static class Applications
         }
     }
 
-    private static List<ApplicationEntry> QueryAppx()
-    {
-        var script =
-            "Get-AppxPackage | Where-Object { $_.PackageFamilyName } | " +
-            "ForEach-Object { [pscustomobject]@{ " +
-            "Name = $_.Name; DisplayName = $(if ($_.Name) { $_.Name } else { '' }); " +
-            "Family = $_.PackageFamilyName; InstallLocation = $_.InstallLocation; " +
-            "AppId = $(try { (Get-AppxPackageManifest $_).Package.Applications.Application.Id } catch { '' }) } } | " +
-            "ConvertTo-Json -Compress -Depth 4";
-
-        var startInfo = new ProcessStartInfo("powershell.exe", $"-NoProfile -NonInteractive -Command \"{script}\"")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("powershell did not start");
-        var output = process.StandardOutput.ReadToEnd();
-        process.WaitForExit(20_000);
-
-        var result = new List<ApplicationEntry>();
-        if (string.IsNullOrWhiteSpace(output)) return result;
-
-        using var document = JsonDocument.Parse(output);
-        var items = document.RootElement.ValueKind == JsonValueKind.Array
-            ? document.RootElement.EnumerateArray().ToList()
-            : new List<JsonElement> { document.RootElement };
-
-        foreach (var item in items)
-        {
-            var name = item.TryGetProperty("Name", out var nameElement) ? nameElement.GetString() : null;
-            var family = item.TryGetProperty("Family", out var familyElement) ? familyElement.GetString() : null;
-            var location = item.TryGetProperty("InstallLocation", out var locationElement) ? locationElement.GetString() : null;
-            var appId = item.TryGetProperty("AppId", out var appIdElement) ? appIdElement.GetString() : null;
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            var bundleId = string.IsNullOrWhiteSpace(appId) ? family : $"{family}!{appId}";
-            result.Add(new ApplicationEntry(
-                $"msix:{family}",
-                name,
-                location,
-                bundleId,
-                null,
-                true,
-                false));
-        }
-        return result;
-    }
-
-    private static bool IsRunning(string path)
-    {
-        try
-        {
-            var fileName = System.IO.Path.GetFileName(path);
-            return Process.GetProcessesByName(
-                System.IO.Path.GetFileNameWithoutExtension(path))
-                .Any(process =>
-                {
-                    try { return string.Equals(process.MainModule?.FileName, path, StringComparison.OrdinalIgnoreCase); }
-                    catch { return false; }
-                });
-        }
-        catch
-        {
-            return false;
-        }
-    }
 
     /// <summary>
     /// The user's default browser executable, resolved the way Windows itself does: the http(s)
@@ -762,5 +829,200 @@ internal static class IconCache
     {
         try { return File.GetLastWriteTimeUtc(path).Ticks; }
         catch { return 0; }
+    }
+}
+
+/// <summary>
+/// Persists .lnk target resolutions keyed by shortcut path + mtime so a launch does not pay the
+/// WScript.Shell COM round trip for every Start Menu shortcut again (Raycast caches its search
+/// index the same way). New and modified shortcuts still resolve.
+/// </summary>
+internal static class ShortcutTargetCache
+{
+    private sealed record Entry(string Target, DateTime MtimeUtc);
+
+    private static readonly object Lock = new();
+    private static readonly string CacheFile = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "RaycastMini", "applications-shortcuts.json");
+    private static Dictionary<string, Entry>? _entries;
+    private static bool _dirty;
+    private static int _hits;
+    private static int _misses;
+
+    public static string Counters => $"hits={_hits} misses={_misses}";
+
+    public static string Resolve(string shortcutPath)
+    {
+        DateTime mtime;
+        try { mtime = File.GetLastWriteTimeUtc(shortcutPath); }
+        catch { mtime = DateTime.MinValue; }
+        lock (Lock)
+        {
+            var entries = _entries ??= Load();
+            if (entries.TryGetValue(shortcutPath, out var hit) && hit.MtimeUtc == mtime)
+            {
+                _hits++;
+                return hit.Target;
+            }
+            _misses++;
+        }
+        var target = ShortcutTarget.Resolve(shortcutPath) ?? shortcutPath;
+        lock (Lock)
+        {
+            (_entries ??= new Dictionary<string, Entry>())[shortcutPath] = new Entry(target, mtime);
+            _dirty = true;
+        }
+        return target;
+    }
+
+    public static void Flush()
+    {
+        lock (Lock)
+        {
+            if (!_dirty || _entries is null) return;
+            try
+            {
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CacheFile)!);
+                File.WriteAllText(CacheFile, JsonSerializer.Serialize(_entries));
+                _dirty = false;
+            }
+            catch
+            {
+                /* best effort */
+            }
+        }
+    }
+
+    private static Dictionary<string, Entry> Load()
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, Entry>>(File.ReadAllText(CacheFile)) ?? new();
+        }
+        catch
+        {
+            return new Dictionary<string, Entry>();
+        }
+    }
+}
+
+/// <summary>
+/// MSIX package list cache. The scan shells out to `Get-AppxPackage`, which costs seconds; the
+/// installed-package list changes rarely, so it is cached on disk for six hours.
+/// </summary>
+internal static class MsixCache
+{
+    private sealed record Cached(DateTimeOffset Time, List<ApplicationEntry> Packages);
+
+    private static readonly object Lock = new();
+    private static readonly string CacheFile = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "RaycastMini", "applications-msix.json");
+    private static readonly TimeSpan Ttl = TimeSpan.FromHours(6);
+    private static Cached? _memory;
+
+    public static List<ApplicationEntry>? Get()
+    {
+        lock (Lock)
+        {
+            if (_memory is not null && DateTimeOffset.UtcNow - _memory.Time < Ttl) return _memory.Packages;
+            try
+            {
+                var disk = JsonSerializer.Deserialize<Cached>(File.ReadAllText(CacheFile));
+                if (disk is not null && DateTimeOffset.UtcNow - disk.Time < Ttl)
+                {
+                    _memory = disk;
+                    RaycastMini.Launcher.App.Log.Write($"[applications] msix cache hit (disk, {disk.Packages.Count})");
+                    return disk.Packages;
+                }
+            }
+            catch
+            {
+                /* no cache yet */
+            }
+        }
+        // Resolved outside the lock: the PowerShell call takes seconds.
+        var fresh = QueryAppx();
+        RaycastMini.Launcher.App.Log.Write($"[applications] msix cache refresh: {fresh.Count} packages");
+        lock (Lock)
+        {
+            _memory = new Cached(DateTimeOffset.UtcNow, fresh);
+            try
+            {
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CacheFile)!);
+                File.WriteAllText(CacheFile, JsonSerializer.Serialize(_memory));
+                RaycastMini.Launcher.App.Log.Write("[applications] msix cache written");
+            }
+            catch (Exception error)
+            {
+                RaycastMini.Launcher.App.Log.Write($"[applications] msix cache write failed: {error.Message}");
+            }
+        }
+        return fresh;
+    }
+
+    private static List<ApplicationEntry> QueryAppx()
+    {
+        var script =
+            "Get-AppxPackage | Where-Object { $_.PackageFamilyName } | " +
+            "ForEach-Object { [pscustomobject]@{ " +
+            "Name = $_.Name; DisplayName = $(if ($_.Name) { $_.Name } else { '' }); " +
+            "Family = $_.PackageFamilyName; InstallLocation = $_.InstallLocation; " +
+            "AppId = $(try { (Get-AppxPackageManifest $_).Package.Applications.Application.Id } catch { '' }) } } | " +
+            "ConvertTo-Json -Compress -Depth 4";
+
+        var startInfo = new ProcessStartInfo("powershell.exe", $"-NoProfile -NonInteractive -Command \"{script}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("powershell did not start");
+        var output = process.StandardOutput.ReadToEnd();
+        process.WaitForExit(20_000);
+
+        var result = new List<ApplicationEntry>();
+        if (string.IsNullOrWhiteSpace(output)) return result;
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            var items = document.RootElement.ValueKind == JsonValueKind.Array
+                ? document.RootElement.EnumerateArray().ToList()
+                : new List<JsonElement> { document.RootElement };
+
+            foreach (var item in items)
+            {
+                try
+                {
+                    var name = item.TryGetProperty("Name", out var nameElement) ? nameElement.GetString() : null;
+                    var family = item.TryGetProperty("Family", out var familyElement) ? familyElement.GetString() : null;
+                    var location = item.TryGetProperty("InstallLocation", out var locationElement) ? locationElement.GetString() : null;
+                    var appId = item.TryGetProperty("AppId", out var appIdElement) ? appIdElement.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(family)) continue;
+                    var bundleId = string.IsNullOrWhiteSpace(appId) ? family : $"{family}!{appId}";
+                    result.Add(new ApplicationEntry(
+                        $"msix:{family}",
+                        name,
+                        location,
+                        bundleId,
+                        null,
+                        true,
+                        false));
+                }
+                catch
+                {
+                    /* one malformed row does not drop the rest */
+                }
+            }
+        }
+        catch (JsonException error)
+        {
+            RaycastMini.Launcher.App.Log.Write($"[applications] msix output unparseable: {error.Message}");
+        }
+        return result;
     }
 }

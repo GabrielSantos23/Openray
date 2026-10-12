@@ -4,7 +4,7 @@
 
 import type { ApplicationCommand } from "../applications";
 import type { FocusSessionState } from "../focus";
-import { applicationFavoriteKey, commandFavoriteKey } from "../favorites";
+import { applicationFavoriteKey, commandFavoriteKey, internalFavoriteKey } from "../favorites";
 import { isDevExtensionsEnabled } from "../testHooks";
 import { isLikelyUrl, type QuicklinkEntry } from "../quicklinks";
 import { looksLikeFilePath } from "../fileSearch";
@@ -30,7 +30,7 @@ import {
   type TranslatorCustomCommand,
 } from "./entries";
 
-type RootSectionId = "favorites" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search" | "window-management" | "focus" | "focus-commands" | "games";
+type RootSectionId = "favorites" | "suggestions" | "results" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search" | "window-management" | "focus" | "focus-commands" | "games";
 
 interface RootSection {
   id: RootSectionId;
@@ -213,6 +213,8 @@ export function buildSections(
         return CLIPBOARD_FAVORITE_KEY === key;
       } else if (re.kind === "extension") {
         return commandFavoriteKey(re.extension.uuid, re.command.name) === key;
+        } else if (re.kind === "internal") {
+          return internalFavoriteKey(re.commandId) === key;
       }
       return false;
     });
@@ -229,6 +231,8 @@ export function buildSections(
           return CLIPBOARD_FAVORITE_KEY === key;
         } else if (re.kind === "extension") {
           return commandFavoriteKey(re.extension.uuid, re.command.name) === key;
+        } else if (re.kind === "internal") {
+          return internalFavoriteKey(re.commandId) === key;
         }
         return false;
       });
@@ -236,10 +240,28 @@ export function buildSections(
     })
     .filter((e): e is RootEntry => e !== undefined);
 
-  // Filter out favorites from regular results
-  const regularResults = ranked.filter((r) => !favoriteRows.has(r.entry.rootEntry));
-
   const searching = query.trim().length > 0;
+
+  // Favorites are an empty-query section only; while searching, favorited items are ordinary
+  // results in ranked order.
+  const regularResults = searching
+    ? ranked
+    : ranked.filter((r) => !favoriteRows.has(r.entry.rootEntry));
+
+  // Empty-query root: Suggestions (the shipped slice(0,5) pattern from XW in
+  // main-window-g1Vb1JLY.js) followed by every available command, both ranked by the usage tier.
+  // Applications stay searching-only; dynamic rows (quicklinks, custom translate commands,
+  // flagged games) are searching-only too.
+  const commandKinds = new Set<RootEntry["kind"]>(["clipboard", "internal", "extension", "wm-command", "wm-args", "focus-view", "focus-action", "games-view"]);
+  const emptyQueryRanked: RootEntry[] = searching
+    ? []
+    : [...regularResults]
+        .filter((r) => r.entry.rootEntry.kind === "application" || commandKinds.has(r.entry.rootEntry.kind))
+        .sort((a, b) => b.usageScore - a.usageScore || a.originalIndex - b.originalIndex)
+        .map((r) => r.entry.rootEntry);
+  const suggestionEntries: RootEntry[] = emptyQueryRanked.slice(0, 5);
+  const suggestionSet = new Set(suggestionEntries);
+  const emptyQueryCommands = emptyQueryRanked.filter((entry) => !suggestionSet.has(entry) && entry.kind !== "application");
 
   // Separate by type
   const apps = regularResults
@@ -307,9 +329,20 @@ export function buildSections(
     .filter((r) => r.type === "web-search")
     .map((result) => ({ kind: "inline" as const, result }));
 
-  const sections: RootSection[] = [
-    { id: "favorites", title: "Favorites", icon: "star", entries: favoriteEntries },
-  ];
+  const sections: RootSection[] = searching
+    ? []
+    : [{ id: "favorites", title: "Favorites", icon: "star", entries: favoriteEntries }];
+
+  // Suggestions: usage-ranked top five while the search bar is empty (after Favorites, like the
+  // shipped root layout). Every searchable section below needs a query.
+  if (suggestionEntries.length > 0) {
+    sections.push({ id: "suggestions", title: "Suggestions", icon: "Bolt", entries: suggestionEntries });
+  }
+
+  // Every available command under the Suggestions, still on the empty-query root.
+  if (emptyQueryCommands.length > 0) {
+    sections.push({ id: "commands", title: "Commands", icon: "Blocks", entries: emptyQueryCommands });
+  }
 
   // Calculator section (highest priority) - the ephemeral row appears whenever the search term
   // evaluates; it is not a searchable command (rootSearch matching:'always').
@@ -325,19 +358,16 @@ export function buildSections(
     sections.push({ id: "translate", title: "Translate", icon: "Globe", entries: translateEntries });
   }
 
-  // Applications section: dynamic `game` command rows are filed under `apps` too (confirmed).
-  if (apps.length > 0 || gameRows.length > 0) {
-    sections.push({ id: "applications", title: "Applications", icon: "app-window-list", entries: [...apps, ...gameRows] });
-  }
-
-  // Commands section
-  if (clipboardEntries.length > 0 || internalCommandEntries.length > 0 || commands.length > 0) {
-    sections.push({ id: "commands", title: "Commands", icon: "Blocks", entries: [...clipboardEntries, ...internalCommandEntries, ...commands] });
-  }
-
-  // Window Management section: Raycast files the extension's commands under their product area.
-  if (windowManagementEntries.length > 0) {
-    sections.push({ id: "window-management", title: "Window Management", icon: "app-window", entries: windowManagementEntries });
+  // Searching: one ranked "Results" section — apps and commands interleave in the comparator's
+  // order (Raycast's root search does not split applications and commands while searching).
+  if (searching) {
+    const resultSet = new Set<RootEntry["kind"]>(["application", "game", "clipboard", "internal", "extension", "wm-command", "wm-args", "focus-view", "focus-action", "games-view"]);
+    const results = regularResults
+      .filter((r) => resultSet.has(r.entry.rootEntry.kind))
+      .map((r) => r.entry.rootEntry);
+    if (results.length > 0) {
+      sections.push({ id: "results", title: "Results", icon: "magnifying-glass", entries: results });
+    }
   }
 
   // Focus section: the dynamic `session` row (rootSearch:{section:'focus',when:'empty'}) shows
@@ -361,13 +391,6 @@ export function buildSections(
       ],
     });
   }
-  if (focusCommandEntries.length > 0) {
-    sections.push({ id: "focus-commands", title: "Focus", icon: "bulls-eye", entries: focusCommandEntries });
-  }
-  if (gamesCommandEntries.length > 0) {
-    sections.push({ id: "games", title: "Games", icon: "game-controller", entries: gamesCommandEntries });
-  }
-
   // Quicklinks section: the createWithURL entry, then dynamic quicklink rows. Dynamic rows only
   // show while searching — Raycast's dynamic quicklink commands are searchable, not always visible.
   const quicklinkRowsShown = searching

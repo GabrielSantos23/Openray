@@ -280,6 +280,43 @@ Based on investigation of Raycast version 2.4.0.0:
 - ✅ Pop to Root Search timeout: **IMPLEMENTED** - Configurable timeout (default 30s), resets on activity, clears search and selection
 - ✅ Search-history restore: **IMPLEMENTED** - Up arrow in empty search shows history (50 entries), stores in localStorage, persists across sessions
 
+## Addendum (2026-10-12b): searching shows one ranked Results section
+
+While a query is typed, Raycast's root search shows a **single "Results" section** — applications
+and commands interleave in the comparator's order (user screenshot: "transl" lists Translate
+commands and Control Panel items together, best match first). The empty-query root keeps its
+curated sections (Favorites / Suggestions); Calculator, Translate, Quicklinks, Snippets, Files,
+Web Search and Fallback Commands stay as their own sections. Implemented in
+`build/frontend/src/app/buildSections.ts`: the searching-only Applications/Commands/Window
+Management/Focus/Games sections are merged into one `Results` section in `regularResults` order.
+Tests: `build/frontend/tests/root-sections.test.mjs`.
+
+## Addendum (2026-10-12): empty-query root composition (Drafts / Favorites / Suggestions)
+
+Raycast's root list does **not** show the whole catalog with an empty query. The empty-query root
+shows curated sections only — the user's screenshot shows `Drafts`, `Favorites`, `Suggestions`
+(Translate / Google Translate, Steam / Game) — and Applications/Commands appear once a query is
+typed. The section composition is native (the JS `RootSearchView` only renders `sections` handed
+to it; the frontend section-id map is `M_={development,results,commands,favorites,fallback-commands}`
+in `main-window-g1Vb1JLY.js`), so the full empty-query layout is **unconfirmed**; what is
+**confirmed** from the shipped JS is the empty-query sectioning pattern: when the search term is
+empty, the ranked pool is capped at five rows under a `Suggestions` title (`XW` in
+`main-window-g1Vb1JLY.js`: `t.trim() ? [{id:'results',…}] : [..,{id:'suggestions',title:'Suggestions',items:e.slice(0,5)},..]`).
+
+**Our implementation** (`build/frontend/src/app/buildSections.ts`):
+- **Empty query**: only `Favorites`, the Focus session row (`when:'empty'`), and `Suggestions`.
+- **Suggestions** = the usage-ranked top five of every searchable row except the searching-only
+  dynamic rows (quicklinks, custom translate commands, flagged games), sorted by the confirmed
+  usage tier (usage score desc, original index tiebreak). Favorite rows do not repeat in
+  Suggestions.
+- **Every other section requires a non-empty query** — Applications/Commands/Window Management/
+  Focus/Games commands are hidden at the empty root, matching the screenshot.
+- **Drafts**: Raycast's empty root leads with saved extension-form drafts (`FormDrafts` store in
+  `main-window-g1Vb1JLY.js`). We have no form-draft system, so the section is not implemented —
+  listed as a documented gap, not a silent omission.
+- Tests: `build/frontend/tests/root-sections.test.mjs` (empty-query sections, usage ordering +
+  favorite exclusion, Applications return while searching).
+
 ## Addendum (2026-10-11): empty-target match fix and usage-key aliasing
 
 - **Empty-haystack reverse prefix (bug fix, confirmed against the shipped matcher).** Our

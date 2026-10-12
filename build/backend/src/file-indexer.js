@@ -251,7 +251,12 @@ function createFileIndexer({ pushToFrontend, dataRoot, autoStart = true } = {}) 
     fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
   }
 
-  function pushState(extra = {}) {
+  let lastPushAt = 0;
+  function pushState(extra = {}, force = false) {
+    // Concurrent walks each throttle their own report timer; one global floor keeps the pipe
+    // (and everything sharing it, like launch responses) from drowning in state pushes.
+    if (!force && Date.now() - lastPushAt < 800) return;
+    lastPushAt = Date.now();
     if (pushToFrontend) {
       pushToFrontend("fileSearch.indexState", {
         state,
@@ -386,17 +391,17 @@ function createFileIndexer({ pushToFrontend, dataRoot, autoStart = true } = {}) 
       flush();
       if (!completed) {
         state = "stopped";
-        pushState({ fileCount });
+        pushState({ fileCount }, true);
         return { status: "ready", stopped: true, fileCount, durationMs: Date.now() - indexStart };
       }
       state = "idle";
       const durationMs = Date.now() - indexStart;
-      pushState({ fileCount, durationMs });
+      pushState({ fileCount, durationMs }, true);
       console.log(`[fileSearch] indexed ${fileCount} entries in ${durationMs}ms`); // counts only
       return { status: "ready", fileCount, durationMs };
     } catch (error) {
       state = "failed";
-      pushState({ error: error instanceof Error ? error.message : String(error) });
+      pushState({ error: error instanceof Error ? error.message : String(error) }, true);
       return { status: "failed", error: error instanceof Error ? error.message : String(error) };
     } finally {
       flush();

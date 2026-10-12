@@ -83,6 +83,7 @@ public sealed class SettingsWindow : Window
         await _webView.EnsureCoreWebView2Async(environment);
         _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             "raycast.mini", _frontendRoot, CoreWebView2HostResourceAccessKind.Allow);
+        WebView2Permissions.AllowClipboardRead(_webView.CoreWebView2);
 
         var html = Path.Combine(_frontendRoot, "dist", "settings.html");
         _webView.CoreWebView2.Navigate(

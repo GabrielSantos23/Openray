@@ -47,6 +47,7 @@ export function SearchNotesView({
   searchText,
   onSearchTextChange,
   showToast,
+  onBack,
   closeMainWindow,
   onCreateQuicklink,
 }: SearchNotesViewProps) {
@@ -273,11 +274,15 @@ export function SearchNotesView({
         if (!entry) return;
         event.preventDefault();
         runOpen(entry);
+      } else if (key === "Escape" && !panelOpen) {
+        // The open action panel owns Escape; otherwise Escape pops back to root search.
+        event.preventDefault();
+        onBack();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [rows, selectedIndex, runOpen]);
+  }, [rows, selectedIndex, runOpen, panelOpen, onBack]);
 
   const actionGroups = useMemo<ActionGroup[]>(() => {
     const open: ActionGroup["actions"] = [];
@@ -322,6 +327,11 @@ export function SearchNotesView({
   return (
     <div className="window">
       <header className="window__header">
+        <button type="button" className="back-button" onClick={onBack} aria-label="Back">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
         <button type="button" className="icon icon--plain" onClick={() => setPanelOpen((open) => !open)} aria-label="Actions">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M4 7h16M4 12h10M4 17h7" strokeLinecap="round" />

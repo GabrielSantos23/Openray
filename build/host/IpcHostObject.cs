@@ -21,6 +21,26 @@ using Microsoft.Web.WebView2.Wpf;
 namespace RaycastMini.Launcher;
 
 /// <summary>
+/// Grants WebView2 permissions the launcher needs without surfacing the browser prompt: the
+/// launcher reads the clipboard itself (quicklink prefill from the copied URL, paste actions),
+/// which Chromium gates behind a per-origin clipboard-read permission.
+/// </summary>
+internal static class WebView2Permissions
+{
+    public static void AllowClipboardRead(Microsoft.Web.WebView2.Core.CoreWebView2 core)
+    {
+        core.PermissionRequested += (_, args) =>
+        {
+            if (args.PermissionKind == Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.ClipboardRead)
+            {
+                args.Handled = true;
+                args.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Allow;
+            }
+        };
+    }
+}
+
+/// <summary>
 /// Object projected into the renderer as `window.chrome.webview.hostObjects.ipc`.
 /// The method signature deliberately mirrors Raycast's `ipcRequest`.
 /// </summary>

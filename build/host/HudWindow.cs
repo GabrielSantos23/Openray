@@ -213,6 +213,7 @@ public sealed class HudWindow : Window
         await _webView.EnsureCoreWebView2Async(environment);
 
         var core = _webView.CoreWebView2;
+            WebView2Permissions.AllowClipboardRead(_webView.CoreWebView2);
         core.Settings.AreDevToolsEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;

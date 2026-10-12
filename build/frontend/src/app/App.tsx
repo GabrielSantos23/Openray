@@ -44,7 +44,7 @@ import {
   type FocusSessionState,
 } from "../focus";
 import { getGameFlags, hideGame, markAsApplication, type GamePayload } from "../games";
-import { applicationFavoriteKey, commandFavoriteKey, useFavorites } from "../favorites";
+import { applicationFavoriteKey, commandFavoriteKey, internalFavoriteKey, useFavorites } from "../favorites";
 import {
   type ApplicationCommand,
   runApplicationAction,
@@ -99,6 +99,7 @@ import {
   CLIPBOARD_FAVORITE_KEY,
   type ClipboardEntryResult,
   type ExtensionEntry,
+  type InternalCommandEntry,
   type ExtensionSummary,
   INTERNAL_EXTENSION_META,
   INTERNAL_COMMANDS,
@@ -149,7 +150,7 @@ export function MainWindow() {
   // Action panel for a command row (extension commands and the synthetic Clipboard History
   // entry) — Raycast's root search opens the same action popover for every result kind, not
   // just applications.
-  const [commandPanelEntry, setCommandPanelEntry] = useState<ExtensionEntry | ClipboardEntryResult | null>(
+  const [commandPanelEntry, setCommandPanelEntry] = useState<ExtensionEntry | ClipboardEntryResult | InternalCommandEntry | null>(
     null,
   );
   const [hostError, setHostError] = useState<string | null>(null);
@@ -909,6 +910,28 @@ export function MainWindow() {
   // synthetic Clipboard History entry shares the panel; only the favorite key differs.
   const commandPanelGroups = useMemo<ActionGroup[]>(() => {
     if (!commandPanelEntry) return [];
+    // Internal commands are filed by area/command at the root; they have no favorite key
+    // (root sections match favorites only for applications, clipboard and extension commands).
+    if (commandPanelEntry.kind === "internal") {
+      const internalKey = internalFavoriteKey(commandPanelEntry.commandId);
+      return [
+        { name: "general", actions: [{ id: "command:open", title: "Open Command", itemId: internalKey }] },
+        {
+          name: "favorites",
+          actions: [
+            {
+              id: "command:favorite",
+              title: isFavorite(internalKey) ? "Remove from Favorites" : "Add to Favorites",
+              itemId: internalKey,
+            },
+          ],
+        },
+        {
+          name: "configure",
+          actions: [{ id: "command:configureCommand", title: "Configure Command", itemId: internalKey }],
+        },
+      ];
+    }
     const key =
       commandPanelEntry.kind === "clipboard"
         ? CLIPBOARD_FAVORITE_KEY
@@ -961,9 +984,10 @@ export function MainWindow() {
   // Ctrl+K / right-click / footer button all funnel through here, whatever the row is.
   const openRootActionPanel = useCallback((entry: RootEntry | undefined) => {    if (!entry) return;
     if (entry.kind === "application") setOpenApplication(entry.application);
-    // Extension commands AND the Clipboard History entry get the command action panel —
-    // Ctrl+K must never run the command directly.
-    else if (entry.kind === "internal" || entry.kind === "quicklink-create") setSelected(entry);
+    // Extension commands, internal commands AND the Clipboard History entry get the command
+    // action panel — Ctrl+K must never run the command directly.
+    else if (entry.kind === "internal") setCommandPanelEntry(entry);
+    else if (entry.kind === "quicklink-create") setSelected(entry);
     else if (entry.kind === "calculator") setCalculatorPanel(entry);
     else if (entry.kind === "translate") setTranslatePanel(entry);
     else if (entry.kind === "file") setFilePanel(entry.file as FileSearchRow);
@@ -981,6 +1005,22 @@ export function MainWindow() {
     else if (entry.kind === "translator-command") setSelected(entry);
     else if (entry.kind !== "fallback" && entry.kind !== "inline" && entry.kind !== "quicklink" && entry.kind !== "file-indexing") setCommandPanelEntry(entry);
   }, [showToast, closeMainWindow, refreshFocus]);
+
+  // Raycast rows carry an actions chevron on the right edge; clicking it opens the action panel
+  // instead of running the row's primary action (same as Ctrl+K / right-click).
+  const renderRowActions = (entry: RootEntry) => (
+    <span
+      className="list__rowActions"
+      role="button"
+      title="Actions (Ctrl K)"
+      onClick={(event) => {
+        event.stopPropagation();
+        openRootActionPanel(entry);
+      }}
+    >
+      <RaycastIcon name="chevron-right" size={12} />
+    </span>
+  );
 
   // Enter on a dynamic game row launches it (primary action `Open Game`).
   const openGameEntry = useCallback((game: GamePayload) => {
@@ -1566,13 +1606,7 @@ export function MainWindow() {
         </span>
 
         <div className="searchbar">
-          <span className="searchbar__icon" aria-hidden>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" strokeLinecap="round" />
-            </svg>
-          </span>
-<input
+          <input
             ref={searchRef}
             className="searchbar__input"
             autoFocus
@@ -1744,11 +1778,7 @@ export function MainWindow() {
               section.entries.length === 0 ? null : (
                 <li key={section.id} className="list__section">
                   <div className="list__sectionHeader">
-                    <span className="list__sectionIcon" aria-hidden>
-                      <RaycastIcon name={section.icon} size={ROOT_SECTION_ICON_SIZE} />
-                    </span>
                     <span className="list__sectionTitle">{section.title}</span>
-                    <span className="list__sectionCount">{section.entries.length}</span>
                   </div>
                   <ul className="list__sectionBody">
                     {section.entries.map((entry) => {
@@ -1783,12 +1813,8 @@ export function MainWindow() {
                               ) : null}
                             </span>
                             <span className="list__accessory">
-                              {isFavorite(applicationFavoriteKey(entry.application.payload.id)) ? (
-                                <span className="list__favorite" title="Favorite">
-                                  <RaycastIcon name="star" size={13} />
-                                </span>
-                              ) : null}
-                              <span className="pill">Application</span>
+                              <span className="list__command-type">Application</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1816,12 +1842,8 @@ export function MainWindow() {
                               </span>
                             </span>
                             <span className="list__accessory">
-                              {isFavorite(CLIPBOARD_FAVORITE_KEY) ? (
-                                <span className="list__favorite" title="Favorite">
-                                  <RaycastIcon name="star" size={13} />
-                                </span>
-                              ) : null}
-                              <span className="pill">view</span>
+                                                            <span className="list__command-type">view</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1843,9 +1865,10 @@ export function MainWindow() {
                             </span>
                             <span className="list__accessory">
                               {entry.quicklink.args.length > 0 ? (
-                                <span className="pill">{entry.quicklink.args.length} args</span>
+                                <span className="list__command-type">{entry.quicklink.args.length} args</span>
                               ) : null}
-                              <span className="pill">Quicklink</span>
+                              <span className="list__command-type">Quicklink</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1870,7 +1893,8 @@ export function MainWindow() {
                               <span className="list__subtitle">{entry.link}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">Quicklink</span>
+                              <span className="list__command-type">Quicklink</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1891,7 +1915,8 @@ export function MainWindow() {
                               <span className="list__subtitle">{INTERNAL_EXTENSION_META[entry.area].title}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="list__command-type">Command</span>
+                                                            <span className="list__command-type">Command</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1917,10 +1942,11 @@ export function MainWindow() {
                             </span>
                             <span className="list__accessory">
                               {storedWmHotkeys[entry.commandKey] ? (
-                                <span className="pill">{storedWmHotkeys[entry.commandKey]}</span>
+                                <span className="list__command-type">{storedWmHotkeys[entry.commandKey]}</span>
                               ) : entry.kind === "wm-args" ? (
-                                <span className="pill">Args</span>
+                                <span className="list__command-type">Args</span>
                               ) : null}
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1952,6 +1978,7 @@ export function MainWindow() {
                             </span>
                             <span className="list__accessory">
                               <span className="list__command-type">Command</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1976,7 +2003,8 @@ export function MainWindow() {
                               <span className="list__subtitle">{focusSessionSubtitle(entry)}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">{entry.status === "paused" ? "Paused" : "Running"}</span>
+                              <span className="list__command-type">{entry.status === "paused" ? "Paused" : "Running"}</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -2005,7 +2033,8 @@ export function MainWindow() {
                               {entry.app.path ? <span className="list__subtitle">{entry.app.path}</span> : null}
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">Game</span>
+                              <span className="list__command-type">Game</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -2028,7 +2057,7 @@ export function MainWindow() {
                               ) : null}
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">fallback</span>
+                              <span className="list__command-type">fallback</span>
                             </span>
                           </button>
                         </li>
@@ -2120,7 +2149,8 @@ export function MainWindow() {
                               </span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">Translator</span>
+                              <span className="list__command-type">Translator</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -2145,7 +2175,7 @@ export function MainWindow() {
                               <span className="list__subtitle">{entry.result.subtitle}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">{entry.result.type}</span>
+                              <span className="list__command-type">{entry.result.type}</span>
                             </span>
                           </button>
                         </li>
@@ -2170,7 +2200,8 @@ export function MainWindow() {
                               <span className="list__subtitle">{entry.file.folder}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">{entry.file.contentType ?? "file"}</span>
+                              <span className="list__command-type">{entry.file.contentType ?? "file"}</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -2188,7 +2219,7 @@ export function MainWindow() {
                               </span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">files</span>
+                              <span className="list__command-type">files</span>
                             </span>
                           </div>
                         </li>
@@ -2209,7 +2240,7 @@ export function MainWindow() {
                               <span className="list__subtitle">{entry.path}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">explorer</span>
+                              <span className="list__command-type">explorer</span>
                             </span>
                           </button>
                         </li>
@@ -2261,12 +2292,7 @@ export function MainWindow() {
                               </span>
                             </span>
                             <span className="list__accessory">
-                              {isFavorite(commandFavoriteKey(entry.extension.uuid, entry.command.name)) ? (
-                                <span className="list__favorite" title="Favorite">
-                                  <RaycastIcon name="star" size={13} />
-                                </span>
-                              ) : null}
-                              <span className="pill">{entry.command.mode ?? "view"}</span>
+                                                            <span className="list__command-type">{entry.command.mode ?? "view"}</span>
                             </span>
                           </button>
                         </li>
@@ -2312,7 +2338,13 @@ export function MainWindow() {
 
       <ActionPanel
         open={commandPanelEntry !== null}
-        title={commandPanelEntry?.kind === "clipboard" ? "Clipboard History" : commandPanelEntry?.command.title}
+        title={
+          commandPanelEntry?.kind === "clipboard"
+            ? "Clipboard History"
+            : commandPanelEntry?.kind === "internal"
+              ? INTERNAL_COMMANDS.find((definition) => definition.area === commandPanelEntry.area && definition.command === commandPanelEntry.command)?.title
+              : commandPanelEntry?.command.title
+        }
         groups={[...commandPanelGroups, ...toastGroups]}
         onClose={() => setCommandPanelEntry(null)}
         onRun={async (action) => {
@@ -2330,11 +2362,17 @@ export function MainWindow() {
             const key =
               entry.kind === "clipboard"
                 ? CLIPBOARD_FAVORITE_KEY
-                : commandFavoriteKey(entry.extension.uuid, entry.command.name);
+                : entry.kind === "internal"
+                  ? internalFavoriteKey(entry.commandId)
+                  : commandFavoriteKey(entry.extension.uuid, entry.command.name);
             const added = toggleFavorite(key);
             showToast(
               added ? "Added to Favorites" : "Removed from Favorites",
-              entry.kind === "clipboard" ? "Clipboard History" : entry.command.title,
+              entry.kind === "clipboard"
+                ? "Clipboard History"
+                : entry.kind === "internal"
+                  ? (INTERNAL_COMMANDS.find((definition) => definition.area === entry.area && definition.command === entry.command)?.title ?? entry.commandId)
+                  : entry.command.title,
             );
           } else if (verb === "configureCommand") {
             openSettings();
