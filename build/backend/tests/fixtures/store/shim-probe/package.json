@@ -1,0 +1,10 @@
+{
+  "name": "shim-probe-fixture",
+  "title": "Shim Probe Fixture",
+  "description": "API shim probe: canAccess routing, typed throws, Cache, preferences",
+  "author": "fixture",
+  "platforms": ["Windows"],
+  "commands": [
+    { "name": "probe", "title": "Probe", "description": "Runs the probe", "mode": "view" }
+  ]
+}

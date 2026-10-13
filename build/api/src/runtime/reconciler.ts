@@ -169,7 +169,10 @@ const hostConfig: any = {
   },
 
   resetAfterCommit() {
-    /* no-op: no DOM to commit into */
+    // Runs after every host commit — the initial mount AND every hook-state re-render. The
+    // `updateContainer` callback alone only covers the mount update, so `setState` inside
+    // `useEffect` (how every extension loads its data) never reached the model shipper.
+    for (const listener of commitListeners) listener();
   },
 
   finalizeInitialChildren() {
@@ -221,8 +224,7 @@ export function createRoot(element: React.ReactElement) {
   // `List`/`Grid` can read them through context.
   return {
     render(node: React.ReactNode) {
-      // React commits asynchronously, so the serialisation must be triggered from the
-      // `updateContainer` callback — never from right after the call.
+      // Commits notify through `resetAfterCommit` (host config) — see the note there.
       HeadlessReconciler.updateContainer(
         React.createElement(
           SelectedItemContext.Provider,
@@ -231,11 +233,7 @@ export function createRoot(element: React.ReactElement) {
         ),
         container,
         null,
-        () => {
-          // React commits asynchronously, so serialisation must be triggered from here, never
-          // straight after the `updateContainer` call.
-          for (const listener of commitListeners) listener();
-        },
+        null,
       );
     },
     async unmount() {

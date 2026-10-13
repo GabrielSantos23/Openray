@@ -132,7 +132,12 @@ function createBackend(options) {
         apiRoot: options.apiRoot,
         extensionsRoot: options.extensionsRoot,
         isDevelopment,
-        canAccessAI: true,
+        // The clone has no AI, browser extension, or window-management integration — the same
+        // flag values the real app produces without a pro subscription (docs/store-spec.md §5).
+        canAccessAI: false,
+        canAccessBetterAIModels: false,
+        isBrowserExtensionInstalled: false,
+        canAccessWindowManagement: false,
         appearance,
         textSize: "medium",
       },
@@ -225,9 +230,31 @@ function createBackend(options) {
       }
     });
 
-    worker.on("error", (error) => console.error(`[backend] worker ${workerId} error`, error));
+    // A crashed worker is discarded (never pooled), its session torn down, and the failure
+    // surfaces as a `commandException` toast naming the extension (plan §1.3).
+    function reportWorkerCrash(name, message) {
+      if (terminated || !sessions.has(workerId)) return;
+      sessions.delete(workerId);
+      for (const [sessionId, mappedWorkerId] of activeSessions) {
+        if (mappedWorkerId === workerId) activeSessions.delete(sessionId);
+      }
+      toRenderer("extensionHost.commandException", {
+        sessionId: workerId,
+        title: context?.extensionName ?? "Extension",
+        name,
+        message,
+      }).catch(() => undefined);
+    }
+
+    worker.on("error", (error) => {
+      console.error(`[backend] worker ${workerId} error`, error);
+      reportWorkerCrash(error?.name ?? "Error", error?.message ?? String(error));
+    });
     worker.on("exit", (code) => {
-      if (!terminated) console.error(`[backend] worker ${workerId} exited with ${code}`);
+      if (!terminated) {
+        console.error(`[backend] worker ${workerId} exited with ${code}`);
+        reportWorkerCrash("WorkerExited", `Command worker exited unexpectedly with code ${code}`);
+      }
     });
 
     return record;
@@ -318,8 +345,20 @@ function createBackend(options) {
         command: { name: params.name, type: params.type, mode: "view" },
         preferences: {},
         props: params.arguments ?? {},
+        launchContext: params.context ?? null,
         debug: false,
       });
+    },
+
+    // --- file / shell routes the extended API surface forwards natively -----------------------
+    async "fileSystem.moveToTrash"(ctx, params) {
+      return dispatch("backend", "fileSystem.moveToTrash", params);
+    },
+    async "shell.revealFile"(ctx, params) {
+      return dispatch("backend", "shell.revealFile", params);
+    },
+    async "shell.openWith"(ctx, params) {
+      return dispatch("backend", "shell.openWith", params);
     },
 
     // --- OS-level integration ---------------------------------------------------------------
@@ -476,6 +515,7 @@ function createBackend(options) {
         namedExport: command.namedExport,
         startedAt: Date.now(),
         launchType: props?.launchType ?? "userInitiated",
+        launchContext: params.launchContext ?? props?.launchContext ?? null,
         assetsPath: extension.assetsPath ?? P.assetsPath(extension),
         supportPath: P.extensionDir(extension.uuid),
         commandPath: P.commandEntry(extension, command),

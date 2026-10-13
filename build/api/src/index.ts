@@ -6,6 +6,7 @@
 // types/authoring) and as a runtime when it is the main module of the worker.
 
 import * as React from "react";
+import { workerData } from "node:worker_threads";
 import {
   createCommandRoot,
   renderCurrent,
@@ -13,8 +14,9 @@ import {
 import { registerMethod, request, startRpc, notify } from "./runtime/rpc";
 import { resolveCallback, serializeCallback } from "./runtime/reconciler";
 import { InternalNavigationRoot, resetNavigation, useNavigation } from "./runtime/navigation";
+import { UnsupportedApiError, throwUnsupported } from "./unsupported";
 
-export { useNavigation };
+export { useNavigation, UnsupportedApiError };
 
 // ---------------------------------------------------------------------------------------------
 // Icons
@@ -128,6 +130,35 @@ function SubmitFormAction(props: Record<string, unknown>) {
 
 Action.Push = PushAction;
 Action.SubmitForm = SubmitFormAction;
+
+/** `Action.OpenWith` — opens the target through the host's `shell.openWith` route. */
+function OpenWithAction(props: Record<string, unknown>) {
+  const { target, path, application, applicationName, ...rest } = props as any;
+  const hostProps: Record<string, unknown> = { ...rest };
+  hostProps.callbackId = serializeCallback(() =>
+    request("shell.openWith", { path: target ?? path, application: application ?? applicationName ?? null }),
+  );
+  return React.createElement("ray-action-open-with", hostProps);
+}
+
+/** `Action.Trash` — moves `path` (or the item's own `path`) to the recycle bin. */
+function TrashAction(props: Record<string, unknown>) {
+  const { target, path, ...rest } = props as any;
+  const hostProps: Record<string, unknown> = { ...rest };
+  hostProps.callbackId = serializeCallback(() =>
+    request("fileSystem.moveToTrash", { path: target ?? path }),
+  );
+  return React.createElement("ray-action-trash", hostProps);
+}
+
+/** `Action.PickDate` renders a native date picker; not implemented in the clone. */
+function PickDateAction(_props: Record<string, unknown>): never {
+  throwUnsupported("Action.PickDate");
+}
+
+Action.OpenWith = OpenWithAction;
+Action.Trash = TrashAction;
+Action.PickDate = PickDateAction;
 
 export interface PaginationOptions {
   pageSize: number;
@@ -695,6 +726,25 @@ export const Alert = {
 // Navigation / launcher control
 // ---------------------------------------------------------------------------------------------
 
+// `pne()` in the API bundle — preference objects flatten to `value ?? default`.
+function flattenPreferences(preferences: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [name, raw] of Object.entries(preferences ?? {})) {
+    if (raw && typeof raw === "object" && ("value" in raw || "default" in (raw as Record<string, unknown>))) {
+      const holder = raw as { value?: unknown; default?: unknown };
+      out[name] = holder.value ?? holder.default;
+    } else {
+      out[name] = raw;
+    }
+  }
+  return out;
+}
+
+// Launch-session state, captured in `initialize` (the real bundle reads `Oe` / workerData).
+let sessionPreferences: Record<string, unknown> = {};
+let sessionLaunchContext: string | null = null;
+let sessionLaunchType: "userInitiated" | "background" = "userInitiated";
+
 export const environment = {
   commandName: process.env.COMMAND_NAME,
   extensionName: process.env.EXTENSION_NAME,
@@ -704,7 +754,42 @@ export const environment = {
   supportPath: process.env.SUPPORT_PATH,
   appearance: "dark" as "light" | "dark",
   textSize: "medium" as "small" | "medium" | "large",
-  canAccess: (feature: string) => feature === "AI",
+  /** Only menu-bar commands expose reactive `preferences`; everything else reads
+   * `getPreferenceValues()`. Menu-bar commands are out of scope, so this is absent by design. */
+  get launchType() {
+    return sessionLaunchType;
+  },
+  get commandMode() {
+    return (process.env.COMMAND_MODE ?? "view") as "view" | "no-view" | "menu-bar";
+  },
+  get launchContext() {
+    return sessionLaunchContext;
+  },
+  /**
+   * The real `canAccess` routing (docs/store-spec.md §5): AI / betterAI models /
+   * BrowserExtension / WindowManagement answer from the worker flags; everything else true. The
+   * host starts every worker with all four flags false — the clone has no AI, browser
+   * extension, or window-management integration — so these families always answer false.
+   */
+  canAccess(feature: unknown): boolean {
+    const workerFlags = (workerData ?? {}) as {
+      canAccessAI?: boolean;
+      canAccessBetterAIModels?: boolean;
+      isBrowserExtensionInstalled?: boolean;
+      canAccessWindowManagement?: boolean;
+    };
+    if (feature === AI) return workerFlags.canAccessAI === true;
+    if (typeof feature === "string" && AI.betterAIModels.includes(feature)) {
+      return workerFlags.canAccessBetterAIModels === true;
+    }
+    if (feature === BrowserExtension || (typeof feature === "string" && BrowserExtension.PermissionValues.includes(feature))) {
+      return workerFlags.isBrowserExtensionInstalled === true;
+    }
+    if (feature === WindowManagement || (typeof feature === "string" && WindowManagement.PermissionValues.includes(feature))) {
+      return workerFlags.canAccessWindowManagement === true;
+    }
+    return true;
+  },
 };
 
 export async function popToRoot(options?: { clearSearchBar?: boolean }) {
@@ -752,19 +837,177 @@ export async function closeMainWindow(options?: { clearRootSearch?: boolean; pop
   await request("closeMainRaycastWindow", { ...(options ?? {}) });
 }
 
-export async function getSelectedText() {
-  const result = await request<{ value: string }>("getSelectedText", {});
-  return result.value;
+export async function getSelectedText(): Promise<string> {
+  // The host's route is a stub returning null today; a fake result is worse than a typed throw.
+  throwUnsupported("getSelectedText");
 }
 
-export async function getFrontmostApplication() {
-  const result = await request<{ value: unknown }>("getFrontmostApplication", {});
-  return result.value;
+export async function getFrontmostApplication(): Promise<never> {
+  // The host's route currently returns a fake "Raycast Mini" application; thrown instead.
+  throwUnsupported("getFrontmostApplication");
 }
 
 export async function getApplications(path?: string) {
   const result = await request<{ value: unknown[] }>("getApplications", { path });
   return result.value;
+}
+
+export async function getDefaultApplication(_path: string): Promise<never> {
+  // No host route exists for this query; a fabricated answer would be worse.
+  throwUnsupported("getDefaultApplication");
+}
+
+/** `trash(path)` — moves files to the recycle bin through the host (`fileSystem.moveToTrash`). */
+export async function trash(path: string | string[]): Promise<void> {
+  await request("fileSystem.moveToTrash", { path });
+}
+
+/** `showInFinder(path)` — reveals the file in Explorer through the host (`shell.revealFile`). */
+export async function showInFinder(path: string): Promise<void> {
+  await request("shell.revealFile", { path });
+}
+
+/** `getPreferenceValues<Values>()` — the flattened launch preferences (`value ?? default`). */
+export function getPreferenceValues<Values extends Record<string, unknown> = Record<string, unknown>>(): Values {
+  return flattenPreferences(sessionPreferences) as Values;
+}
+
+/**
+ * `Cache` — in-memory key/value store with a byte capacity (LRU eviction), matching the official
+ * semantics for the fields the clone supports. No disk persistence: `directory` is accepted and
+ * ignored, reported honestly in docs/api-coverage.md.
+ */
+export class Cache {
+  private readonly capacityBytes: number;
+  private readonly store = new Map<string, string>();
+
+  constructor(options?: { capacity?: number }) {
+    this.capacityBytes = options?.capacity ?? 10 * 1024 * 1024;
+  }
+
+  get isEmpty(): boolean {
+    return this.store.size === 0;
+  }
+
+  get(key: string): string | undefined {
+    const value = this.store.get(key);
+    if (value !== undefined) {
+      // Refresh recency.
+      this.store.delete(key);
+      this.store.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: string, data: string): void {
+    if (key in this.store) this.store.delete(key);
+    this.store.set(key, data);
+    this.evict();
+  }
+
+  remove(key: string): boolean {
+    return this.store.delete(key);
+  }
+
+  clear(): void {
+    this.store.clear();
+  }
+
+  contains(key: string): boolean {
+    return this.store.has(key);
+  }
+
+  private evict() {
+    let size = 0;
+    for (const [key, value] of this.store) size += key.length + value.length;
+    while (size > this.capacityBytes && this.store.size > 1) {
+      const oldest = this.store.keys().next().value;
+      if (oldest === undefined) break;
+      size -= oldest.length + (this.store.get(oldest)?.length ?? 0);
+      this.store.delete(oldest);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Out-of-scope namespaces. Present so imports resolve; every call throws the typed error, and
+// `environment.canAccess` answers false for the family.
+// ---------------------------------------------------------------------------------------------
+
+/** Out-of-scope: the browser extension integration. Permission values from the shipped bundle. */
+export const BrowserExtension = {
+  Permission: {
+    ExecuteJavaScript: "browserExtensionExecuteJS",
+    GetContent: "browserExtensionGetContent",
+    GetTabs: "browserExtensionGetTabs",
+  } as Record<string, string>,
+  /** Values of `Permission`, for `environment.canAccess` string membership. */
+  PermissionValues: ["browserExtensionExecuteJS", "browserExtensionGetContent", "browserExtensionGetTabs"],
+  async getContent(..._args: unknown[]): Promise<never> {
+    throwUnsupported("BrowserExtension.getContent");
+  },
+  async getTabs(): Promise<never> {
+    throwUnsupported("BrowserExtension.getTabs");
+  },
+};
+
+/** Out-of-scope: window management (the real app gates this behind pro). No permission strings
+ * are observable in the shipped bundle, so `PermissionValues` is empty — `canAccess` gates the
+ * namespace by identity, and every call throws regardless. */
+export const WindowManagement = {
+  DesktopType: { User: "User", FullScreen: "FullScreen" } as Record<string, string>,
+  PermissionValues: [] as string[],
+  async getDesktops(): Promise<never> {
+    throwUnsupported("WindowManagement.getDesktops");
+  },
+  async getWindowsOnActiveDesktop(): Promise<never> {
+    throwUnsupported("WindowManagement.getWindowsOnActiveDesktop");
+  },
+  async getActiveWindow(): Promise<never> {
+    throwUnsupported("WindowManagement.getActiveWindow");
+  },
+  async setWindowBounds(..._args: unknown[]): Promise<never> {
+    throwUnsupported("WindowManagement.setWindowBounds");
+  },
+};
+
+/**
+ * Out-of-scope: OAuth. `PKCEClient` constructs (imports resolve) but every method throws; no
+ * token ever leaves the machine and no browser window is opened.
+ */
+export const OAuth = {
+  RedirectMethod: { Web: "web", AppUri: "app-uri" } as Record<string, string>,
+  async authorize(..._args: unknown[]): Promise<never> {
+    throwUnsupported("OAuth.authorize");
+  },
+  PKCEClient: class {
+    constructor(_options?: unknown) {}
+    async authorize(..._args: unknown[]): Promise<never> {
+      throwUnsupported("OAuth.PKCEClient.authorize");
+    }
+    async getTokens(): Promise<never> {
+      throwUnsupported("OAuth.PKCEClient.getTokens");
+    }
+    async setTokens(): Promise<void> {
+      throwUnsupported("OAuth.PKCEClient.setTokens");
+    }
+    async removeTokens(): Promise<void> {
+      throwUnsupported("OAuth.PKCEClient.removeTokens");
+    }
+  },
+};
+
+/** Out-of-scope: the unstable AI surface. */
+export function useUnstableAI(..._args: unknown[]): never {
+  throwUnsupported("useUnstableAI");
+}
+export const unstable_AI = {
+  async ask(): Promise<never> {
+    throwUnsupported("unstable_AI.ask");
+  },
+};
+export function useAI(..._args: unknown[]): never {
+  throwUnsupported("useAI");
 }
 
 // Clipboard
@@ -791,15 +1034,36 @@ export const LocalStorage = {
   },
 };
 
+// Out-of-scope: AI. `betterAIModels` is the shipped model list (the real bundle's canAccess
+// consults it); `ask`/`experimental_decide`/`refreshModels` throw — the clone never routes
+// anything to an AI service.
+const AI_BETTER_MODELS = [
+  "openai-gpt-4",
+  "openai-gpt-5.5",
+  "openai-gpt-5.5-instant",
+  "openai-gpt-5.6-sol",
+  "openai-gpt-6-astra",
+  "anthropic-claude-opus-4-7",
+  "anthropic-claude-opus-4-8",
+  "anthropic-claude-opus-5",
+  "anthropic-claude-fable-5-1",
+];
+
 export const AI = {
-  async ask(prompt: string, options?: { model?: string; creativity?: "none" | "low" | "medium" | "high" | "maximum" }) {
-    const streamCallbackId = serializeCallback(() => undefined);
-    return request<{ value: string }>("completePrompt", {
-      prompt, model: options?.model, temperature: options?.creativity, streamCallbackId,
-    });
+  betterAIModels: AI_BETTER_MODELS,
+  Style: { Ai: "AI", Generic: "GENERIC" },
+  async ask(_prompt: string, _options?: { model?: string; creativity?: "none" | "low" | "medium" | "high" | "maximum" }): Promise<string> {
+    throwUnsupported("AI.ask");
+  },
+  async experimental_decide(..._args: unknown[]): Promise<never> {
+    throwUnsupported("AI.experimental_decide");
+  },
+  async refreshModels(): Promise<void> {
+    throwUnsupported("AI.refreshModels");
   },
 };
 
+/** Out-of-scope: tools. Symbols exist so imports resolve; tools never load (policy D6). */
 export const Tool = {
   Confirmation: null as unknown,
 };
@@ -841,7 +1105,30 @@ registerMethod("initialize", async (launchContext: any) => {
 
   const preferences = launchContext.preferences ?? {};
   const argumentValues = launchContext.argumentValues ?? {};
-  const launchType = launchContext.launchType ?? "userInitiated";
+  const launchType = (launchContext.launchType ?? "userInitiated") as "userInitiated" | "background";
+
+  // Launch-session state for `environment` / `getPreferenceValues()` (the real bundle's `Oe`).
+  sessionPreferences = preferences;
+  sessionLaunchContext = launchContext.launchContext ?? null;
+  sessionLaunchType = launchType;
+  process.env.COMMAND_MODE = launchContext.commandMode ?? launchContext.entryPointMode ?? "view";
+
+  const commandProps = {
+    arguments: argumentValues,
+    launchArguments: argumentValues,
+    preferences,
+    launchType,
+    launchContext: sessionLaunchContext,
+  };
+
+  // A `no-view` command's default export is an async function to RUN, not a component to render
+  // (React error #31 otherwise — a Promise is not an element). It returns when done; toasts/HUDs
+  // are its only output. `view` commands render through the reconciler.
+  const commandMode = launchContext.commandMode ?? launchContext.entryPointMode ?? "view";
+  if (commandMode === "no-view") {
+    await (Component as (props: unknown) => unknown)(commandProps);
+    return undefined;
+  }
 
   // `Yg` (InternalRootComponent): the command tree lives inside the navigation root, which owns
   // the `ray-navigation-stack` element and the routes the stack model is built from. Navigation
@@ -849,12 +1136,6 @@ registerMethod("initialize", async (launchContext: any) => {
   // is rebuilt on every render on purpose — re-rendering the same element object would bail the
   // reconciler out (oldProps === newProps by reference) and module-state changes would never
   // reach the shadow tree, so `push` would produce a renderEmpty.
-  const commandProps = {
-    arguments: argumentValues,
-    launchArguments: argumentValues,
-    preferences,
-    launchType,
-  };
   const buildRoot = () =>
     React.createElement(InternalNavigationRoot, null, React.createElement(Component, commandProps));
   activeRoot = createCommandRoot(buildRoot());
