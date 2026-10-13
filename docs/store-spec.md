@@ -138,3 +138,5 @@ The original policy excluded OAuth (D5). After real-world use the policy changed
 | D12 | The install gate ("install only if ≥1 compatible command") stays, computed over each command's **reachable source graph** (entry + relative imports, pre-build). | Blocks hopeless installs in milliseconds with their real reason, instead of after a full npm install. |
 
 `environment.platformName` answers `"Windows"` (worker shim). Classifier `COVERAGE_VERSION` is 2 — installed extensions reclassify at the next app start and OAuth-only commands re-enable.
+
+Known runtime limitation found by the harness: extensions using React 19's `use` hook (Spotify Player's data hooks) crash against the runtime's React 18.3.1 — the reconciler bundle pins 18; upgrading is future work. Commands needing user configuration (e.g. `OPENAI_API_KEY`) fail with the extension's own error.

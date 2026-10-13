@@ -442,6 +442,12 @@ function createBackend(options) {
       return dispatch("backend", "shell.openWith", params);
     },
 
+    /** Worker-side `getApplications` — the same native route the launcher's app list uses. */
+    async getApplications(ctx, params) {
+      const result = await send("backend", "native", { method: "applications.getAll", data: params ?? {} });
+      return result ?? { value: [] };
+    },
+
     // --- OS-level integration ---------------------------------------------------------------
     async open(ctx, params) {
       const target = String(params.path).replace(/"/g, "");
