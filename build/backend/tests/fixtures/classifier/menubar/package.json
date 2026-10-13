@@ -1,0 +1,10 @@
+{
+  "name": "menubar-fixture",
+  "title": "Menubar Fixture",
+  "description": "Fixture: one menu-bar command",
+  "author": "fixture",
+  "platforms": ["Windows"],
+  "commands": [
+    { "name": "menubar-cmd", "title": "Menubar Command", "description": "Menu bar", "mode": "menu-bar" }
+  ]
+}

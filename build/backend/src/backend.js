@@ -66,6 +66,9 @@ function createBackend(options) {
   let gamesHandlers = {};
   let taskbarHandlers = {};
   let notesHandlers = {};
+  let storeHandlers = {};
+  // Set by index.js to the store's classification gate; loadCommand refuses disabled commands.
+  let launchGate = null;
 
   // ---------------------------------------------------------------------------------------------
   // Installed-extension registry.
@@ -447,6 +450,9 @@ function createBackend(options) {
       if (!extension?.uuid) throw new Error("loadCommand: missing extension");
       if (!command?.name) throw new Error("loadCommand: missing command");
 
+      // The store's classification gate: disabled commands never reach a worker.
+      if (launchGate) await launchGate(extension, command);
+
       const isDevelopment = Boolean(debug);
       const worker = takeFromPool(isDevelopment) ?? createWorker({ isDevelopment });
       const sessionId = worker.id;
@@ -521,7 +527,15 @@ function createBackend(options) {
     },
 
     async getInstalledNodeExtensionSummaries() {
-      return { extensions: await allExtensions() };
+      // The store's per-command classification rides along (badge + disabled reasons) so root
+      // search can grey out disabled commands; extensions with no classification simply lack it.
+      let compat = null;
+      try {
+        compat = storeHandlers.getSummariesCompat?.()?.compat ?? null;
+      } catch {
+        compat = null;
+      }
+      return { extensions: await allExtensions(), compat };
     },
   };
 
@@ -729,6 +743,13 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
+      // Store (`store.*`): catalog, install/update/uninstall, classifications, command
+      // preferences — all persisted in this process (store.sqlite under the data dir).
+      if (method.startsWith("store.")) {
+        const handler = storeHandlers[method.slice("store.".length)];
+        if (handler) return handler(data ?? {});
+      }
+
       // Native `.NET` operations (clipboard, shell, and Raycast's internal Applications extension).
       // The clipboard-history verbs the host owns (OCR, image pixels, `Open in App`, `Save as File`,
       // capability probe) are named `clipboardHistory.*` so they are distinguishable from the raw
@@ -819,6 +840,14 @@ function createBackend(options) {
     /** Install the notes store handler table. */
     registerNotesHandler(handlers) {
       notesHandlers = handlers ?? {};
+    },
+    /** Install the store handler table (catalog, install, classifications, preferences). */
+    registerStoreHandler(handlers) {
+      storeHandlers = handlers ?? {};
+    },
+    /** Install the launch gate (the store's classification check); throwing refuses a launch. */
+    setLaunchGate(gate) {
+      launchGate = gate ?? null;
     },
   };
 }

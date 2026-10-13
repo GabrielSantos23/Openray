@@ -32,6 +32,7 @@ const { createCalculator } = require("./calculator");
 const { createTranslator } = require("./translator");
 const { createFileIndexer } = require("./file-indexer");
 const { createUsageTracker } = require("./usage-tracker");
+const { createStore } = require("./store");
 const { createWindowStates } = require("./window-states");
 const { createFocus } = require("./focus");
 const { createGames } = require("./games");
@@ -167,6 +168,22 @@ const notes = createNotes({
 });
 backend.registerNotesHandler(notes.handlers);
 notes.bootstrap();
+
+// The Store is the tenth internal extension (`store.*`): the GitHub catalog, install/update/
+// uninstall, per-command classifications and command preferences live in store.sqlite under the
+// data dir (`RAYCAST_MINI_DATA_DIR`, defaulting next to the extensions root). Bootstrap recomputes
+// any classification that predates the current coverage version.
+const store = createStore({
+  dataRoot: process.env.RAYCAST_MINI_DATA_DIR ?? path.dirname(config.extensionsRoot),
+  extensionsRoot: config.extensionsRoot,
+  apiRoot: config.apiRoot,
+  pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+});
+backend.registerStoreHandler(store.handlers);
+backend.setLaunchGate(async (extension, command) => {
+  store.assertLaunchable(extension.uuid, command.name, command.title);
+});
+store.syncClassifications();
 
 // The Clipboard History shortcut is a per-command hotkey in Raycast, registered with the host once the
 // window exists. Re-registering is harmless if it is already in place.
