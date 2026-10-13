@@ -66,6 +66,20 @@ export function ActionPanel({ children }: { children?: React.ReactNode }) {
   return React.createElement("ray-action-panel", {}, children);
 }
 
+/** `<ActionPanel.Section>` groups actions; the model flattens them into the panel's action list. */
+ActionPanel.Section = function ActionPanelSection({ title, children }: { title?: string; children?: React.ReactNode }) {
+  return React.createElement("ray-action-section", { title }, children);
+};
+
+/** `<ActionPanel.Submenu title>` — nested actions; flattened like sections by the model. */
+ActionPanel.Submenu = function ActionPanelSubmenu({ title, icon, children }: { title?: string; icon?: unknown; children?: React.ReactNode }) {
+  return React.createElement("ray-action-submenu", { title, icon }, children);
+};
+
+ActionPanel.Item = function ActionPanelItem(props: Record<string, unknown>) {
+  return React.createElement("ray-action-item", props);
+};
+
 function makeAction(kind: string) {
   return function Action(props: Record<string, unknown>) {
     const hostProps: Record<string, unknown> = { ...props };

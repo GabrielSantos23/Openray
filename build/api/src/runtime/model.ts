@@ -210,20 +210,28 @@ const FORM_KIND_BY_HOST_NAME: Record<string, ViewFormField["kind"]> = {
 function actionTable(node: ShadowNode): ViewAction[] {
   const panel = node.childElements.find((c) => c.name === "ray-action-panel");
   if (!panel) return [];
-  return panel.childElements
-    .filter((c) => c.name.startsWith("ray-action"))
-    .map((action, index) => {
-      const props = action.props as Record<string, any>;
+  // `<ActionPanel.Section>` / `<ActionPanel.Submenu>` group actions; the panel is a flat action
+  // list in the model, so their children are collected in order.
+  const collect = (elements: ShadowNode[]): ViewAction[] =>
+    elements.flatMap((element) => {
+      if (element.name === "ray-action-section" || element.name === "ray-action-submenu") {
+        return collect(element.childElements);
+      }
+      if (!element.name.startsWith("ray-action")) return [];
+      const props = element.props as Record<string, any>;
       const callbackId = props.callbackId as string | undefined;
-      return {
-        id: callbackId ?? `action_${index}`,
-        title: String(props.title ?? props.name ?? "Action"),
-        shortcut: props.shortcut as string | undefined,
-        style: props.style as string | undefined,
-        type: (props.type as string | undefined) ?? "default",
-        itemId: (node.props as any).id as string | undefined,
-      };
+      return [
+        {
+          id: callbackId ?? `action_${props.title ?? element.name}`,
+          title: String(props.title ?? props.name ?? "Action"),
+          shortcut: props.shortcut as string | undefined,
+          style: props.style as string | undefined,
+          type: (props.type as string | undefined) ?? "default",
+          itemId: (node.props as any).id as string | undefined,
+        },
+      ];
     });
+  return collect(panel.childElements);
 }
 
 function dropdownMenu(node: ShadowNode): ViewFormField["menu"] {
