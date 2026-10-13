@@ -103,3 +103,25 @@ Our decisions (deltas):
 | D6 | Tools listed in manifests are ignored (not built, not registered, never block install) | Task policy |
 | D7 | Commands with `mode: "menu-bar"` are classified unsupported (disabled) | No menu-bar host exists in clone; real Windows hosting unconfirmed |
 | D8 | Background refresh (`interval`) implemented only if confirmed in the real app | Task requirement; the real backend has extension interval handling [UNCONFIRMED for Windows → default: classify interval commands as unsupported-disabled, revisit] |
+
+---
+
+## 9. Phase 2 implementation status (2026-10-13)
+
+Everything in §8 "Our decisions" is implemented. Per decision:
+
+- **D1 catalog** — done (`build/backend/src/store.js` `catalogRefresh`): branches/main pins the commit (recorded in `store.sqlite` `catalog_meta.commit_sha`), two tree calls list `extensions/`, every `package.json` is fetched from the pinned commit and cached. The Store lists only extensions whose manifest declares `platforms: ["Windows"]` (975 of 3,423 at the pinned commit observed while building the harness). Refresh is manual (Store view button).
+- **D2 build at install time** — done (`store-bundler.js`): `npm install --omit=dev --no-audit --no-fund` in the staged copy, then esbuild per command (`platform node`, `target node22`, `format cjs`, `jsx automatic`, metafile + sourcemap, no minify) to the flat `<commandName>.js`. `react`, `react-dom`, `@raycast/api` are stripped from the staged `node_modules` after install (the real app's shared-dependencies dedup, §3) so the runtime resolves the host's copies through `NODE_PATH`; `@raycast/utils` and everything else stays a real dependency. Bundling runs no extension code.
+- **D3 install root** — done: `<extensionsRoot>/<handle>` with staging/backup/rollback mirroring §2.7. The handle is the uuid.
+- **D4 canAccess** — done (api shim): exact routing of §5; all four worker flags false.
+- **D5 typed throws** — done: `UnsupportedApiError` (build/api/src/unsupported.ts) names call/extension/command, reports itself over `commandException` (failure toast + backend log). Verified per call in `build/backend/tests/api-shim.test.mjs`.
+- **D6 tools** — done: never bundled, never classified, never registered.
+- **D7 menu-bar** — done: `mode: "menu-bar"` commands are classified `disabled-mode` ("Menu bar commands are not supported") and the backend launch gate refuses them.
+- **D8 interval** — done as decided: `interval` commands are classified `disabled-manifest` ("Background refresh (interval) is not supported"). No new Windows evidence appeared.
+
+Additional implementation notes:
+
+- **Classifications** persist in `store.sqlite` (`extension_classifications`, `command_classifications`) and recompute when `COVERAGE_VERSION` (classifier.js, currently 1) changes at startup. Disabled commands carry a one-line reason into the renderer summaries; root search greys them out, blocks launch/alias/hotkey, and the backend launch gate refuses them.
+- **Harness** (build/scripts/harness-report.mjs + backend/tests/harness.test.mjs): installs the 15 candidate extensions unmodified and launches every command classified compatible in a real worker. The final candidate list maps the plan's §7 themes onto extensions that actually declare Windows (several plan handles do not exist upstream or are macOS-only); see the report in docs/store-implementation-plan.md §10.
+- **Reconciler fix found by the harness**: `resetAfterCommit` now drives the model shipper — the previous wiring only covered the mount update, so any `setState` (how every extension loads its data) never re-rendered.
+- **Cache.subscribe fix found by the harness**: `@raycast/utils` passes `cache.subscribe` unbound to `useSyncExternalStore`; the official Cache `subscribe`/`Subscriber` contract is implemented (instance property, real notifications on set/remove/clear).

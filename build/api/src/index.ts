@@ -160,6 +160,18 @@ Action.OpenWith = OpenWithAction;
 Action.Trash = TrashAction;
 Action.PickDate = PickDateAction;
 
+/** Out-of-scope: MCP server installation. */
+function InstallMCPServerAction(_props: Record<string, unknown>): never {
+  throwUnsupported("Action.InstallMCPServer");
+}
+Action.InstallMCPServer = InstallMCPServerAction;
+
+/** Not implemented in the clone: the Windows QuickLook path differs. */
+function ToggleQuickLookAction(_props: Record<string, unknown>): never {
+  throwUnsupported("Action.ToggleQuickLook");
+}
+Action.ToggleQuickLook = ToggleQuickLookAction;
+
 export interface PaginationOptions {
   pageSize: number;
   hasMore: boolean;
@@ -880,6 +892,7 @@ export function getPreferenceValues<Values extends Record<string, unknown> = Rec
 export class Cache {
   private readonly capacityBytes: number;
   private readonly store = new Map<string, string>();
+  private readonly subscribers = new Set<(key?: string, data?: string) => void>();
 
   constructor(options?: { capacity?: number }) {
     this.capacityBytes = options?.capacity ?? 10 * 1024 * 1024;
@@ -887,6 +900,27 @@ export class Cache {
 
   get isEmpty(): boolean {
     return this.store.size === 0;
+  }
+
+  /**
+   * `subscribe(subscriber)` — the official change notification (`Subscriber` receives
+   * `(key, data)` on every mutation; the return value unsubscribes). Real notifications for the
+   * in-memory store. An instance property, not a prototype method: `@raycast/utils` passes
+   * `cache.subscribe` to `useSyncExternalStore` unbound.
+   */
+  subscribe = (subscriber: (key?: string, data?: string) => void): (() => void) => {
+    this.subscribers.add(subscriber);
+    return () => this.subscribers.delete(subscriber);
+  };
+
+  private notify(key?: string, data?: string) {
+    for (const subscriber of this.subscribers) {
+      try {
+        subscriber(key, data);
+      } catch {
+        /* a broken subscriber never breaks the mutation */
+      }
+    }
   }
 
   get(key: string): string | undefined {
@@ -903,14 +937,18 @@ export class Cache {
     if (key in this.store) this.store.delete(key);
     this.store.set(key, data);
     this.evict();
+    this.notify(key, data);
   }
 
   remove(key: string): boolean {
-    return this.store.delete(key);
+    const removed = this.store.delete(key);
+    if (removed) this.notify(key, undefined);
+    return removed;
   }
 
   clear(): void {
     this.store.clear();
+    this.notify(undefined, undefined);
   }
 
   contains(key: string): boolean {
@@ -1070,6 +1108,101 @@ export const Tool = {
 
 export function getFavicon(url: string, options?: { size?: number }) {
   return `https://www.google.com/s2/favicons?sz=${options?.size ?? 32}&domain_url=${encodeURIComponent(url)}`;
+}
+
+// Deprecated ActionPanel member aliases (the official deprecated surface).
+export const ActionPanelItem = ActionPanel;
+export const ActionPanelSection = ActionPanel;
+export const ActionPanelSubmenu = ActionPanel;
+
+/** `LaunchType` (`IM` in the API bundle). */
+export const LaunchType = {
+  UserInitiated: "userInitiated",
+  Background: "background",
+} as const;
+
+/** `PopToRootType` (`M2` in the API bundle). */
+export const PopToRootType = {
+  Immediate: "immediate",
+  Suspended: "suspended",
+  Default: "default",
+} as const;
+
+/** `randomId` — the API bundle's `QF()`: a UUID. */
+export function randomId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * `Keyboard.Shortcut.Common` — the shipped preset shortcuts (values read from the API bundle);
+ * the clone is Windows-only, so the Windows half of each shipped pair is what extensions see.
+ * `Shortcut.Reserved` ships the app's reserved keys as observed.
+ */
+const KEYBOARD_COMMON: Record<string, { modifiers: string[]; key: string }> = {
+  Copy: { modifiers: ["ctrl", "shift"], key: "c" },
+  CopyDeeplink: { modifiers: ["ctrl", "shift"], key: "c" },
+  CopyName: { modifiers: ["ctrl", "alt"], key: "c" },
+  CopyPath: { modifiers: ["alt", "shift"], key: "c" },
+  Save: { modifiers: ["ctrl"], key: "s" },
+  Duplicate: { modifiers: ["ctrl", "shift"], key: "s" },
+  Edit: { modifiers: ["ctrl"], key: "e" },
+  MoveDown: { modifiers: ["ctrl", "alt"], key: "arrowDown" },
+  MoveUp: { modifiers: ["ctrl", "alt"], key: "arrowUp" },
+  New: { modifiers: ["ctrl"], key: "n" },
+  Open: { modifiers: ["ctrl"], key: "o" },
+  OpenWith: { modifiers: ["ctrl", "shift"], key: "o" },
+  Pin: { modifiers: ["ctrl"], key: "." },
+  Refresh: { modifiers: ["ctrl"], key: "r" },
+  Remove: { modifiers: ["ctrl"], key: "d" },
+  RemoveAll: { modifiers: ["ctrl", "alt"], key: "d" },
+  ToggleQuickLook: { modifiers: ["ctrl"], key: "y" },
+};
+
+export const Keyboard = {
+  Shortcut: {
+    Common: KEYBOARD_COMMON,
+    Reserved: {
+      CloseWindow: { modifiers: ["cmd"], key: "w" },
+      Delete: { modifiers: [], key: "delete" },
+      DeleteForward: { modifiers: [], key: "deleteForward" },
+      DeleteLineBackward: { modifiers: ["cmd"], key: "delete" },
+      DeleteWordBackward: { modifiers: ["opt"], key: "delete" },
+      GoBack: { modifiers: [], key: "escape" },
+      OpenActionPanel: { modifiers: ["cmd"], key: "k" },
+      OpenPreferences: { modifiers: ["cmd"], key: "," },
+      OpenSearchBarDropdown: { modifiers: ["cmd"], key: "p" },
+      OpenSearchBarLink: { modifiers: ["shift", "cmd"], key: "/" },
+      PrimaryAction: { modifiers: [], key: "enter" },
+      Quit: { modifiers: ["cmd"], key: "q" },
+      ReturnToRoot: { modifiers: ["cmd"], key: "escape" },
+      SecondaryAction: { modifiers: ["cmd"], key: "enter" },
+      SelectAll: { modifiers: ["cmd"], key: "a" },
+    } as Record<string, { modifiers: string[]; key: string }>,
+  },
+  DeprecatedKeys: ["{", "}", "«", "»", "(", ")", "§", "^", "@", "$"],
+};
+
+/** `useId` — React's hook, re-exported like the real package does. */
+export const useId = React.useId;
+
+// Not implemented (typed throws, per the runtime failure policy).
+export async function getSelectedFinderItems(): Promise<never> {
+  throwUnsupported("getSelectedFinderItems");
+}
+export async function captureMemorySnapshot(): Promise<never> {
+  throwUnsupported("captureMemorySnapshot");
+}
+export function useActionPanel(): never {
+  throwUnsupported("useActionPanel");
+}
+export async function updateCommandMetadata(values: { subtitle?: string }): Promise<void> {
+  await request("updateCommandMetadata", values);
+}
+export async function captureException(exception: unknown): Promise<void> {
+  // Local logging only — no external crash service.
+  notify("captureException", { message: exception instanceof Error ? exception.message : String(exception) });
 }
 
 // ---------------------------------------------------------------------------------------------

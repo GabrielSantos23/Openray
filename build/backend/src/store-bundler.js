@@ -23,6 +23,31 @@ const ENTRY_EXTENSIONS = [".tsx", ".ts", ".jsx", ".js", ".mjs"];
 
 const COPY_EXCLUDES = new Set(["node_modules", ".git", "dist", ".DS_Store"]);
 
+/**
+ * Packages the host owns. The real install trees dedup them away
+ * (`node_modules/.raycast-shared-dependencies`, store-spec §3): an extension's own `react` copy
+ * would win Node's resolution over the host's NODE_PATH and produce the classic two-React crash
+ * (`Cannot read properties of null (reading 'useState')`) — the component's hooks would run
+ * against a different dispatcher than the reconciler's react. Only `@raycast/api` is stripped
+ * from the `@raycast` scope — `@raycast/utils` is a genuine dependency the extension installs.
+ */
+const HOST_OWNED_PACKAGES = ["react", "react-dom"];
+
+function stripHostOwnedPackages(targetDir) {
+  const nodeModules = path.join(targetDir, "node_modules");
+  if (!fs.existsSync(nodeModules)) return;
+  for (const name of HOST_OWNED_PACKAGES) {
+    const owned = path.join(nodeModules, name);
+    if (fs.existsSync(owned)) {
+      fs.rmSync(owned, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  }
+  const api = path.join(nodeModules, "@raycast", "api");
+  if (fs.existsSync(api)) {
+    fs.rmSync(api, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+}
+
 /** Resolve esbuild from the API package's node_modules (the build host's own copy). */
 function resolveEsbuild(apiRoot) {
   const anchor = path.join(apiRoot, "node_modules", "esbuild", "package.json");
@@ -90,22 +115,28 @@ function installDependencies(sourceRoot, { onOutput } = {}) {
  */
 async function bundleCommand({ apiRoot, entryPath, outFile }) {
   const esbuild = resolveEsbuild(apiRoot);
-  const result = await esbuild.build({
-    entryPoints: [entryPath],
-    bundle: true,
-    platform: "node",
-    target: "node22",
-    format: "cjs",
-    outfile: outFile,
-    external: ESBUILD_EXTERNALS,
-    metafile: true,
-    sourcemap: true,
-    logLevel: "silent",
-    // Store extensions use the automatic JSX runtime (the official `ray` CLI's setting): no
-    // `React` import required, `react/jsx-runtime` stays external like `react` itself.
-    jsx: "automatic",
-    loader: { ".png": "file", ".jpg": "file", ".jpeg": "file", ".gif": "file", ".svg": "file" },
-  });
+  let result;
+  try {
+    result = await esbuild.build({
+      entryPoints: [entryPath],
+      bundle: true,
+      platform: "node",
+      target: "node22",
+      format: "cjs",
+      outfile: outFile,
+      external: ESBUILD_EXTERNALS,
+      metafile: true,
+      sourcemap: true,
+      logLevel: "silent",
+      // Store extensions use the automatic JSX runtime (the official `ray` CLI's setting): no
+      // `React` import required, `react/jsx-runtime` stays external like `react` itself.
+      jsx: "automatic",
+      loader: { ".png": "file", ".jpg": "file", ".jpeg": "file", ".gif": "file", ".svg": "file" },
+    });
+  } catch (error) {
+    const details = (error.errors ?? []).map((entry) => `${entry.location ? `${entry.location.file}:${entry.location.line}: ` : ""}${entry.text}`).join("; ");
+    throw new Error(details || error.message);
+  }
   return { metafile: result.metafile };
 }
 
@@ -147,6 +178,7 @@ async function buildExtension({ apiRoot, targetDir, manifest, onProgress } = {})
   await installDependencies(targetDir, {
     onOutput: (chunk) => progress({ step: "dependencies", message: chunk.trim().split("\n").pop() ?? "" }),
   });
+  stripHostOwnedPackages(targetDir);
 
   const commandOutFiles = {};
   const metafiles = {};
