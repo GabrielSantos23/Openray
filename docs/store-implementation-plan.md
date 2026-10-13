@@ -164,3 +164,21 @@ From `github.com/raycast/extensions`, each pinned to the catalog commit; the har
 - **The real app's encrypted DBs** could not be read (SQLCipher-like headers) — command-enable-state schema is confirmed only via code references, not data. Unconfirmed; our own schema is independent.
 - **Background refresh (`interval`)** — Windows confirmation not found in REA session → classified unsupported (D8). If evidence appears, revisit.
 - **Out of scope**: AI, OAuth, BrowserExtension, WindowManagement, menu-bar commands, tools (per task); porting the real app's store backend/auth; the other agent's in-flight work.
+
+---
+
+## 10. Implementation status (2026-10-13)
+
+All milestones landed on `feature/store`, one commit group each:
+
+| Milestone | Status | Notes |
+|---|---|---|
+| M1 pipeline | done | `store-bundler.js`: `npm install --omit=dev` + esbuild per command (node22/cjs/automatic JSX, metafile + sourcemap, no minify), flat `<command>.js` layout, host-owned packages (`react`, `react-dom`, `@raycast/api`) stripped from the staged `node_modules` so the runtime resolves the host's copies (the real app's shared-dependencies dedup). 4 tests incl. a real worker round-trip. |
+| M2 classifier | done | Manifest/source/guard levels, tools ignored, 5 policy fixtures + coverage-version recompute + launch gate. 10 tests. |
+| M3 API shim | done | Real `canAccess` routing; `UnsupportedApiError` for every missing/out-of-scope call (reports itself over `commandException`); `Cache` (+`subscribe`), `trash`, `showInFinder`, `Action.OpenWith/.Trash`, `getPreferenceValues`, `launchContext`, `Keyboard.Shortcut` presets, `LaunchType`, `PopToRootType`, no-view commands run instead of render; reconciler ships models on every commit. 5 tests. |
+| M4 Store | done | Catalog (pinned commit + cached manifests), search/categories/detail (README, contributors, updated, commit, per-command status), install gate (confirmation required; Windows-only before download), staging/backup/rollback install, update, uninstall, per-command preferences, StoreView, root-search gating, aliases + hotkeys, Extensions preferences page. 7 store tests + 3 gating tests. |
+| M5 harness | done | `harness-report.mjs` + `harness.test.mjs`. Final candidate list: google-translate, urban-dictionary, emoji-kitchen, currency-exchange, password-generator, modify-hash, unirate-currency, one-time-password, windows-terminal, kill-process, github, spotify-player, chatgpt, ai-usage-tracker, ai-stats (the plan's example handles that do not exist upstream or are macOS-only were replaced with Windows-declaring equivalents; the substitution criteria are in the script). |
+
+Harness result at the pinned commit (`92414ed8…`), full report in the final task report: 14 compatible commands pass in real workers; 54 commands disabled-by-policy with reasons; `github` install-failed (upstream undeclared devDependency `graphql-tag`); every compatible command launched unmodified.
+
+Fixes the harness forced into the API (never into extensions): the reconciler commit wiring, host-owned package dedup, `Cache.subscribe`, `Keyboard`, `ActionPanel.Section/.Submenu/.Item`.
