@@ -23,6 +23,12 @@ import { QuicklinksView, type QuicklinksCommandName } from "../features/quicklin
 import { SnippetsView, type SnippetsCommandName } from "../features/snippets/SnippetsView";
 import { CalculatorHistoryView } from "../features/calculator/CalculatorHistoryView";
 import { TranslateView, type TranslateSeed } from "../features/translator/TranslateView";
+import { SearchFilesView } from "../features/fileSearch/SearchFilesView";
+import { WindowManagementArgsView } from "../features/windowManagement/WindowManagementArgsView";
+import { FocusCategoriesSession, FocusFormView, FocusImportView } from "../features/focus/FocusViews";
+import { GameLauncherView } from "../features/games/GameLauncherView";
+import { SearchNotesView } from "../features/notes/SearchNotesView";
+import { noteDeeplink, openNotesWindow } from "../notes";
 import { LoadingBar } from "../LoadingBar";
 import type { ApplicationCommand } from "../applications";
 import type { RootEntry } from "./entries";
@@ -44,15 +50,17 @@ export function CommandSession({
   createLink,
   onConsumeCreateLink,
   translatorSeed,
+  onOpenQuicklinkCreate,
 }: {
   entry: RootEntry;
   onBack: () => void;
   showToast: (title: string, message?: string) => void;
   closeMainWindow: () => void;
   applications: ApplicationCommand[];
-  createLink?: string | null;
+  createLink?: string | { link: string; name?: string } | null;
   onConsumeCreateLink?: () => void;
   translatorSeed?: TranslateSeed | null;
+  onOpenQuicklinkCreate?: (seed: { link: string; name?: string }) => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const toastGroups = useToastActionGroups();
@@ -266,6 +274,39 @@ export function CommandSession({
         />
       );
     }
+    if (entry.area === "file-search") {
+      // The Search Files view: the filter IS the backend indexer query; the type/sort dropdowns
+      // and the details pane live inside the view.
+      return (
+        <SearchFilesView
+          command="searchFiles"
+          searchText={searchText}
+          onSearchTextChange={setSearchText}
+          showToast={showToast}
+          onBack={onBack}
+          closeMainWindow={closeWindow}
+          applications={applications}
+        />
+      );
+    }
+    if (entry.area === "notes") {
+      // Raycast Notes: `open`/`create` have no view — they close the launcher and open the Notes
+      // window; `search` renders the confirmed Search Notes view.
+      if (entry.command === "open" || entry.command === "create") {
+        return <NotesWindowRedirect command={entry.command} closeMainWindow={closeWindow} onBack={onBack} />;
+      }
+      return (
+        <SearchNotesView
+          command="search"
+          searchText={searchText}
+          onSearchTextChange={setSearchText}
+          showToast={showToast}
+          onBack={onBack}
+          closeMainWindow={closeWindow}
+          onCreateQuicklink={(note) => onOpenQuicklinkCreate?.({ link: noteDeeplink(note.id), name: note.title })}
+        />
+      );
+    }
     return (
       <SnippetsView
         command={entry.command as SnippetsCommandName}
@@ -278,6 +319,42 @@ export function CommandSession({
     );
   }
 
+  if (entry.kind === "wm-args") {
+    // `Resize Window` / `Move Window`: the search bar becomes the argument field, Enter applies.
+    return (
+      <WindowManagementArgsView
+        commandKey={entry.commandKey}
+        showToast={showToast}
+        onBack={onBack}
+        closeMainWindow={closeWindow}
+      />
+    );
+  }
+
+  if (entry.kind === "focus-view") {
+    // Focus commands: the Start/Edit form (the edit prefill comes from the backend's last start
+    // input), the categories session (view + create/edit/open forms), or the import picker.
+    if (entry.command === "searchCategories") {
+      return <FocusCategoriesSession showToast={showToast} onBack={onBack} applications={applications} />;
+    }
+    if (entry.command === "importCategories") {
+      return <FocusImportView showToast={showToast} onBack={onBack} onChanged={() => undefined} />;
+    }
+    return (
+      <FocusFormView
+        formMode={entry.command === "edit" ? "edit" : "start"}
+        showToast={showToast}
+        onBack={onBack}
+        closeMainWindow={closeWindow}
+        applications={applications}
+      />
+    );
+  }
+
+  if (entry.kind === "games-view") {
+    return <GameLauncherView showToast={showToast} onBack={onBack} closeMainWindow={closeWindow} />;
+  }
+
   if (entry.kind !== "extension") {
     // Applications are handled natively; this keeps the type narrow.
     return null;
@@ -286,9 +363,9 @@ export function CommandSession({
   return (
     <div className="window" onMouseDown={keepSearchFocus}>
       <header className="window__header">
-        <button type="button" className="icon icon--plain" onClick={pages.pages.length > 1 ? popOne : onBack} aria-label="Back">
+        <button type="button" className="back-button" onClick={pages.pages.length > 1 ? popOne : onBack} aria-label="Back">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
         <div className="searchbar">
@@ -417,6 +494,33 @@ export function CommandSession({
       />
     </div>
   );
+}
+
+/**
+ * The Notes window entry commands (`Raycast Notes` / `Create Note`): Raycast closes the main
+ * window and calls `host.raycast.showNotesWindow` — no view exists for these two commands. The
+ * selection is reset immediately so the next launcher show lands at the root.
+ */
+function NotesWindowRedirect({
+  command,
+  closeMainWindow,
+  onBack,
+}: {
+  command: "open" | "create";
+  closeMainWindow: () => void;
+  onBack: () => void;
+}) {
+  const fired = useRef(false);
+  useEffect(() => {
+    if (fired.current) return;
+    fired.current = true;
+    closeMainWindow();
+    openNotesWindow(command === "create" ? { create: true } : {});
+    onBack();
+    // Raycast's command runs exactly once per invocation; the deps exist to satisfy the linter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
 }
 
 /**

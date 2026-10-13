@@ -78,15 +78,12 @@ public sealed class SettingsWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        var environment = await CoreWebView2Environment.CreateAsync(
-            userDataFolder: Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RaycastMini",
-                "WebView2.Settings"));
-
+        var udir = MainWindow.GetSafeUserDataFolder("WebView2.Settings");
+        var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: udir);
         await _webView.EnsureCoreWebView2Async(environment);
         _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             "raycast.mini", _frontendRoot, CoreWebView2HostResourceAccessKind.Allow);
+        WebView2Permissions.AllowClipboardRead(_webView.CoreWebView2);
 
         var html = Path.Combine(_frontendRoot, "dist", "settings.html");
         _webView.CoreWebView2.Navigate(

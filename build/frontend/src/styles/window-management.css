@@ -1,0 +1,20 @@
+/* Window Management (internal extension 6): the root-search tile, the args view hint and the
+   preset hotkey pill. Palette variables are the shared ones from base.css. */
+
+/* The extension tile next to the command name in root search rows. */
+.command-tile--windowmanagement {
+  background: color-mix(in srgb, #9a7bf7 18%, transparent);
+  color: #b39df8;
+}
+
+/* The args view's expected-format hint inside the search bar ("Width × Height" / "100,100"). */
+.searchbar__hint {
+  margin-left: var(--space-6);
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-11);
+  white-space: nowrap;
+}
+
+.searchbar__hint--invalid {
+  color: #f2726f;
+}

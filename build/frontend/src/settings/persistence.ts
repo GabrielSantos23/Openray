@@ -28,6 +28,16 @@ export const QUICKLINKS_ROW_IDS = new Set(["quicklinks-pass-selected-text", "qui
 /** The calculator page's one preference lives in the backend store (`remToPxRate`). */
 export const CALCULATOR_ROW_IDS = new Set(["calculator-rem-to-px"]);
 
+/** File Search rows persist to the Node store (`file-search-settings.json`). */
+export const FILE_SEARCH_ROW_IDS = new Set([
+  "include-files-in-root-search",
+  "file-search-scopes",
+  "file-search-ignore-patterns",
+  "file-search-include-hidden",
+  "file-search-respect-ignore-files",
+  "file-search-reset",
+]);
+
 /** Translator rows persist to the backend store (`translator-settings.json`). */
 export const TRANSLATOR_ROW_IDS = new Set([
   "translator-primary-action",
@@ -90,6 +100,16 @@ export const SNIPPETS_SOUND_LABEL: Record<string, string> = Object.fromEntries(
   Object.entries(SNIPPETS_SOUND_BY_LABEL).map(([label, value]) => [value, label]),
 );
 
+/** Notes rows persist to the Node store (`notes-settings.json`). */
+export const NOTES_ROW_IDS = new Set(["notes-escape-key-behavior", "notes-zoom"]);
+export const NOTES_ESCAPE_BY_LABEL: Record<string, string> = {
+  "Closes Window": "closesWindow",
+  "Loses Focus": "losesFocus",
+};
+export const NOTES_ESCAPE_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(NOTES_ESCAPE_BY_LABEL).map(([label, value]) => [value, label]),
+);
+
 export const DEFAULTS: SettingsMap = {
   "follow-system-appearance": true,
   "theme-dark": "Raycast Dark",
@@ -135,7 +155,46 @@ export const DEFAULTS: SettingsMap = {
   "snippets-primary-action": "Paste to Active App",
   "snippets-warn-before-delete": true,
   "calculator-rem-to-px": "16",
+  "include-files-in-root-search": true,
+  "file-search-ignore-patterns": "",
+  "file-search-include-hidden": false,
+  "file-search-respect-ignore-files": true,
+  "wm-inner-gap": "None",
+  "wm-outer-gap": "None",
+  "wm-cycle-mode": "None",
+  "wm-preset": "None",
+  "focus-snooze-duration": "3 minutes",
+  "focus-play-sound": true,
+  "focus-restore-apps": false,
+  "games-game-mode": false,
+  "taskbar-show": false,
+  "taskbar-position": "Bottom",
+  "notes-escape-key-behavior": "Closes Window",
+  "notes-zoom": "100%",
 };
+
+/** Focus Snooze Duration labels -> the backend `snoozeDurationMs` (null = No Snooze). */
+export const FOCUS_SNOOZE_BY_LABEL: Record<string, number | null> = {
+  "1 minute": 60000,
+  "3 minutes": 180000,
+  "5 minutes": 300000,
+  "10 minutes": 600000,
+  "No Snooze": null,
+};
+export const FOCUS_SNOOZE_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(FOCUS_SNOOZE_BY_LABEL).map(([label, ms]) => [ms === null ? "null" : String(ms), label]),
+);
+
+/** Taskbar Position labels -> the backend `position` value. */
+export const TASKBAR_POSITION_BY_LABEL: Record<string, string> = {
+  "Top": "top",
+  "Bottom": "bottom",
+  "Left": "left",
+  "Right": "right",
+};
+export const TASKBAR_POSITION_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(TASKBAR_POSITION_BY_LABEL).map(([label, value]) => [value, label]),
+);
 
 export const SENSITIVITY_MAP: Record<string, Sensitivity> = {
   "Low": "low",

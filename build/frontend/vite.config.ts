@@ -13,6 +13,7 @@ export default defineConfig({
         "main-window": "main-window.html",
         settings: "settings.html",
         hud: "hud.html",
+        notes: "notes.html",
       },
     },
   },

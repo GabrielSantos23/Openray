@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { RaycastIcon } from "../icons";
 import { ipc } from "../ipc";
 import { type Sensitivity } from "../matching";
+import type { FileSearchSettings } from "../fileSearch";
 import {
   ACCOUNT_PAGE_ID,
   PAGES,
@@ -13,6 +14,8 @@ import {
   type RowDefinition,
   type SettingsMap,
   type SettingsValue,
+  NOTES_ZOOM_LABEL_BY_VALUE,
+  NOTES_ZOOM_VALUE_BY_LABEL,
 } from "./pages";
 import {
   CALCULATOR_ROW_IDS,
@@ -20,7 +23,13 @@ import {
   CLIPBOARD_ROW_IDS,
   CLIPBOARD_TEXTAREA_ROW,
   DEFAULTS,
+  FILE_SEARCH_ROW_IDS,
+  FOCUS_SNOOZE_BY_LABEL,
+  FOCUS_SNOOZE_LABEL,
   HISTORY_DURATION_BY_LABEL,
+  NOTES_ESCAPE_BY_LABEL,
+  NOTES_ESCAPE_LABEL,
+  NOTES_ROW_IDS,
   QUICKLINKS_ROW_IDS,
   SENSITIVITY_MAP,
   SNIPPETS_INJECTION_DELAY_BY_LABEL,
@@ -32,6 +41,8 @@ import {
   SNIPPETS_SOUND_BY_LABEL,
   SNIPPETS_SOUND_LABEL,
   SNIPPETS_ROW_IDS,
+  TASKBAR_POSITION_BY_LABEL,
+  TASKBAR_POSITION_LABEL,
   TRANSLATOR_ROW_IDS,
   formatFilterRows,
   loadSettings,
@@ -43,6 +54,8 @@ import {
 import { Dropdown, HotkeyRecorder, RadioGroup, Switch } from "./controls";
 import { SearchField, SidebarLink, searchResults } from "./sidebar";
 import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
+import { applyPreset, readStoredHotkeys } from "../windowManagement";
+import { WM_COMMANDS } from "../wm-commands";
 
 export function Settings() {
   const [values, setValues] = useState<SettingsMap>(() => loadSettings());
@@ -303,6 +316,119 @@ export function Settings() {
       });
   }, [translatorLanguages]);
 
+  // File Search rows live in the Node store (`file-search-settings.json`); the switches and the
+  // ignore-patterns field write straight through, the scopes row shows the backend scope count.
+  const [fileSearchSettings, setFileSearchSettings] = useState<FileSearchSettings | null>(null);
+  useEffect(() => {
+    ipc
+      .backend("fileSearch.getSettings", {}, { module: "backend" })
+      .then((response) => {
+        const settings = (response as { settings?: FileSearchSettings }).settings;
+        if (!settings) return;
+        setFileSearchSettings(settings);
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "include-files-in-root-search": settings.showInRootSearch,
+            "file-search-ignore-patterns": settings.ignore.join(", "),
+            "file-search-include-hidden": settings.includeHiddenFiles,
+            "file-search-respect-ignore-files": settings.respectIgnoreFiles,
+            "file-search-scopes": `${settings.include.length} folder${settings.include.length === 1 ? "" : "s"}`,
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+  }, []);
+
+  // Focus, Games and Taskbar rows live in their backend stores; the switches write straight
+  // through, the selects map labels onto values.
+  useEffect(() => {
+    ipc
+      .backend("focus.getSession", {}, { module: "backend" })
+      .then((response) => {
+        const preferences = (response as { preferences?: { snoozeDurationMs: number | null; playSound: boolean; restoreAppsWhenSessionEnds: boolean } }).preferences;
+        if (!preferences) return;
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "focus-snooze-duration": FOCUS_SNOOZE_LABEL[String(preferences.snoozeDurationMs ?? "null")] ?? "3 minutes",
+            "focus-play-sound": preferences.playSound !== false,
+            "focus-restore-apps": preferences.restoreAppsWhenSessionEnds === true,
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+    ipc
+      .backend("games.getSettings", {}, { module: "backend" })
+      .then((response) => {
+        const enabled = (response as { gameModeEnabled?: boolean }).gameModeEnabled === true;
+        setValues((current) => {
+          const merged = { ...current, "games-game-mode": enabled };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+    ipc
+      .backend("taskbar.getSettings", {}, { module: "backend" })
+      .then((response) => {
+        const settings = response as { showTaskbar?: boolean; position?: string };
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "taskbar-show": settings.showTaskbar === true,
+            "taskbar-position": TASKBAR_POSITION_LABEL[settings.position ?? "bottom"] ?? "Bottom",
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+    ipc
+      .backend("notes.getPreferences", {}, { module: "backend" })
+      .then((response) => {
+        const preferences = response as { zoom?: number; escapeKeyBehavior?: string };
+        setValues((current) => {
+          const merged = {
+            ...current,
+            "notes-escape-key-behavior": NOTES_ESCAPE_LABEL[preferences.escapeKeyBehavior ?? "closesWindow"] ?? "Closes Window",
+            "notes-zoom": NOTES_ZOOM_LABEL_BY_VALUE[String(preferences.zoom ?? 1)] ?? "100%",
+          };
+          persistSettings(merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        /* the backend may not be up yet */
+      });
+  }, []);
+
+  // The Move & Resize command list shows the applied preset hotkeys (empty until one is applied).
+  useEffect(() => {
+    const hotkeys = readStoredHotkeys();
+    setValues((current) => {
+      const merged = { ...current };
+      for (const definition of WM_COMMANDS) {
+        if (merged[`wm-cmd-${definition.key}`] === undefined) {
+          merged[`wm-cmd-${definition.key}`] = hotkeys[definition.key] ?? "";
+        }
+      }
+      return merged;
+    });
+  }, []);
+
   const setValue = useCallback((id: string, next: SettingsValue) => {
     setValues((current) => {
       const merged = { ...current, [id]: next };
@@ -346,6 +472,103 @@ export function Settings() {
         localStorage.setItem("settings-snippets-primary-action", next === "Copy to Clipboard" ? "copy" : "paste");
       } else if (id === "snippets-warn-before-delete") {
         localStorage.setItem("settings-snippets-remember-delete", next ? "1" : "0");
+      }
+      return;
+    }
+    if (FILE_SEARCH_ROW_IDS.has(id)) {
+      // `file-search-scopes` and `file-search-reset` are actions handled in `runAction`; the rest
+      // write through to the store. A settings push may follow (the backend reindexes).
+      if (
+        id === "file-search-scopes" ||
+        id === "file-search-reset"
+      ) {
+        return;
+      }
+      const patch: Record<string, unknown> =
+        id === "include-files-in-root-search"
+          ? { showInRootSearch: Boolean(next) }
+          : id === "file-search-include-hidden"
+            ? { includeHiddenFiles: Boolean(next) }
+            : id === "file-search-respect-ignore-files"
+              ? { respectIgnoreFiles: Boolean(next) }
+              : { ignore: String(next).split(",").map((item) => item.trim()).filter(Boolean) };
+      void ipc
+        .backend("fileSearch.setSettings", patch, { module: "backend" })
+        .then((response) => {
+          const settings = (response as { settings?: FileSearchSettings }).settings;
+          if (settings) setFileSearchSettings(settings);
+        })
+        .catch((error: unknown) => {
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", {
+              detail: {
+                title: "Couldn't save that setting",
+                message: error instanceof Error ? error.message : undefined,
+              },
+            }),
+          );
+        });
+      return;
+    }
+    if (id === "wm-preset") {
+      // Applying a preset registers the Magnet map with the host (Rectangle ships byte-identical
+      // to Magnet); `None` clears every command hotkey. The toast strings are the confirmed ones.
+      const preset = next === "Magnet" || next === "Rectangle" ? "Magnet" : null;
+      void applyPreset(preset)
+        .then(() => {
+          const hotkeys = readStoredHotkeys();
+          setValues((current) => {
+            const merged: SettingsMap = { ...current, [id]: next };
+            for (const definition of WM_COMMANDS) {
+              merged[`wm-cmd-${definition.key}`] = hotkeys[definition.key] ?? "";
+            }
+            persistSettings(merged);
+            return merged;
+          });
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", {
+              detail: { title: preset ? `Applied "${String(next)}" hotkeys` : "Removed hotkeys" },
+            }),
+          );
+        })
+        .catch(() => {
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", { detail: { title: "Failed to apply preset" } }),
+          );
+        });
+      return;
+    }
+    if (id === "focus-snooze-duration" || id === "focus-play-sound" || id === "focus-restore-apps") {
+      const setFocusPreference = (key: string, value: unknown) => {
+        void ipc.backend("focus.setPreferences", { [key]: value }, { module: "backend" }).catch(() => undefined);
+      };
+      if (id === "focus-snooze-duration") setFocusPreference("snoozeDurationMs", FOCUS_SNOOZE_BY_LABEL[String(next)] ?? null);
+      else if (id === "focus-play-sound") setFocusPreference("playSound", Boolean(next));
+      else if (id === "focus-restore-apps") setFocusPreference("restoreAppsWhenSessionEnds", Boolean(next));
+      return;
+    }
+    if (id === "games-game-mode") {
+      // Game Mode toggles the host's fullscreen hotkey suppression (docs/focus-games-taskbar-spec.md §B).
+      void ipc
+        .backend("games.setGameMode", { enabled: Boolean(next) }, { module: "backend" })
+        .catch(() => undefined);
+      return;
+    }
+    if (id === "taskbar-show" || id === "taskbar-position") {
+      const payload = id === "taskbar-show"
+        ? { key: "showTaskbar", value: Boolean(next) }
+        : { key: "position", value: TASKBAR_POSITION_BY_LABEL[String(next)] ?? "bottom" };
+      void ipc.backend("taskbar.setSetting", payload, { module: "backend" }).catch(() => undefined);
+      return;
+    }
+    if (NOTES_ROW_IDS.has(id)) {
+      const setNotePreference = (key: string, value: unknown) => {
+        void ipc.backend("notes.setPreference", { key, value }, { module: "backend" }).catch(() => undefined);
+      };
+      if (id === "notes-escape-key-behavior") {
+        setNotePreference("escapeKeyBehavior", NOTES_ESCAPE_BY_LABEL[String(next)] ?? "closesWindow");
+      } else if (id === "notes-zoom") {
+        setNotePreference("zoom", NOTES_ZOOM_VALUE_BY_LABEL[String(next)] ?? 1);
       }
       return;
     }
@@ -455,7 +678,64 @@ export function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [translatorLanguages]);
 
+  const applyFileSearchSettings = useCallback((settings: FileSearchSettings | undefined) => {
+    if (!settings) return;
+    setFileSearchSettings(settings);
+    setValues((current) => {
+      const merged = {
+        ...current,
+        "include-files-in-root-search": settings.showInRootSearch,
+        "file-search-ignore-patterns": settings.ignore.join(", "),
+        "file-search-include-hidden": settings.includeHiddenFiles,
+        "file-search-respect-ignore-files": settings.respectIgnoreFiles,
+        "file-search-scopes": `${settings.include.length} folder${settings.include.length === 1 ? "" : "s"}`,
+      };
+      persistSettings(merged);
+      return merged;
+    });
+  }, []);
+
   const runAction = useCallback((id: string) => {
+    if (id === "file-search-scopes") {
+      void ipc
+        .backend("fileSystem.showSelectFolderDialog", { title: "Add Search Scope" }, { module: "backend" })
+        .then((response) => {
+          const folder = (response as { path?: string | null }).path;
+          if (!folder) return;
+          const include = [...new Set([...(fileSearchSettings?.include ?? []), folder])];
+          return ipc
+            .backend("fileSearch.setSettings", { include }, { module: "backend" })
+            .then((response) => {
+              applyFileSearchSettings((response as { settings?: FileSearchSettings }).settings);
+              window.dispatchEvent(
+                new CustomEvent("raycast-mini:settings-toast", { detail: { title: "Indexing Files…" } }),
+              );
+            });
+        })
+        .catch((error: unknown) => {
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", {
+              detail: { title: "Couldn't add that folder", message: error instanceof Error ? error.message : undefined },
+            }),
+          );
+        });
+      return;
+    }
+    if (id === "file-search-reset") {
+      // The confirmed confirm + toast strings.
+      if (!window.confirm("Reset File Search Settings?")) return;
+      void ipc
+        .backend("fileSearch.resetToDefaults", {}, { module: "backend" })
+        .then((response) => {
+          applyFileSearchSettings((response as { settings?: FileSearchSettings }).settings);
+          window.dispatchEvent(
+            new CustomEvent("raycast-mini:settings-toast", {
+              detail: { title: "File Search settings reset to defaults" },
+            }),
+          );
+        });
+      return;
+    }
     if (id === "clipboard-run-maintenance") {
       void ipc
         .backend("clipboard.runMaintenance", {}, { module: "backend" })
@@ -474,7 +754,7 @@ export function Settings() {
           );
         });
     }
-  }, []);
+  }, [fileSearchSettings, applyFileSearchSettings]);
 
   const page = useMemo(() => PAGES.find((candidate) => candidate.id === route) ?? PAGES[0], [route]);
   const results = useMemo(() => searchResults(query), [query]);
@@ -670,6 +950,10 @@ function Row({
             onChange={(event) => onValueChange(event.target.value)}
           />
         );
+      case "textarea-commit":
+        // Buffers keystrokes locally and commits on blur — for values whose write triggers an
+        // expensive backend reaction (File Search's ignore patterns reindex on every change).
+        return <CommitTextarea row={row} value={String(value ?? "")} onCommit={onValueChange} />;
       case "text":
         return (
           <input
@@ -681,10 +965,12 @@ function Row({
             onChange={(event) => onValueChange(event.target.value)}
           />
         );
-      case "action":
+      case "action": {
+        // The value may be dynamic (e.g. the File Search scopes count from the backend store).
+        const actionValue = value === undefined || value === "" ? row.value : String(value);
         return (
           <span className="settings-row__actions">
-            {row.value ? <span className="settings-row__value">{row.value}</span> : null}
+            {actionValue ? <span className="settings-row__value">{actionValue}</span> : null}
             <button
               type="button"
               className="settings-button"
@@ -698,8 +984,10 @@ function Row({
             </button>
           </span>
         );
+      }
       case "info":
-        return <span className="settings-row__value">{row.value}</span>;
+        // The value may be dynamic (the Window Management command list shows applied hotkeys).
+        return <span className="settings-row__value">{row.value ?? (value !== undefined ? String(value) : "")}</span>;
       default:
         return null;
     }
@@ -723,6 +1011,40 @@ function Row({
         {right()}
       </div>
     </div>
+  );
+}
+
+/** A textarea that only reports its value when the user leaves the field (or presses Ctrl+Enter). */
+function CommitTextarea({
+  row,
+  value,
+  onCommit,
+}: {
+  row: RowDefinition;
+  value: string;
+  onCommit: (next: SettingsValue) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => {
+    if (draft !== value) onCommit(draft);
+  };
+  return (
+    <textarea
+      className="settings-textarea"
+      aria-label={row.title}
+      placeholder={row.description}
+      value={draft}
+      disabled={row.unavailable}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          commit();
+        }
+      }}
+    />
   );
 }
 

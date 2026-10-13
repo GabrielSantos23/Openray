@@ -122,8 +122,8 @@ export interface QuicklinksViewProps {
   onBack: () => void;
   closeMainWindow: () => void;
   applications: ApplicationCommand[];
-  /** Seed the create form (the `createWithURL` root-search entry). */
-  createLink?: string | null;
+  /** Seed the create form (the `createWithURL` root-search entry, or a note's Create Quicklink). */
+  createLink?: string | { link: string; name?: string } | null;
   onConsumeCreateLink?: () => void;
 }
 
@@ -146,7 +146,8 @@ export function QuicklinksView({
 
   useEffect(() => {
     if (createLink) {
-      setForm({ mode: "create", name: "", link: createLink, openWith: "", tags: "", icon: "" });
+      const seed = typeof createLink === "string" ? { name: "", link: createLink } : { name: createLink.name ?? "", link: createLink.link };
+      setForm({ mode: "create", ...seed, openWith: "", tags: "", icon: "" });
       onConsumeCreateLink?.();
     }
   }, [createLink, onConsumeCreateLink]);
@@ -495,9 +496,9 @@ function SearchQuicklinks({
   return (
     <div className="window">
       <header className="window__header">
-        <button type="button" className="icon icon--plain" onClick={onBack} aria-label="Back">
+        <button type="button" className="back-button" onClick={onBack} aria-label="Back">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
 
@@ -1094,9 +1095,9 @@ function CreateQuicklinkForm({
   return (
     <div className="window">
       <header className="window__header">
-        <button type="button" tabIndex={-1} className="icon icon--plain" onClick={onBack} aria-label="Back">
+        <button type="button" tabIndex={-1} className="back-button" onClick={onBack} aria-label="Back">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
         <span className="footer__spacer" />
@@ -1279,9 +1280,9 @@ function ImportQuicklinks({
   return (
     <div className="window">
       <header className="window__header">
-        <button type="button" className="icon icon--plain" onClick={onBack} aria-label="Back">
+        <button type="button" className="back-button" onClick={onBack} aria-label="Back">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
       </header>
@@ -1390,9 +1391,9 @@ function ExportQuicklinks({
   return (
     <div className="window">
       <header className="window__header">
-        <button type="button" className="icon icon--plain" onClick={onBack} aria-label="Back">
+        <button type="button" className="back-button" onClick={onBack} aria-label="Back">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
       </header>

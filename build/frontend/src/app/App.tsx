@@ -31,7 +31,20 @@ import {
   type ToastState,
 } from "../toastStore";
 import { RaycastIcon } from "../icons";
-import { applicationFavoriteKey, commandFavoriteKey, useFavorites } from "../favorites";
+import { readStoredHotkeys, reregisterStoredHotkeys, runWindowManagementCommand, wmCommandDefinition, wmCommandIcon } from "../windowManagement";
+import {
+  cancelFocusSession,
+  completeFocusSession,
+  pauseFocusSession,
+  readLastStartInput,
+  resumeFocusSession,
+  restartFocusSession,
+  runFocusAction,
+  useSessionState,
+  type FocusSessionState,
+} from "../focus";
+import { getGameFlags, hideGame, markAsApplication, type GamePayload } from "../games";
+import { applicationFavoriteKey, commandFavoriteKey, internalFavoriteKey, useFavorites } from "../favorites";
 import {
   type ApplicationCommand,
   runApplicationAction,
@@ -56,7 +69,18 @@ import {
   type FileSearchResult,
   generateKeywords,
 } from "../matching";
-import { searchFiles, loadFileSearchConfig, loadFileUsageScores, trackFileUsage } from "../fileSearch";
+import {
+  fetchFileResults,
+  fetchFileSettings,
+  fetchIndexState,
+  fileActionGroups,
+  fileIconFor,
+  runFileAction,
+  trackFileUsage,
+  type FileIndexState,
+  type FileSearchRow,
+  type FileSearchSettings,
+} from "../fileSearch";
 import { getInlineSectionResults, loadInlineSectionSettings, type InlineSectionResult, type InlineSectionSettings } from "../inlineSections";
 import {
   getCommandArguments,
@@ -75,17 +99,22 @@ import {
   CLIPBOARD_FAVORITE_KEY,
   type ClipboardEntryResult,
   type ExtensionEntry,
+  type InternalCommandEntry,
   type ExtensionSummary,
   INTERNAL_EXTENSION_META,
   INTERNAL_COMMANDS,
   internalCommandEntry,
   type CalculatorEntry,
+  type FocusActionEntry,
+  type FocusSessionEntry,
+  type FocusViewEntry,
+  type GameEntry,
   type RootEntry,
   type SearchableEntry,
   type TranslateEntry,
   type TranslatorCustomCommand,
 } from "./entries";
-import { buildSections } from "./buildSections";
+import { buildSections, FOCUS_COMMANDS } from "./buildSections";
 import {
   formatRelativeTime,
   nextToastId,
@@ -101,6 +130,17 @@ import {
 } from "./rootHelpers";
 import { CommandSession } from "./CommandSession";
 
+/** The dynamic session row's subtitle: remaining time for timed sessions, paused state otherwise. */
+function focusSessionSubtitle(entry: FocusSessionEntry): string {
+  if (entry.status === "paused") return entry.pauseEndsAt ? "Paused — resumes automatically" : "Paused";
+  if (entry.mode === "noLimit") return "No time limit";
+  if (entry.remainingMs === null) return "Running";
+  const minutes = Math.max(0, Math.round(entry.remainingMs / 60000));
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours > 0 ? `${hours}h ${rest}m remaining` : `${rest}m remaining`;
+}
+
 export function MainWindow() {
   const [extensions, setExtensions] = useState<ExtensionSummary[]>([]);
   const [searchText, setSearchText] = useState("");
@@ -110,7 +150,7 @@ export function MainWindow() {
   // Action panel for a command row (extension commands and the synthetic Clipboard History
   // entry) — Raycast's root search opens the same action popover for every result kind, not
   // just applications.
-  const [commandPanelEntry, setCommandPanelEntry] = useState<ExtensionEntry | ClipboardEntryResult | null>(
+  const [commandPanelEntry, setCommandPanelEntry] = useState<ExtensionEntry | ClipboardEntryResult | InternalCommandEntry | null>(
     null,
   );
   const [hostError, setHostError] = useState<string | null>(null);
@@ -118,13 +158,20 @@ export function MainWindow() {
   const [sensitivity, setSensitivity] = useState<Sensitivity>("medium");
   const [usageScores, setUsageScores] = useState<Map<string, number>>(new Map());
   const [fallbackCommands, setFallbackCommands] = useState<FallbackCommand[]>([]);
-  const [fileSearchConfig, setFileSearchConfig] = useState(() => loadFileSearchConfig());
+  // File Search: settings and index state live in the backend; the results cache is per query.
+  const [fileSearchSettings, setFileSearchSettings] = useState<FileSearchSettings | null>(null);
+  const [fileIndexState, setFileIndexState] = useState<FileIndexState | null>(null);
   const [fileResults, setFileResults] = useState<FileSearchResult[]>([]);
-  const [fileUsageScores, setFileUsageScores] = useState(() => loadFileUsageScores());
+  const [fileSearchRefresh, setFileSearchRefresh] = useState(0);
+  // Action panel for a file result row (Ctrl+K on the Files section).
+  const [filePanel, setFilePanel] = useState<FileSearchRow | null>(null);
   const [inlineSectionSettings, setInlineSectionSettings] = useState(() => loadInlineSectionSettings());
   const [inlineResults, setInlineResults] = useState<InlineSectionResult[]>([]);
   // Action panel for the ephemeral calculator row (Ctrl+K on the split row).
   const [calculatorPanel, setCalculatorPanel] = useState<CalculatorEntry | null>(null);
+  // Action panels for the Focus session row and the dynamic game rows.
+  const [focusSessionPanel, setFocusSessionPanel] = useState<FocusSessionEntry | null>(null);
+  const [gamePanel, setGamePanel] = useState<GameEntry | null>(null);
   // Translator: saved custom commands (dynamic root rows) and the seed the quick row passes to
   // the Translate view when "Open in Translator" runs.
   const [customTranslateCommands, setCustomTranslateCommands] = useState<TranslatorCustomCommand[]>([]);
@@ -133,7 +180,7 @@ export function MainWindow() {
   // Quicklinks: one root row per stored quicklink, refreshed on `quicklinks.updated`.
   const { quicklinks: quicklinkRows } = useQuicklinks();
   const [quicklinkArgs, setQuicklinkArgs] = useState<QuicklinkEntry | null>(null);
-  const [quicklinkCreateLink, setQuicklinkCreateLink] = useState<string | null>(null);
+  const [quicklinkCreateLink, setQuicklinkCreateLink] = useState<string | { link: string; name?: string } | null>(null);
   // Argument input state
   const [argumentEntry, setArgumentEntry] = useState<ExtensionEntry | null>(null);
   const [argumentValues, setArgumentValues] = useState<ArgumentValues>({});
@@ -249,17 +296,20 @@ export function MainWindow() {
     return () => window.removeEventListener("raycast-mini:fallback-commands-changed", handleFallbackChange as EventListener);
   }, []);
 
-  // File search - search files when query changes and file search is enabled
+  // File Search — debounced backend query while `Include Files in Root Search` is on.
   useEffect(() => {
-    if (!fileSearchConfig.enabled || searchText.trim().length === 0) {
+    if (!fileSearchSettings?.showInRootSearch || searchText.trim().length === 0) {
       setFileResults([]);
       return;
     }
-    
     const trimmed = searchText.trim();
-    const results = searchFiles(trimmed, fileSearchConfig, fileUsageScores);
-    results.then(setFileResults);
-  }, [searchText, fileSearchConfig, fileUsageScores]);
+    const timer = setTimeout(() => {
+      fetchFileResults(trimmed, { limit: 10 })
+        .then((rows) => setFileResults(rows))
+        .catch(() => setFileResults([]));
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [searchText, fileSearchSettings, fileSearchRefresh]);
 
   // Inline sections - update results when query changes
   useEffect(() => {
@@ -394,13 +444,22 @@ export function MainWindow() {
     return onNotification("translator.customCommandsUpdated", refreshCustomTranslateCommands);
   }, [refreshCustomTranslateCommands]);
 
-  // Listen for file search config changes from Settings
+  // File Search settings and index state live in the backend store; the indexer pushes
+  // `fileSearch.indexState` (live counts for the pinned indexing row) and `settingsUpdated`
+  // whenever the Settings window changes a row.
   useEffect(() => {
-    const handleConfigChange = (event: CustomEvent) => {
-      setFileSearchConfig(event.detail);
+    fetchFileSettings().then(setFileSearchSettings).catch(() => undefined);
+    fetchIndexState().then(setFileIndexState).catch(() => undefined);
+    const offState = onNotification("fileSearch.indexState", (raw) => {
+      setFileIndexState(raw as FileIndexState);
+    });
+    const offSettings = onNotification("fileSearch.settingsUpdated", (raw) => {
+      setFileSearchSettings((raw as { settings?: FileSearchSettings }).settings ?? null);
+    });
+    return () => {
+      offState();
+      offSettings();
     };
-    window.addEventListener("raycast-mini:file-search-config-changed", handleConfigChange as EventListener);
-    return () => window.removeEventListener("raycast-mini:file-search-config-changed", handleConfigChange as EventListener);
   }, []);
 
   // Listen for inline section settings changes from Settings
@@ -417,6 +476,26 @@ export function MainWindow() {
   // the document visibilitychange and the host’s explicit `window.visibilityChanged` push feed the
   // same timer — WPF Hide() does not always surface as a renderer visibility event.
   const popToRootTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Window Management: preset hotkey labels refresh when the launcher reopens (the Settings
+  // window edits them in its own document), and the host's registrations are replayed on mount.
+  const [storedWmHotkeys, setStoredWmHotkeys] = useState<Record<string, string>>(() => readStoredHotkeys());
+  useEffect(() => {
+    void reregisterStoredHotkeys().catch(() => undefined);
+    return onNotification("windowManagement.hotkey", (raw) => {
+      const payload = raw as { commandKey?: string };
+      if (!payload.commandKey) return;
+      void runWindowManagementCommand(payload.commandKey, { showToast, closeMainWindow });
+    });
+    // showToast/closeMainWindow are stable callbacks; the subscription lives for the session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const offHost = onNotification("window.visibilityChanged", (raw) => {
+      const payload = raw as { visible?: boolean };
+      if (payload.visible === true) setStoredWmHotkeys(readStoredHotkeys());
+    });
+    return offHost;
+  }, []);
   useEffect(() => {
     const handleVisibility = (visible: boolean) => {
       // The toast store mirrors host visibility: a live in-window toast migrates to the HUD.
@@ -514,6 +593,18 @@ export function MainWindow() {
       setSelected(CLIPBOARD_COMMAND);
     });
     return off;
+  }, []);
+
+  // The Notes window's `Create Quicklink` action: the host reveals the launcher with the
+  // Quicklinks create form prefilled with the note deeplink and title (the confirmed cross-window
+  // action `Create Quicklink`).
+  useEffect(() => {
+    return onNotification("quicklink.createSeed", (raw) => {
+      const payload = raw as { link?: string; name?: string } | null;
+      if (!payload?.link) return;
+      setQuicklinkCreateLink({ link: payload.link, name: payload.name });
+      setSelected(internalCommandEntry("quicklinks", "create"));
+    });
   }, []);
 
   // The renderer-side toast/HUD handlers. Raycast's equivalents live in `main-window-g1Vb1JLY.js`:
@@ -664,6 +755,83 @@ export function MainWindow() {
 
   const { applications, error: applicationsError, loading: applicationsLoading } = useApplications(true);
 
+  // Focus (docs/focus-games-taskbar-spec.md §A): the dynamic session row subscribes to the
+  // backend's `focus.sessionChanged` push; the games flag map feeds the dynamic `game` rows.
+  const { state: focusState, refresh: refreshFocus } = useSessionState();
+  const [gameFlags, setGameFlags] = useState<Record<string, boolean>>({});
+  const refreshGameFlags = useCallback(() => {
+    getGameFlags()
+      .then((flags) => setGameFlags(flags.games))
+      .catch(() => undefined);
+  }, []);
+  useEffect(refreshGameFlags, [refreshGameFlags]);
+  useEffect(() => {
+    // Flags can change from the Settings window (Game Mode presets) or a game view session.
+    return onNotification("window.visibilityChanged", (raw) => {
+      const payload = raw as { visible?: boolean };
+      if (payload.visible === true) refreshGameFlags();
+    });
+  }, [refreshGameFlags]);
+
+  // Focus: the panel window's buttons route into the backend state machine; `edit` opens the
+  // edit form in the launcher (surfacing the hidden window, like the alert store does).
+  useEffect(() => {
+    return onNotification("focus.panelAction", (raw) => {
+      const payload = raw as { action?: string; Action?: string; durationMs?: number | null; DurationMs?: number | null };
+      const action = payload.action ?? payload.Action;
+      const durationMs = payload.durationMs ?? payload.DurationMs;
+      if (action === "edit") {
+        setSelected({ kind: "focus-view", command: "edit", title: "Edit Focus Session" });
+        void ipcRequest("window.showMainWindow", {}, { module: "frontend" }).catch(() => undefined);
+        return;
+      }
+      const run = action === "pause"
+        ? pauseFocusSession(durationMs ?? null)
+        : action === "resume"
+          ? resumeFocusSession()
+          : action === "complete"
+            ? completeFocusSession()
+            : action === "cancel"
+              ? cancelFocusSession()
+              : null;
+      if (!run) return;
+      void run.then(() => refreshFocus()).catch(() => undefined);
+    });
+  }, [refreshFocus]);
+  const gameApps = useMemo(
+    () => applications.filter((app) => gameFlags[app.payload.id]),
+    [applications, gameFlags],
+  );
+  const gamePanelGroups = useMemo<ActionGroup[]>(() => {
+    if (!gamePanel) return [];
+    const id = gamePanel.app.id;
+    return [
+      {
+        name: "general",
+        actions: [
+          { id: "game:open", title: "Open Game", itemId: id },
+          { id: "game:runAsAdministrator", title: "Run as Administrator", itemId: id },
+          { id: "game:reveal", title: "Show in File Explorer", itemId: id },
+        ],
+      },
+      {
+        name: "copy",
+        actions: [
+          { id: "game:copyPath", title: "Copy Path", itemId: id },
+          { id: "game:copyName", title: "Copy Name", itemId: id },
+          { id: "game:copyBundleIdentifier", title: "Copy Bundle Identifier", itemId: id },
+        ],
+      },
+      {
+        name: "configure",
+        actions: [
+          { id: "game:treatAsApplication", title: "Treat as Application", itemId: id },
+          { id: "game:hide", title: "Hide Game", itemId: id },
+        ],
+      },
+    ];
+  }, [gamePanel]);
+
   const rootLoading = applicationsLoading || extensionsLoading;
 
   // Update usage scores when applications are loaded
@@ -687,11 +855,22 @@ export function MainWindow() {
     }
   }, [applications, usageScores]);
 
+  // `usage.getAppUsage` keys counts by application id, but the root ranker compares by title —
+  // alias the counts so an app's open frequency breaks ties in its favor.
+  const rootUsageScores = useMemo(() => {
+    const map = new Map(usageScores);
+    for (const app of applications) {
+      const count = usageScores.get(app.payload.id);
+      if (count !== undefined) map.set(app.title, count);
+    }
+    return map;
+  }, [usageScores, applications]);
+
   // Root Search renders Favorites / Applications / Commands as named sections, exactly like
   // Raycast's root search, and the flat selection index walks all of them in order.
   const sections = useMemo(
-    () => buildSections(searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands),
-    [searchText, applications, extensions, favorites, sensitivity, usageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands],
+    () => buildSections(searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false, focusState?.session ?? null, gameApps),
+    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings, focusState, gameApps],
   );
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
@@ -731,6 +910,28 @@ export function MainWindow() {
   // synthetic Clipboard History entry shares the panel; only the favorite key differs.
   const commandPanelGroups = useMemo<ActionGroup[]>(() => {
     if (!commandPanelEntry) return [];
+    // Internal commands are filed by area/command at the root; they have no favorite key
+    // (root sections match favorites only for applications, clipboard and extension commands).
+    if (commandPanelEntry.kind === "internal") {
+      const internalKey = internalFavoriteKey(commandPanelEntry.commandId);
+      return [
+        { name: "general", actions: [{ id: "command:open", title: "Open Command", itemId: internalKey }] },
+        {
+          name: "favorites",
+          actions: [
+            {
+              id: "command:favorite",
+              title: isFavorite(internalKey) ? "Remove from Favorites" : "Add to Favorites",
+              itemId: internalKey,
+            },
+          ],
+        },
+        {
+          name: "configure",
+          actions: [{ id: "command:configureCommand", title: "Configure Command", itemId: internalKey }],
+        },
+      ];
+    }
     const key =
       commandPanelEntry.kind === "clipboard"
         ? CLIPBOARD_FAVORITE_KEY
@@ -754,20 +955,235 @@ export function MainWindow() {
     ];
   }, [commandPanelEntry, isFavorite]);
 
+  // Opening a file hides the launcher first, like every launching action in Raycast.
+  const openFileEntry = useCallback(
+    (file: FileSearchResult) => {
+      trackFileUsage(file.path);
+      closeMainWindow();
+      void ipc.backend("fileSystem.openFile", { path: file.path }, { module: "backend" }).catch(() => {
+        showToast("Failed to open file", file.name);
+      });
+    },
+    [closeMainWindow, showToast],
+  );
+
+  // The `Open in File Explorer` fallback: trailing separator → open the directory, otherwise
+  // select the target in its parent (the confirmed `explorer /select` behavior).
+  const openExplorerEntry = useCallback(
+    (target: string) => {
+      closeMainWindow();
+      const trimmed = target.replace(/[\\/]+$/, "");
+      const isDirectory = /[\\/]$/.test(target);
+      void ipc
+        .backend(isDirectory ? "fileSystem.openFile" : "shell.revealFile", { path: trimmed }, { module: "backend" })
+        .catch(() => undefined);
+    },
+    [closeMainWindow],
+  );
+
   // Ctrl+K / right-click / footer button all funnel through here, whatever the row is.
-  const openRootActionPanel = useCallback((entry: RootEntry | undefined) => {
-    if (!entry) return;
+  const openRootActionPanel = useCallback((entry: RootEntry | undefined) => {    if (!entry) return;
     if (entry.kind === "application") setOpenApplication(entry.application);
-    // Extension commands AND the Clipboard History entry get the command action panel —
-    // Ctrl+K must never run the command directly.
-    else if (entry.kind === "internal" || entry.kind === "quicklink-create") setSelected(entry);
+    // Extension commands, internal commands AND the Clipboard History entry get the command
+    // action panel — Ctrl+K must never run the command directly.
+    else if (entry.kind === "internal") setCommandPanelEntry(entry);
+    else if (entry.kind === "quicklink-create") setSelected(entry);
     else if (entry.kind === "calculator") setCalculatorPanel(entry);
     else if (entry.kind === "translate") setTranslatePanel(entry);
+    else if (entry.kind === "file") setFilePanel(entry.file as FileSearchRow);
+    else if (entry.kind === "open-in-explorer") openExplorerEntry(entry.path);
+    // Window Management commands have no view or action panel — running IS the only action (the
+    // `open-in-explorer` row above works the same way); the args commands open their view.
+    else if (entry.kind === "wm-command") runWindowManagementCommand(entry.commandKey, { showToast, closeMainWindow });
+    else if (entry.kind === "wm-args") setSelected(entry);
+    else if (entry.kind === "focus-action") void runFocusAction(entry.action, { showToast, refresh: refreshFocus }, readLastStartInput());
+    else if (entry.kind === "focus-view" || entry.kind === "games-view") setSelected(entry);
+    else if (entry.kind === "focus-session") setFocusSessionPanel(entry);
+    else if (entry.kind === "game") setGamePanel(entry);
     // A custom translate command's primary action IS opening the view; the panel would add
     // nothing, so Ctrl+K opens the prefilled Translate view directly.
     else if (entry.kind === "translator-command") setSelected(entry);
-    else if (entry.kind !== "fallback" && entry.kind !== "file" && entry.kind !== "inline" && entry.kind !== "quicklink") setCommandPanelEntry(entry);
-  }, []);
+    else if (entry.kind !== "fallback" && entry.kind !== "inline" && entry.kind !== "quicklink" && entry.kind !== "file-indexing") setCommandPanelEntry(entry);
+  }, [showToast, closeMainWindow, refreshFocus]);
+
+  // Raycast rows carry an actions chevron on the right edge; clicking it opens the action panel
+  // instead of running the row's primary action (same as Ctrl+K / right-click).
+  const renderRowActions = (entry: RootEntry) => (
+    <span
+      className="list__rowActions"
+      role="button"
+      title="Actions (Ctrl K)"
+      onClick={(event) => {
+        event.stopPropagation();
+        openRootActionPanel(entry);
+      }}
+    >
+      <RaycastIcon name="chevron-right" size={12} />
+    </span>
+  );
+
+  // Enter on a dynamic game row launches it (primary action `Open Game`).
+  const openGameEntry = useCallback((game: GamePayload) => {
+    void ipc.backend("usage.incrementAppUsage", { appId: game.id, count: 1 }, { module: "backend" }).catch(() => undefined);
+    closeMainWindow();
+    void ipc.backend("applications.open", { id: game.id }, { module: "backend" }).catch(() => undefined);
+  }, [closeMainWindow]);
+
+  const runGamePanelAction = useCallback(
+    (game: GamePayload, actionId: string) => {
+      const verb = actionId.slice(actionId.indexOf(":") + 1);
+      setGamePanel(null);
+      switch (verb) {
+        case "open":
+          openGameEntry(game);
+          return;
+        case "runAsAdministrator":
+          closeMainWindow();
+          void ipc.backend("applications.runAsAdministrator", { id: game.id }, { module: "backend" }).catch(() => undefined);
+          return;
+        case "reveal":
+          void ipc.backend("applications.reveal", { id: game.id }, { module: "backend" }).catch(() => undefined);
+          return;
+        case "copyPath":
+        case "copyName":
+          void ipc
+            .backend(`applications.${verb}`, { id: game.id }, { module: "backend" })
+            .then((result) => {
+              const content = (result as { content?: string }).content;
+              if (content) {
+                void ipc.backend("clipboard.write", { content }, { module: "backend" });
+                showToast("Copied to clipboard", content);
+              }
+            })
+            .catch(() => undefined);
+          return;
+        case "copyBundleIdentifier":
+          if (game.bundleId) {
+            void ipc.backend("clipboard.write", { content: game.bundleId }, { module: "backend" });
+            showToast("Copied to clipboard", game.bundleId);
+          }
+          return;
+        case "treatAsApplication":
+          void markAsApplication(game.id).then(() => {
+            showToast("Marked as application", game.name);
+            refreshGameFlags();
+          });
+          return;
+        case "hide":
+          void hideGame(game.id).then(() => {
+            showToast("Hidden Game", game.name);
+            refreshGameFlags();
+          });
+          return;
+        default:
+          return;
+      }
+    },
+    [closeMainWindow, openGameEntry, refreshGameFlags, showToast],
+  );
+
+  // The Focus session row's actions (the shipped dynamic `session` command). Raycast renders the
+  // pause durations as a submenu; this clone flattens them into five actions — documented delta.
+  const focusSessionPanelGroups = useMemo<ActionGroup[]>(() => {
+    if (!focusSessionPanel) return [];
+    const groups: ActionGroup[] = [{ name: "primary", actions: [{ id: "focus:edit", title: "Edit Session", itemId: focusSessionPanel.title }] }];
+    const session: ActionGroup[] = [{ name: "session", actions: [] }];
+    const actions = session[0].actions;
+    actions.push({ id: "focus:restart", title: "Restart Session", itemId: focusSessionPanel.title });
+    actions.push({ id: "focus:complete", title: "Complete Session", itemId: focusSessionPanel.title });
+    if (focusSessionPanel.status === "running") {
+      for (const [label, durationMs] of [
+        ["Pause Session for 1 Minute", 60000],
+        ["Pause Session for 2 Minutes", 120000],
+        ["Pause Session for 5 Minutes", 300000],
+        ["Pause Session for 10 Minutes", 600000],
+        ["Pause Session Indefinitely", 0],
+      ] as const) {
+        actions.push({ id: `focus:pause:${durationMs}`, title: label, itemId: focusSessionPanel.title });
+      }
+    }
+    if (focusSessionPanel.status === "paused") {
+      actions.push({ id: "focus:resume", title: "Resume Session", itemId: focusSessionPanel.title });
+    }
+    actions.push({ id: "focus:cancel", title: "Cancel Session", itemId: focusSessionPanel.title });
+    groups.push(session[0]);
+    return groups;
+  }, [focusSessionPanel]);
+
+  const runFocusPanelAction = useCallback(
+    (actionId: string) => {
+      setFocusSessionPanel(null);
+      const verb = actionId.slice(actionId.indexOf(":") + 1);
+      const fail = (title: string, error: unknown) => showToast(title, error instanceof Error ? error.message : String(error));
+      if (verb === "edit") {
+        setSelected({ kind: "focus-view", command: "edit", title: "Edit Focus Session" });
+        return;
+      }
+      if (verb === "restart") {
+        void restartFocusSession().then(() => showToast("Focus session started.")).catch((error) => fail("Failed to restart focus session", error));
+      } else if (verb === "complete") {
+        void completeFocusSession().then(() => showToast("Focus session completed")).catch((error) => fail("Failed to complete focus session", error));
+      } else if (verb.startsWith("pause:")) {
+        const durationMs = Number(verb.slice("pause:".length));
+        void pauseFocusSession(durationMs > 0 ? durationMs : null).then(() => showToast("Focus session paused.")).catch((error) => fail("Failed to pause focus session", error));
+      } else if (verb === "resume") {
+        void resumeFocusSession().then(() => showToast("Focus session running.")).catch((error) => fail("Failed to resume focus session", error));
+      } else if (verb === "cancel") {
+        void cancelFocusSession().then(() => showToast("Focus session cancelled")).catch((error) => fail("Failed to cancel focus session", error));
+      }
+      refreshFocus();
+    },
+    [refreshFocus, showToast],
+  );
+
+  // --- File Search actions (docs/file-search-spec.md — the confirmed action set) ---------------
+
+  const refreshFileSearch = useCallback(() => setFileSearchRefresh((value) => value + 1), []);
+
+  const fileActionHandlers = useMemo(
+    () => ({
+      showToast,
+      refresh: refreshFileSearch,
+      openWith: () => undefined, // the root panel omits "Open With…" (it lives in the view)
+      saveAsQuicklink: (row: FileSearchRow) => {
+        void ipc.backend(
+          "quicklinks.save",
+          { name: row.name, link: `file:///${row.path.replace(/\\/g, "/")}`, openWith: null, icon: null, tags: ["file"] },
+          { module: "backend" },
+        )
+          .then(() => showToast("Saved as Quicklink", row.name))
+          .catch(() => showToast("Failed to save Quicklink"));
+      },
+    }),
+    [showToast, refreshFileSearch],
+  );
+
+  const filePanelGroups = useMemo<ActionGroup[]>(
+    () => (filePanel ? fileActionGroups(filePanel, { indexing: fileIndexState?.state === "indexing" }) : []),
+    [filePanel, fileIndexState],
+  );
+
+  const runFilePanelAction = useCallback(
+    async (file: FileSearchRow, actionId: string) => {
+      const verb = actionId.slice(actionId.indexOf(":") + 1);
+      setFilePanel(null);
+      if (verb === "delete") {
+        // Confirmed confirm string: `Are you sure you want to delete ${filename}?`
+        alertStore.open({
+          title: `Are you sure you want to delete ${file.name}?`,
+          primaryAction: {
+            title: "Delete",
+            style: "destructive",
+            action: () => runFileAction(file, actionId, fileActionHandlers),
+          },
+          secondaryAction: { title: "Cancel", action: () => undefined },
+        });
+        return;
+      }
+      await runFileAction(file, actionId, fileActionHandlers);
+    },
+    [fileActionHandlers],
+  );
 
   // --- Calculator actions (docs/calculator-spec.md — root row and history row action set) ------
 
@@ -1066,6 +1482,23 @@ export function MainWindow() {
         } else if (entry.kind === "translate") {
           // Enter = primary action = Copy Translation (confirmed for the quick row).
           copyTranslation(entry);
+        } else if (entry.kind === "file") {
+          openFileEntry(entry.file);
+        } else if (entry.kind === "open-in-explorer") {
+          openExplorerEntry(entry.path);
+        } else if (entry.kind === "wm-command") {
+          runWindowManagementCommand(entry.commandKey, { showToast, closeMainWindow });
+        } else if (entry.kind === "wm-args") {
+          setSelected(entry);
+        } else if (entry.kind === "focus-action") {
+          void runFocusAction(entry.action, { showToast, refresh: refreshFocus }, readLastStartInput());
+        } else if (entry.kind === "focus-view" || entry.kind === "games-view") {
+          setSelected(entry);
+        } else if (entry.kind === "focus-session") {
+          // The session row's primary action is Edit Session (the shipped dynamic command).
+          setSelected({ kind: "focus-view", command: "edit", title: "Edit Focus Session" });
+        } else if (entry.kind === "game") {
+          openGameEntry(entry.app);
         } else {
           setSelected(entry);
         }
@@ -1073,7 +1506,7 @@ export function MainWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation]);
+  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry, showToast, closeMainWindow, refreshFocus, openGameEntry]);
 
   // Escape closes the launcher, matching Raycast: the window hides and the global hotkey brings it
   // back. While the action panel is open it owns Escape (capture handler + stopPropagation), and a
@@ -1151,6 +1584,11 @@ export function MainWindow() {
           createLink={quicklinkCreateLink}
           onConsumeCreateLink={() => setQuicklinkCreateLink(null)}
           translatorSeed={translatorSeed}
+          onOpenQuicklinkCreate={(seed) => {
+            // The note's Create Quicklink action routes to the Quicklinks create form prefilled.
+            setQuicklinkCreateLink(seed);
+            setSelected(internalCommandEntry("quicklinks", "create"));
+          }}
         />
         <AlertHost />
       </>
@@ -1168,13 +1606,7 @@ export function MainWindow() {
         </span>
 
         <div className="searchbar">
-          <span className="searchbar__icon" aria-hidden>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" strokeLinecap="round" />
-            </svg>
-          </span>
-<input
+          <input
             ref={searchRef}
             className="searchbar__input"
             autoFocus
@@ -1346,11 +1778,7 @@ export function MainWindow() {
               section.entries.length === 0 ? null : (
                 <li key={section.id} className="list__section">
                   <div className="list__sectionHeader">
-                    <span className="list__sectionIcon" aria-hidden>
-                      <RaycastIcon name={section.icon} size={ROOT_SECTION_ICON_SIZE} />
-                    </span>
                     <span className="list__sectionTitle">{section.title}</span>
-                    <span className="list__sectionCount">{section.entries.length}</span>
                   </div>
                   <ul className="list__sectionBody">
                     {section.entries.map((entry) => {
@@ -1385,12 +1813,8 @@ export function MainWindow() {
                               ) : null}
                             </span>
                             <span className="list__accessory">
-                              {isFavorite(applicationFavoriteKey(entry.application.payload.id)) ? (
-                                <span className="list__favorite" title="Favorite">
-                                  <RaycastIcon name="star" size={13} />
-                                </span>
-                              ) : null}
-                              <span className="pill">Application</span>
+                              <span className="list__command-type">Application</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1418,12 +1842,8 @@ export function MainWindow() {
                               </span>
                             </span>
                             <span className="list__accessory">
-                              {isFavorite(CLIPBOARD_FAVORITE_KEY) ? (
-                                <span className="list__favorite" title="Favorite">
-                                  <RaycastIcon name="star" size={13} />
-                                </span>
-                              ) : null}
-                              <span className="pill">view</span>
+                                                            <span className="list__command-type">view</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1445,9 +1865,10 @@ export function MainWindow() {
                             </span>
                             <span className="list__accessory">
                               {entry.quicklink.args.length > 0 ? (
-                                <span className="pill">{entry.quicklink.args.length} args</span>
+                                <span className="list__command-type">{entry.quicklink.args.length} args</span>
                               ) : null}
-                              <span className="pill">Quicklink</span>
+                              <span className="list__command-type">Quicklink</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1472,7 +1893,8 @@ export function MainWindow() {
                               <span className="list__subtitle">{entry.link}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">Quicklink</span>
+                              <span className="list__command-type">Quicklink</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1493,7 +1915,126 @@ export function MainWindow() {
                               <span className="list__subtitle">{INTERNAL_EXTENSION_META[entry.area].title}</span>
                             </span>
                             <span className="list__accessory">
+                                                            <span className="list__command-type">Command</span>
+                              {renderRowActions(entry)}
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "wm-command" || entry.kind === "wm-args" ? (
+                        <li key={`wm:${entry.kind}:${entry.commandKey}`}>
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() =>
+                              entry.kind === "wm-args"
+                                ? setSelected(entry)
+                                : runWindowManagementCommand(entry.commandKey, { showToast, closeMainWindow })
+                            }
+                          >
+                            <span className="icon-wrap command-tile command-tile--windowmanagement" aria-hidden>
+                              <RaycastIcon name={wmCommandIcon(entry.commandKey)} size={13} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">{entry.title}</span>
+                              <span className="list__subtitle">{wmCommandDefinition(entry.commandKey)?.description}</span>
+                            </span>
+                            <span className="list__accessory">
+                              {storedWmHotkeys[entry.commandKey] ? (
+                                <span className="list__command-type">{storedWmHotkeys[entry.commandKey]}</span>
+                              ) : entry.kind === "wm-args" ? (
+                                <span className="list__command-type">Args</span>
+                              ) : null}
+                              {renderRowActions(entry)}
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "focus-view" || entry.kind === "focus-action" ? (
+                        <li key={`focus:${entry.kind}:${entry.kind === "focus-view" ? entry.command : entry.action}`}>
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() =>
+                              entry.kind === "focus-action"
+                                ? void runFocusAction(entry.action, { showToast, refresh: refreshFocus }, readLastStartInput())
+                                : setSelected(entry)
+                            }
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              openRootActionPanel(entry);
+                            }}
+                          >
+                            <span className="icon-wrap command-tile command-tile--focus" aria-hidden>
+                              <RaycastIcon name="clock" size={13} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">{entry.title}</span>
+                              <span className="list__subtitle">
+                                {FOCUS_COMMANDS.find((definition) => definition.command === (entry.kind === "focus-view" ? entry.command : entry.action))?.description}
+                              </span>
+                            </span>
+                            <span className="list__accessory">
                               <span className="list__command-type">Command</span>
+                              {renderRowActions(entry)}
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "focus-session" ? (
+                        <li key="focus:session-row">
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => setSelected({ kind: "focus-view", command: "edit", title: "Edit Focus Session" })}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              setFocusSessionPanel(entry);
+                            }}
+                          >
+                            <span className="icon-wrap command-tile command-tile--focus" aria-hidden>
+                              <RaycastIcon name="clock" size={13} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">{entry.title}</span>
+                              <span className="list__subtitle">{focusSessionSubtitle(entry)}</span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="list__command-type">{entry.status === "paused" ? "Paused" : "Running"}</span>
+                              {renderRowActions(entry)}
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "game" ? (
+                        <li key={`game:${entry.app.id}`}>
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => openGameEntry(entry.app)}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              setGamePanel(entry);
+                            }}
+                          >
+                            <span className="icon-wrap" aria-hidden>
+                              {entry.app.icon ? (
+                                <img className="icon__img" src={entry.app.icon} alt="" />
+                              ) : (
+                                <RaycastIcon name="game-controller" size={16} />
+                              )}
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">{entry.app.name}</span>
+                              {entry.app.path ? <span className="list__subtitle">{entry.app.path}</span> : null}
+                            </span>
+                            <span className="list__accessory">
+                              <span className="list__command-type">Game</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1516,7 +2057,7 @@ export function MainWindow() {
                               ) : null}
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">fallback</span>
+                              <span className="list__command-type">fallback</span>
                             </span>
                           </button>
                         </li>
@@ -1608,7 +2149,8 @@ export function MainWindow() {
                               </span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">Translator</span>
+                              <span className="list__command-type">Translator</span>
+                              {renderRowActions(entry)}
                             </span>
                           </button>
                         </li>
@@ -1633,7 +2175,7 @@ export function MainWindow() {
                               <span className="list__subtitle">{entry.result.subtitle}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">{entry.result.type}</span>
+                              <span className="list__command-type">{entry.result.type}</span>
                             </span>
                           </button>
                         </li>
@@ -1644,20 +2186,86 @@ export function MainWindow() {
                             className="list__row"
                             data-selected={index === selectedIndex}
                             onMouseEnter={() => setSelectedIndex(index)}
-                            onClick={() => {
-                              trackFileUsage(entry.file.path);
-                              window.open(`file:///${entry.file.path.replace(/\\/g, "/")}`, "_blank");
+                            onClick={() => openFileEntry(entry.file)}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              openRootActionPanel(entry);
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="file-text" size={16} />
+                              <RaycastIcon name={fileIconFor(entry.file.contentType ?? "other")} size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.file.name}</span>
                               <span className="list__subtitle">{entry.file.folder}</span>
                             </span>
                             <span className="list__accessory">
-                              <span className="pill">file</span>
+                              <span className="list__command-type">{entry.file.contentType ?? "file"}</span>
+                              {renderRowActions(entry)}
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "file-indexing" ? (
+                        <li key="file-indexing">
+                          <div className="list__row list__row--static" data-selected={index === selectedIndex}>
+                            <span className="icon" aria-hidden>
+                              <RaycastIcon name="arrow-clockwise" size={16} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">File Search is indexing…</span>
+                              <span className="list__subtitle">
+                                Indexing {entry.fileCount} files
+                                {entry.entriesPerSecond ? ` (${entry.entriesPerSecond} entries/s)` : ""}
+                              </span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="list__command-type">files</span>
+                            </span>
+                          </div>
+                        </li>
+                      ) : entry.kind === "open-in-explorer" ? (
+                        <li key="open-in-explorer">
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => openExplorerEntry(entry.path)}
+                          >
+                            <span className="icon" aria-hidden>
+                              <RaycastIcon name="folder" size={16} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">Open in File Explorer</span>
+                              <span className="list__subtitle">{entry.path}</span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="list__command-type">explorer</span>
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "games-view" ? (
+                        <li key="games:launcher-row">
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => setSelected(entry)}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              setSelected(entry);
+                            }}
+                          >
+                            <span className="icon" aria-hidden>
+                              <RaycastIcon name="game-controller" size={16} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">{entry.title}</span>
+                              <span className="list__subtitle">Launch games from Steam, Epic, Xbox, Riot, and more.</span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="list__command-type">Command</span>
                             </span>
                           </button>
                         </li>
@@ -1684,12 +2292,7 @@ export function MainWindow() {
                               </span>
                             </span>
                             <span className="list__accessory">
-                              {isFavorite(commandFavoriteKey(entry.extension.uuid, entry.command.name)) ? (
-                                <span className="list__favorite" title="Favorite">
-                                  <RaycastIcon name="star" size={13} />
-                                </span>
-                              ) : null}
-                              <span className="pill">{entry.command.mode ?? "view"}</span>
+                                                            <span className="list__command-type">{entry.command.mode ?? "view"}</span>
                             </span>
                           </button>
                         </li>
@@ -1735,7 +2338,13 @@ export function MainWindow() {
 
       <ActionPanel
         open={commandPanelEntry !== null}
-        title={commandPanelEntry?.kind === "clipboard" ? "Clipboard History" : commandPanelEntry?.command.title}
+        title={
+          commandPanelEntry?.kind === "clipboard"
+            ? "Clipboard History"
+            : commandPanelEntry?.kind === "internal"
+              ? INTERNAL_COMMANDS.find((definition) => definition.area === commandPanelEntry.area && definition.command === commandPanelEntry.command)?.title
+              : commandPanelEntry?.command.title
+        }
         groups={[...commandPanelGroups, ...toastGroups]}
         onClose={() => setCommandPanelEntry(null)}
         onRun={async (action) => {
@@ -1753,15 +2362,34 @@ export function MainWindow() {
             const key =
               entry.kind === "clipboard"
                 ? CLIPBOARD_FAVORITE_KEY
-                : commandFavoriteKey(entry.extension.uuid, entry.command.name);
+                : entry.kind === "internal"
+                  ? internalFavoriteKey(entry.commandId)
+                  : commandFavoriteKey(entry.extension.uuid, entry.command.name);
             const added = toggleFavorite(key);
             showToast(
               added ? "Added to Favorites" : "Removed from Favorites",
-              entry.kind === "clipboard" ? "Clipboard History" : entry.command.title,
+              entry.kind === "clipboard"
+                ? "Clipboard History"
+                : entry.kind === "internal"
+                  ? (INTERNAL_COMMANDS.find((definition) => definition.area === entry.area && definition.command === entry.command)?.title ?? entry.commandId)
+                  : entry.command.title,
             );
           } else if (verb === "configureCommand") {
             openSettings();
           }
+        }}
+      />
+
+      <ActionPanel
+        open={filePanel !== null}
+        title={filePanel?.name}
+        groups={filePanelGroups}
+        onClose={() => setFilePanel(null)}
+        onRun={async (action) => {
+          const file = filePanel;
+          if (!file) return;
+          if (action.id === "file:open") closeMainWindow();
+          await runFilePanelAction(file, action.id);
         }}
       />
 
@@ -1823,6 +2451,36 @@ export function MainWindow() {
               refreshCurrencies();
               break;
           }
+        }}
+      />
+
+      <ActionPanel
+        open={focusSessionPanel !== null}
+        title="Focus Session"
+        groups={[...focusSessionPanelGroups, ...toastGroups]}
+        onClose={() => setFocusSessionPanel(null)}
+        onRun={async (action) => {
+          if (await runToastAction(action.id)) {
+            setFocusSessionPanel(null);
+            return;
+          }
+          runFocusPanelAction(action.id);
+        }}
+      />
+
+      <ActionPanel
+        open={gamePanel !== null}
+        title="Game"
+        groups={[...gamePanelGroups, ...toastGroups]}
+        onClose={() => setGamePanel(null)}
+        onRun={async (action) => {
+          const entry = gamePanel;
+          if (!entry) return;
+          if (await runToastAction(action.id)) {
+            setGamePanel(null);
+            return;
+          }
+          runGamePanelAction(entry.app, action.id);
         }}
       />
 

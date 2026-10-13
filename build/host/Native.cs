@@ -109,13 +109,16 @@ internal static class Native
             try
             {
                 if (!GetTokenInformation(token, TokenIntegrityLevel, buffer, retLen, out _)) return -1;
+                // TOKEN_MANDATORY_LABEL contains SID_AND_ATTRIBUTES. The first field is IntPtr Sid.
                 var sid = Marshal.ReadIntPtr(buffer);
                 if (sid == IntPtr.Zero) return -1;
-                var subAuthorityCount = Marshal.ReadByte(sid, 1);
-                var rid = 0;
-                for (var i = 0; i < 4; i++)
-                    rid = (rid << 8) | Marshal.ReadByte(sid, 8 + 4 + (subAuthorityCount - 1) * 4 + i);
-                return rid;
+                var pSubAuthCount = GetSidSubAuthorityCount(sid);
+                if (pSubAuthCount == IntPtr.Zero) return -1;
+                var subAuthorityCount = Marshal.ReadByte(pSubAuthCount);
+                if (subAuthorityCount == 0) return -1;
+                var pSubAuth = GetSidSubAuthority(sid, (uint)(subAuthorityCount - 1));
+                if (pSubAuth == IntPtr.Zero) return -1;
+                return Marshal.ReadInt32(pSubAuth);
             }
             finally
             {
@@ -128,6 +131,12 @@ internal static class Native
             return -1;
         }
     }
+
+    [DllImport("advapi32.dll")]
+    private static extern IntPtr GetSidSubAuthorityCount(IntPtr pSid);
+
+    [DllImport("advapi32.dll")]
+    private static extern IntPtr GetSidSubAuthority(IntPtr pSid, uint nSubAuthority);
 
     [DllImport("advapi32.dll", SetLastError = true)]
     private static extern bool GetTokenInformation(IntPtr token, int infoClass, IntPtr info, uint length, out uint returnLength);

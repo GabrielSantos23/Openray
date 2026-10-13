@@ -1,6 +1,8 @@
 // The Settings page catalog: the model Raycast's `settings-page-definition-utils` produces and
 // the full page definitions (titles, descriptions, sections, rows, keywords) for the sidebar.
 
+import { WM_COMMANDS } from "../wm-commands";
+
 export type SettingsValue = boolean | string | number;
 export type SettingsMap = Record<string, SettingsValue>;
 
@@ -12,6 +14,7 @@ export type ControlKind =
   | "action"
   | "info"
   | "textarea"
+  | "textarea-commit"
   | "text"
   | "none";/** The version the launcher reports everywhere else, kept in one place. */
 export const VERSION = "2.4.0.0";
@@ -42,6 +45,22 @@ export interface SectionDefinition {
   /** Shown instead of the card when the section has no rows to render. */
   empty?: string;
 }
+
+// The confirmed Window Management option lists (the shipped `Qt`/`$t` maps and the preset menu).
+export const WM_GAP_OPTION_LABELS = ["None", "Tiny", "Small", "Medium", "Large", "Extra Large"] as const;
+export const WM_CYCLE_OPTION_LABELS = ["None", "Cycle ½, ⅔, and ⅓", "Cycle Displays"] as const;
+export const WM_PRESET_OPTION_LABELS = ["None", "Magnet", "Rectangle"] as const;
+/** The confirmed snooze options (shipped settings rows); values map to ms via SNOOZE_BY_LABEL. */
+export const FOCUS_SNOOZE_OPTION_LABELS = ["1 minute", "3 minutes", "5 minutes", "10 minutes", "No Snooze"] as const;
+export const TASKBAR_POSITION_OPTION_LABELS = ["Top", "Bottom", "Left", "Right"] as const;
+/** The confirmed zoom range 0.75–2.0; the settings row exposes 5% steps as labels. */
+export const NOTES_ZOOM_OPTION_LABELS: readonly string[] = Array.from({ length: 26 }, (_, index) => `${75 + index * 5}%`);
+export const NOTES_ZOOM_VALUE_BY_LABEL: Record<string, number> = Object.fromEntries(
+  NOTES_ZOOM_OPTION_LABELS.map((label, index) => [label, Math.round(75 + index * 5) / 100]),
+);
+export const NOTES_ZOOM_LABEL_BY_VALUE: Record<string, string> = Object.fromEntries(
+  Object.entries(NOTES_ZOOM_VALUE_BY_LABEL).map(([label, value]) => [String(value), label]),
+);
 
 export interface PageDefinition {
   id: string;
@@ -189,7 +208,7 @@ export const PAGES: readonly PageDefinition[] = [
         id: "customize-search",
         title: "Customize Search",
         rows: [
-          { id: "include-files-in-root-search", title: "Include Files in Root Search", control: "switch", unavailable: true },
+          { id: "include-files-in-root-search", title: "Include Files in Root Search", control: "switch" },
           {
             id: "search-file-contents-in-root-search",
             title: "Include File Content search results in Root Search",
@@ -588,6 +607,237 @@ export const PAGES: readonly PageDefinition[] = [
     ],
   },
   {
+    id: "file-search",
+    title: "File Search",
+    description: "Search for files and folders on your computer.",
+    icon: "folder-search",
+    keywords: [
+      "file search", "files", "folders", "scopes", "ignore patterns", "hidden files",
+      "ignore files", "gitignore", "index", "reset",
+    ],
+    sections: [
+      {
+        id: "file-search",
+        rows: [
+          {
+            id: "file-search-scopes",
+            title: "Search Scopes",
+            description: "Pick additional directories to be included when searching for files",
+            control: "action",
+            action: "Pick Folder",
+          },
+          {
+            id: "file-search-ignore-patterns",
+            title: "Ignore Patterns",
+            description:
+              "File Search respects .gitignore, .ignore, Git exclude files, and .rayignore by default. Add comma-separated filenames or directories here to ignore them globally in Raycast.",
+            control: "textarea-commit",
+          },
+          {
+            id: "file-search-include-hidden",
+            title: "Include Hidden Files",
+            description: "Files and folders whose names start with a dot are indexed too.",
+            control: "switch",
+          },
+          {
+            id: "file-search-respect-ignore-files",
+            title: "Use ignore files",
+            description: "Respect .gitignore and .ignore files inside the searched scopes.",
+            control: "switch",
+          },
+          {
+            id: "file-search-reset",
+            title: "Reset to Defaults",
+            description: "Scopes reset to your home directory and ignore patterns are cleared, then everything is reindexed.",
+            control: "action",
+            action: "Reset",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "window-management",
+    title: "Window Management",
+    description: "Move and resize your application windows.",
+    icon: "app-window",
+    keywords: [
+      "window management", "windows", "gap", "gaps", "cycling", "cycle", "presets", "magnet",
+      "hotkeys", "halves", "thirds", "quarters", "sixths", "maximize", "restore", "minimize",
+      "move", "resize", "always on top",
+    ],
+    sections: [
+      {
+        id: "window-management-gaps",
+        title: "Gaps",
+        rows: [
+          {
+            id: "wm-inner-gap",
+            title: "Window Gap",
+            description: "Gap between windows",
+            control: "select",
+            options: WM_GAP_OPTION_LABELS,
+          },
+          {
+            id: "wm-outer-gap",
+            title: "Screen Gap",
+            description: "Gap from windows to the screen edge",
+            control: "select",
+            options: WM_GAP_OPTION_LABELS,
+          },
+        ],
+      },
+      {
+        id: "window-management-cycling",
+        title: "Cycling",
+        rows: [
+          {
+            id: "wm-cycle-mode",
+            title: "Cycling",
+            description: "Cycle sizes when using half commands",
+            control: "select",
+            options: WM_CYCLE_OPTION_LABELS,
+          },
+        ],
+      },
+      {
+        id: "window-management-presets",
+        title: "Presets",
+        description: "Apply hotkeys from other window management apps",
+        rows: [
+          {
+            id: "wm-preset",
+            title: "Preset",
+            description: "Rectangle ships byte-identical to Magnet in the build we reverse-engineered.",
+            control: "select",
+            options: WM_PRESET_OPTION_LABELS,
+          },
+        ],
+      },
+      {
+        id: "window-management-commands",
+        title: "Move & Resize",
+        description: "Every command also runs from root search. Preset hotkeys show on the right.",
+        rows: WM_COMMANDS.map((definition) => ({
+          id: `wm-cmd-${definition.key}`,
+          title: definition.title,
+          control: "info" as const,
+        })),
+      },
+    ],
+  },
+  {
+    id: "focus",
+    title: "Raycast Focus",
+    description: "Manage focus sessions and categories.",
+    icon: "clock",
+    keywords: [
+      "focus", "session", "snooze", "sound", "restore", "terminated apps", "categories",
+      "blocking", "block apps", "allow apps",
+    ],
+    sections: [
+      {
+        id: "focus",
+        rows: [
+          {
+            id: "focus-snooze-duration",
+            title: "Snooze Duration",
+            description: "How long a blocked app stays snoozed when you snooze it.",
+            control: "select",
+            options: FOCUS_SNOOZE_OPTION_LABELS,
+          },
+          {
+            id: "focus-play-sound",
+            title: "Play Sound",
+            description: "Play a sound when a focus session ends.",
+            control: "switch",
+          },
+          {
+            id: "focus-restore-apps",
+            title: "Restore Terminated Apps",
+            description: "Reopen apps Raycast Focus terminated when the session ends.",
+            control: "switch",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "games",
+    title: "Games",
+    description: "Quickly launch your installed games.",
+    icon: "game-controller",
+    keywords: ["games", "game mode", "disable hotkeys", "hotkeys", "fullscreen"],
+    sections: [
+      {
+        id: "games",
+        rows: [
+          {
+            id: "games-game-mode",
+            title: "Game Mode",
+            description: "Disable Raycast hotkeys while a game window is detected in the foreground.",
+            control: "switch",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "taskbar",
+    title: "Taskbar",
+    description: "Customizable taskbar behaviour.",
+    icon: "app-window-list",
+    keywords: ["taskbar", "bar", "position", "top", "bottom", "left", "right", "show", "hide"],
+    sections: [
+      {
+        id: "taskbar",
+        rows: [
+          {
+            id: "taskbar-show",
+            title: "Show Taskbar Window",
+            description: "Show or hide the taskbar window.",
+            control: "switch",
+          },
+          {
+            id: "taskbar-position",
+            title: "Position",
+            description: "Which screen edge the taskbar window docks to.",
+            control: "select",
+            options: TASKBAR_POSITION_OPTION_LABELS,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "notes",
+    title: "Raycast Notes",
+    description: "Create and manage your notes.",
+    icon: "blank-document",
+    keywords: ["notes", "note", "escape", "zoom", "editor"],
+    sections: [
+      {
+        id: "notes",
+        rows: [
+          {
+            id: "notes-escape-key-behavior",
+            title: "Escape Key Behavior",
+            description: "What happens when you press Escape in the Notes window.",
+            control: "select",
+            options: ["Closes Window", "Loses Focus"],
+          },
+          {
+            id: "notes-zoom",
+            title: "Zoom",
+            description: "The editor text scale (the confirmed 75%–200% range).",
+            control: "select",
+            options: NOTES_ZOOM_OPTION_LABELS,
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "clipboard-history",
     title: "Clipboard History",
     description:
@@ -825,6 +1075,12 @@ export const SIDEBAR_PAGE_IDS = [
   "snippets",
   "calculator",
   "translator",
+  "file-search",
+  "window-management",
+  "focus",
+  "games",
+  "taskbar",
+  "notes",
   "clipboard-history",
   "cloud-sync",
   "advanced",

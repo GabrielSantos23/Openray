@@ -18,7 +18,15 @@ public static class NativeHost
             ? Applications.DispatchAsync(method, data)
             : method.StartsWith("clipboardHistory.", StringComparison.Ordinal)
                 ? ClipboardNative.DispatchAsync(method, data)
-                : DispatchCoreAsync(method, data);
+                : method.StartsWith("windowManagement.", StringComparison.Ordinal)
+                    ? WindowManagementNative.DispatchAsync(method, data)
+                    : method.StartsWith("focus.", StringComparison.Ordinal)
+                        ? FocusSession.DispatchAsync(method, data)
+                        : method.StartsWith("games.", StringComparison.Ordinal)
+                            ? GameMode.DispatchAsync(method, data)
+                            : method.StartsWith("taskbar.", StringComparison.Ordinal)
+                                ? Taskbar.DispatchAsync(method, data)
+                                : DispatchCoreAsync(method, data);
 
     private static Task<object?> DispatchCoreAsync(string method, JsonElement? data) => method switch
     {
@@ -30,8 +38,11 @@ public static class NativeHost
         "shell.openUrl" => Task.FromResult(OpenUrl(data)),
         "shell.openWith" => Task.FromResult(OpenWith(data)),
         "shell.revealFile" => Task.FromResult(RevealFile(data)),
+        "fileSystem.openFile" => Task.FromResult(OpenFile(data)),
+        "fileSystem.moveToTrash" => Task.FromResult(MoveToTrash(data)),
         "fileSystem.showOpenFileDialog" => Task.FromResult(ShowOpenFileDialog(data)),
         "fileSystem.showSaveFileDialog" => Task.FromResult(ShowSaveFileDialog(data)),
+        "fileSystem.showSelectFolderDialog" => Task.FromResult(ShowSelectFolderDialog(data)),
         "fileSystem.writeFile" => Task.FromResult(WriteFile(data)),
         "fileSystem.readFile" => Task.FromResult(ReadFile(data)),
         "snippets.register" => Task.FromResult(SnippetHook.RegisterKeywords(data)),
@@ -70,6 +81,71 @@ public static class NativeHost
         var path = RequireString(data, "path");
         Process.Start("explorer.exe", $"/select,\"{path}\"");
         return new { ok = true };
+    }
+
+    private static object OpenFile(JsonElement? data)
+    {
+        var path = RequireString(data, "path");
+        if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+            throw new InvalidOperationException("no such file");
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        return new { ok = true };
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct SHFILEOPSTRUCTW
+    {
+        public IntPtr hwnd;
+        public uint wFunc;
+        public string pFrom;
+        public ushort fFlags;
+        public int fAnyOperationsAborted;
+        public IntPtr hNameMappings;
+        public string lpszProgressTitle;
+    }
+
+    private const uint FO_DELETE = 3;
+    private const ushort FOF_ALLOWUNDO = 0x40;
+    private const ushort FOF_NOCONFIRMATION = 0x10;
+    private const ushort FOF_SILENT = 0x04;
+    private const ushort FOF_NOERRORUI = 0x400;
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHFileOperationW(ref SHFILEOPSTRUCTW op);
+
+    /// <summary>
+    /// Raycast's `fileSystem.moveToTrash`: recycle instead of erasing, so `Deleted file` is
+    /// recoverable from the Recycle Bin (FOF_ALLOWUNDO). `pFrom` must be double-null-terminated,
+    /// which the marshaler's single terminator does not provide.
+    /// </summary>
+    private static object MoveToTrash(JsonElement? data)
+    {
+        var path = RequireString(data, "path");
+        if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+            throw new InvalidOperationException("no such file");
+        var op = new SHFILEOPSTRUCTW
+        {
+            wFunc = FO_DELETE,
+            pFrom = path + "\0",
+            fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI,
+        };
+        var result = SHFileOperationW(ref op);
+        if (result != 0 || op.fAnyOperationsAborted != 0)
+            throw new InvalidOperationException($"move to trash failed ({result})");
+        return new { ok = true };
+    }
+
+    private static object ShowSelectFolderDialog(JsonElement? data)
+    {
+        // `OpenFolderDialog` is the WPF counterpart of Raycast's directory scope picker.
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = data?.TryGetProperty("title", out var title) == true && title.ValueKind == JsonValueKind.String
+                ? title.GetString()
+                : "Select folder",
+        };
+        var selected = dialog.ShowDialog() == true ? dialog.FolderName : null;
+        return new { path = selected };
     }
 
     private static object ShowOpenFileDialog(JsonElement? data)

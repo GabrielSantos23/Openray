@@ -5,6 +5,7 @@
 // frontend from a virtual host mapping, exactly like Raycast's `Raycast.WebView.ResourceHandler` +
 // `<HandleWebResourceRequest>` serve `frontend/main-window.html` over a custom scheme.
 
+using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -21,8 +22,10 @@ namespace RaycastMini.Launcher;
 public partial class MainWindow : Window
 {
     private const int HotkeyId = 0x1000;
+    private const int HotkeyIdFallback = 0x1002;
     private const uint ModAlt = 0x0001;
     private const uint ModControl = 0x0002;
+    private const uint ModShift = 0x0004;
     private const uint VkSpace = 0x20;
 
     private readonly WebView2 _webView = new();
@@ -49,6 +52,7 @@ public partial class MainWindow : Window
         Height = 480;
         Topmost = true;
         ShowInTaskbar = false;
+        CenterOnScreen();
 
         // The WebView2 must be transparent too, otherwise the rounded frame is filled by an opaque
         // white rectangle before the page paints.
@@ -75,7 +79,7 @@ public partial class MainWindow : Window
         {
             Deactivated += (_, _) =>
             {
-                if (_webViewInitState == 1) return;
+                if (_webViewInitState != 2) return;
                 Hide();
             };
         }
@@ -83,6 +87,41 @@ public partial class MainWindow : Window
         // Remember which window had focus before the launcher took over, so Paste can hand it back.
         // Raycast keeps the same handle (`paste: no last foreground window available` when it is gone).
         Deactivated += (_, _) => ClipboardHistory.RecordForegroundWindow();
+    }
+
+    public static string GetSafeUserDataFolder(string baseName)
+    {
+        var baseDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RaycastMini",
+            baseName);
+
+        var lockFiles = new[]
+        {
+            Path.Combine(baseDir, "EBWebView", "Default", "LOCK"),
+            Path.Combine(baseDir, "EBWebView", "lockfile")
+        };
+
+        foreach (var lockFile in lockFiles)
+        {
+            if (File.Exists(lockFile))
+            {
+                try
+                {
+                    using var stream = File.Open(lockFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                }
+                catch
+                {
+                    App.Log.Write($"[webview2] lock file '{lockFile}' is in use; using process-isolated folder");
+                    return Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "RaycastMini",
+                        $"{baseName}-{Environment.ProcessId}");
+                }
+            }
+        }
+
+        return baseDir;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -95,14 +134,15 @@ public partial class MainWindow : Window
         // the error inside the window instead.
         try
         {
-            var environment = await CoreWebView2Environment.CreateAsync(
-                userDataFolder: Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "RaycastMini",
-                    "WebView2"));
-
+            if (!IsVisible)
+            {
+                Show();
+            }
+            var udir = GetSafeUserDataFolder("WebView2");
+            var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: udir);
             await _webView.EnsureCoreWebView2Async(environment);
             _webViewInitState = 2;
+            WebView2Permissions.AllowClipboardRead(_webView.CoreWebView2);
         }
         catch (Exception error)
         {
@@ -201,6 +241,23 @@ public partial class MainWindow : Window
             return null;
         }
 
+        // Raycast Notes (`host.raycast.showNotesWindow`): `open`/`create` close the launcher and
+        // open the dedicated notes window; the payload carries {noteId?} or {create, text?}.
+        if (method == "window.showNotes")
+        {
+            if (data is { ValueKind: System.Text.Json.JsonValueKind.Object } notesPayload)
+            {
+                _webView.Dispatcher.Invoke(() =>
+                    NotesWindow.GetOrCreate(() => _backend.FrontendRoot).ShowNotes(notesPayload));
+            }
+            else
+            {
+                _webView.Dispatcher.Invoke(() =>
+                    NotesWindow.GetOrCreate(() => _backend.FrontendRoot).ShowNotes(System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
+            }
+            return null;
+        }
+
         // The toast store's floating-HUD fallback (toast while the launcher is hidden) and the
         // `showHUD` API: the host owns the HUD window, mirroring Raycast's Raycast.dll HUDs.
         if (method == "window.showHud")
@@ -251,6 +308,24 @@ public partial class MainWindow : Window
         return result is null ? null : System.Text.Json.JsonSerializer.SerializeToElement(result);
     }
 
+    /// <summary>
+    /// Frontend-module dispatch for a window other than the launcher (the Notes window's page).
+    /// The same routes answer: `window.*` handlers, `fileSystem.*`/`clipboard.*` native routes.
+    /// </summary>
+    internal Task<System.Text.Json.JsonElement?> DispatchForNotesPageAsync(string method, System.Text.Json.JsonElement? data)
+        => DispatchIpcAsync(method, string.Empty, data, isBackend: false);
+
+    /// <summary>
+    /// The Notes window's `Create Quicklink` action: reveal the launcher already on the Quicklinks
+    /// create form, prefilled with the note deeplink and title (the confirmed cross-window action).
+    /// </summary>
+    internal void ShowQuicklinkCreate(string link, string? name)
+    {
+        ShowMainWindow();
+        PostToRenderer("quicklink.createSeed",
+            System.Text.Json.JsonSerializer.SerializeToElement(new { link, name = name ?? string.Empty }));
+    }
+
     /// <summary>Deliver a host-originated message to the renderer (`z.frontend.*`).</summary>
     public void PostToRenderer(string method, System.Text.Json.JsonElement? data)
     {
@@ -263,6 +338,13 @@ public partial class MainWindow : Window
         _bridge.PostMessage(payload);
     }
 
+    /// <summary>Send a request directly from host to Node backend over the named pipe.</summary>
+    public async Task<System.Text.Json.JsonElement?> RequestBackendAsync(string method, object? data)
+    {
+        if (!_backend.IsRunning) _ = Task.Run(() => _backend.EnsureRunning());
+        return await _pipe.RequestAsync("backend", method, data);
+    }
+
     // -----------------------------------------------------------------------------------------
     // Global hotkey + show/hide
     // -----------------------------------------------------------------------------------------
@@ -271,16 +353,62 @@ public partial class MainWindow : Window
 
     private const int ClipboardHotkeyId = 0x1001;
 
+    /// <summary>
+    /// Whenever the launcher loses activation, the OS is handing focus to the next window —
+    /// usually the app the user will want Window Management commands to target. The delayed
+    /// capture runs once that activation landed. This covers shows that bypass the hotkey
+    /// (the launcher auto-showing at boot) and re-captures after every command.
+    /// </summary>
+    protected override void OnDeactivated(EventArgs e)
+    {
+        base.OnDeactivated(e);
+        Dispatcher.BeginInvoke(
+            new Action(WindowManagementNative.CaptureForeground),
+            System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        _source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        var handle = new WindowInteropHelper(this).Handle;
+        _source = HwndSource.FromHwnd(handle);
         _source?.AddHook(WndProc);
-        RegisterHotKey(new WindowInteropHelper(this).Handle, HotkeyId, ModAlt | ModControl, VkSpace);
+        var ok1 = RegisterHotKey(handle, HotkeyId, ModAlt | ModControl, VkSpace);
+        var ok2 = RegisterHotKey(handle, HotkeyIdFallback, ModControl | ModShift, VkSpace);
+        App.Log.Write($"[hotkey] RegisterHotKey Ctrl+Alt+Space: ok={ok1} (err={Marshal.GetLastWin32Error()}), Ctrl+Shift+Space: ok={ok2}");
+        InitTrayIcon();
     }
 
     private bool _clipboardHotkeyRegistered;
     private string? _clipboardHotkeyText;
+    private bool _launcherHotkeysSuppressed;
+
+    /// <summary>
+    /// Game Mode (docs/focus-games-taskbar-spec.md §B): unregister the launcher + Clipboard History
+    /// hotkeys while a game is fullscreen, re-registering the identical combinations afterwards.
+    /// </summary>
+    internal bool SetLauncherHotkeysSuppressed(bool suppressed)
+    {
+        if (_launcherHotkeysSuppressed == suppressed) return true;
+        var handle = new WindowInteropHelper(this).Handle;
+        if (suppressed)
+        {
+            var ok = UnregisterHotKey(handle, HotkeyId);
+            UnregisterHotKey(handle, HotkeyIdFallback);
+            if (_clipboardHotkeyRegistered) ok &= UnregisterHotKey(handle, ClipboardHotkeyId);
+            if (!ok) return false;
+            _launcherHotkeysSuppressed = true;
+            return true;
+        }
+        var restored = RegisterHotKey(handle, HotkeyId, ModAlt | ModControl, VkSpace);
+        RegisterHotKey(handle, HotkeyIdFallback, ModControl | ModShift, VkSpace);
+        if (_clipboardHotkeyRegistered && _clipboardHotkeyText is not null && TryParseHotkey(_clipboardHotkeyText, out var modifiers, out var key))
+        {
+            restored &= RegisterHotKey(handle, ClipboardHotkeyId, modifiers, key);
+        }
+        if (restored) _launcherHotkeysSuppressed = false;
+        return restored;
+    }
 
     /// <summary>
     /// Registers the Clipboard History shortcut on this window's message pump. Raycast stores the
@@ -391,9 +519,23 @@ public partial class MainWindow : Window
     private IntPtr WndProc(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const int WmHotkey = 0x0312;
-        if (message == WmHotkey)
+        if (message == (int)WM_TRAYICON)
         {
-            if (wParam.ToInt32() == HotkeyId)
+            var mouse = (int)lParam & 0xFFFF;
+            if (mouse == WM_LBUTTONUP)
+            {
+                Dispatcher.BeginInvoke(Toggle);
+                handled = true;
+            }
+            else if (mouse == WM_RBUTTONUP)
+            {
+                Dispatcher.BeginInvoke(OpenTrayContextMenu);
+                handled = true;
+            }
+        }
+        else if (message == WmHotkey)
+        {
+            if (wParam.ToInt32() == HotkeyId || wParam.ToInt32() == HotkeyIdFallback)
             {
                 Toggle();
                 handled = true;
@@ -403,6 +545,16 @@ public partial class MainWindow : Window
                 // The Clipboard History shortcut opens that command directly rather than toggling.
                 App.OpenClipboardHistory();
                 handled = true;
+            }
+            else
+            {
+                var commandKey = WindowManagementNative.MapHotkey(wParam.ToInt32());
+                if (commandKey != null)
+                {
+                    PostToRenderer("windowManagement.hotkey",
+                        System.Text.Json.JsonSerializer.SerializeToElement(new { commandKey }));
+                    handled = true;
+                }
             }
         }
         return IntPtr.Zero;
@@ -414,6 +566,7 @@ public partial class MainWindow : Window
     /// </summary>
     public void OpenClipboardHistory()
     {
+        WindowManagementNative.CaptureForeground();
         if (!IsVisible)
         {
             CenterOnScreen();
@@ -437,6 +590,7 @@ public partial class MainWindow : Window
         }
         else
         {
+            WindowManagementNative.CaptureForeground();
             CenterOnScreen();
             Show();
             Activate();
@@ -454,14 +608,17 @@ public partial class MainWindow : Window
     /// </summary>
     public void ShowMainWindow()
     {
+        App.Log.Write($"[window] ShowMainWindow called (IsVisible={IsVisible}, WindowState={WindowState})");
+        WindowManagementNative.CaptureForeground();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         if (!IsVisible)
         {
             CenterOnScreen();
             Show();
-            Activate();
-            Topmost = true;
-            PostVisibility(true);
         }
+        Activate();
+        Topmost = true;
+        PostVisibility(true);
         _webView.Focus();
     }
 
@@ -492,13 +649,15 @@ public partial class MainWindow : Window
     public void ShutdownForReal()
     {
         _reallyClosing = true;
+        RemoveTrayIcon();
         // The settings window hides itself on close; shutdown must bypass that.
         _settingsWindow?.ShutdownForReal();
         HudWindow.Current?.Close();
+        NotesWindow.Current?.ShutdownForReal();
         Close();
     }
 
-    private void OpenSettings()
+    internal void OpenSettings()
     {
         if (_settingsWindow is { IsLoaded: true })
         {
@@ -510,6 +669,135 @@ public partial class MainWindow : Window
         }
         _settingsWindow = new SettingsWindow(_backend.FrontendRoot);
         _settingsWindow.Show();
+    }
+
+    private const uint WM_TRAYICON = 0x8001;
+    private const uint NIM_ADD = 0;
+    private const uint NIM_MODIFY = 1;
+    private const uint NIM_DELETE = 2;
+    private const uint NIF_MESSAGE = 1;
+    private const uint NIF_ICON = 2;
+    private const uint NIF_TIP = 4;
+    private const uint WM_LBUTTONUP = 0x0202;
+    private const uint WM_RBUTTONUP = 0x0205;
+
+    private bool _trayAdded;
+    private ContextMenu? _trayContextMenu;
+    private System.Drawing.Icon? _trayIconInstance;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct NOTIFYICONDATA
+    {
+        public int cbSize;
+        public IntPtr hWnd;
+        public uint uID;
+        public uint uFlags;
+        public uint uCallbackMessage;
+        public IntPtr hIcon;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string szTip;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Shell_NotifyIcon(uint message, ref NOTIFYICONDATA data);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private void InitTrayIcon()
+    {
+        try
+        {
+            var handle = new WindowInteropHelper(this).Handle;
+            if (handle == IntPtr.Zero) return;
+
+            if (_trayIconInstance == null)
+            {
+                using var bitmap = new System.Drawing.Bitmap(32, 32);
+                using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                {
+                    graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    using var fill = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(0xFF, 0x63, 0x63));
+                    graphics.FillEllipse(fill, 4, 4, 24, 24);
+                    using var text = new System.Drawing.SolidBrush(System.Drawing.Color.White);
+                    using var font = new System.Drawing.Font("Segoe UI", 12f, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel);
+                    graphics.DrawString("R", font, text, 10f, 8f);
+                }
+                _trayIconInstance = System.Drawing.Icon.FromHandle(bitmap.GetHicon());
+            }
+
+            var data = new NOTIFYICONDATA
+            {
+                cbSize = Marshal.SizeOf<NOTIFYICONDATA>(),
+                hWnd = handle,
+                uID = 100,
+                uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
+                uCallbackMessage = WM_TRAYICON,
+                hIcon = _trayIconInstance.Handle,
+                szTip = "Raycast Mini",
+            };
+
+            if (Shell_NotifyIcon(NIM_ADD, ref data))
+            {
+                _trayAdded = true;
+                App.Log.Write("[tray] launcher tray icon added successfully");
+            }
+            else
+            {
+                App.Log.Write($"[tray] Shell_NotifyIcon failed (err={Marshal.GetLastWin32Error()})");
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Log.Write($"[tray] failed to initialize tray icon: {ex.Message}");
+        }
+    }
+
+    private void RemoveTrayIcon()
+    {
+        if (!_trayAdded) return;
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+        var data = new NOTIFYICONDATA
+        {
+            cbSize = Marshal.SizeOf<NOTIFYICONDATA>(),
+            hWnd = handle,
+            uID = 100,
+        };
+        Shell_NotifyIcon(NIM_DELETE, ref data);
+        _trayAdded = false;
+    }
+
+    private void OpenTrayContextMenu()
+    {
+        _trayContextMenu = new ContextMenu();
+        var showItem = new MenuItem { Header = "Show Raycast Mini" };
+        showItem.Click += (_, _) => ShowMainWindow();
+
+        var clipboardItem = new MenuItem { Header = "Clipboard History" };
+        clipboardItem.Click += (_, _) => OpenClipboardHistory();
+
+        var settingsItem = new MenuItem { Header = "Settings..." };
+        settingsItem.Click += (_, _) => OpenSettings();
+
+        var exitItem = new MenuItem { Header = "Exit" };
+        exitItem.Click += (_, _) =>
+        {
+            RemoveTrayIcon();
+            System.Windows.Application.Current.Shutdown(0);
+        };
+
+        _trayContextMenu.Items.Add(showItem);
+        _trayContextMenu.Items.Add(clipboardItem);
+        _trayContextMenu.Items.Add(settingsItem);
+        _trayContextMenu.Items.Add(new Separator());
+        _trayContextMenu.Items.Add(exitItem);
+
+        var handle = new WindowInteropHelper(this).Handle;
+        SetForegroundWindow(handle);
+        _trayContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        _trayContextMenu.IsOpen = true;
     }
 
     [DllImport("user32.dll", SetLastError = true)]

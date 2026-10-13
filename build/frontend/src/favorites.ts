@@ -21,6 +21,12 @@ export function commandFavoriteKey(extensionUuid: string, commandName: string): 
   return `command:${extensionUuid}/${commandName}`;
 }
 
+/** `internal:<area>/<command>` — internal commands pin with their own prefix so the key can never
+ * collide with an extension command's `command:<uuid>/<name>` key. */
+export function internalFavoriteKey(commandId: string): FavoriteKey {
+  return `internal:${commandId}`;
+}
+
 function loadFavorites(): FavoriteKey[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);

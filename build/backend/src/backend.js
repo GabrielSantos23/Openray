@@ -56,6 +56,11 @@ function createBackend(options) {
   let translatorHandlers = {};
   let fileIndexerHandlers = {};
   let usageTrackerHandlers = {};
+  let windowStateHandlers = {};
+  let focusHandlers = {};
+  let gamesHandlers = {};
+  let taskbarHandlers = {};
+  let notesHandlers = {};
 
   // ---------------------------------------------------------------------------------------------
   // Installed-extension registry.
@@ -692,6 +697,33 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
+      // Window Management saved bounds (`windowManagement.getSavedWindowState|saveWindowState`)
+      // live in this process; the remaining `windowManagement.*` verbs are native host routes.
+      if (method === "windowManagement.getSavedWindowState" || method === "windowManagement.saveWindowState") {
+        const handler = windowStateHandlers[method.slice("windowManagement.".length)];
+        if (handler) return handler(data ?? {});
+      }
+
+      // Focus (`focus.*`): the session state machine lives here; the module itself forwards the
+      // host half (blocking loop + panel) over the native pipe. Unknown verbs fall through to the
+      // native forward below.
+      if (method.startsWith("focus.")) {
+        const handler = focusHandlers[method.slice("focus.".length)];
+        if (handler) return handler(data ?? {});
+      }
+      if (method.startsWith("games.") || method.startsWith("taskbar.")) {
+        const table = method.startsWith("games.") ? gamesHandlers : taskbarHandlers;
+        const handler = table[method.slice(method.indexOf(".") + 1)];
+        if (handler) return handler(data ?? {});
+      }
+
+      // Notes (`notes.*`): the store lives in this process; the launcher's Search Notes view and
+      // the Notes window page both read through it.
+      if (method.startsWith("notes.")) {
+        const handler = notesHandlers[method.slice("notes.".length)];
+        if (handler) return handler(data ?? {});
+      }
+
       // Native `.NET` operations (clipboard, shell, and Raycast's internal Applications extension).
       // The clipboard-history verbs the host owns (OCR, image pixels, `Open in App`, `Save as File`,
       // capability probe) are named `clipboardHistory.*` so they are distinguishable from the raw
@@ -699,7 +731,7 @@ function createBackend(options) {
       if (method.startsWith("clipboardHistory.")) {
         return send("backend", "native", { method, data: data ?? {} });
       }
-      if (method.startsWith("clipboard.") || method.startsWith("shell.") || method.startsWith("applications.")) {
+      if (method.startsWith("clipboard.") || method.startsWith("shell.") || method.startsWith("applications.") || method.startsWith("fileSystem.") || method.startsWith("windowManagement.")) {
         return send("backend", "native", { method, data: data ?? {} });
       }
 
@@ -762,6 +794,26 @@ function createBackend(options) {
     /** Install the usage tracker handler table. */
     registerUsageTrackerHandler(handlers) {
       usageTrackerHandlers = handlers ?? {};
+    },
+    /** Install the window saved-state handler table. */
+    registerWindowStateHandler(handlers) {
+      windowStateHandlers = handlers ?? {};
+    },
+    /** Install the focus session handler table. */
+    registerFocusHandler(handlers) {
+      focusHandlers = handlers ?? {};
+    },
+    /** Install the games handler table. */
+    registerGamesHandler(handlers) {
+      gamesHandlers = handlers ?? {};
+    },
+    /** Install the taskbar handler table. */
+    registerTaskbarHandler(handlers) {
+      taskbarHandlers = handlers ?? {};
+    },
+    /** Install the notes store handler table. */
+    registerNotesHandler(handlers) {
+      notesHandlers = handlers ?? {};
     },
   };
 }

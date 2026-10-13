@@ -432,9 +432,9 @@ export function TranslateView({ command, seed, showToast, onBack, closeMainWindo
     <div className="window translate-window">
       <main className="window__body translate-body">
         <div className="translate-topbar">
-          <button type="button" className="icon icon--plain translate-back" onClick={onBack} aria-label="Back">
+          <button type="button" className="back-button translate-back" onClick={onBack} aria-label="Back">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M15 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
           <div className="translate-topbar__pane">

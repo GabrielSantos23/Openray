@@ -36,19 +36,20 @@ public partial class App : Application
         {
             try
             {
-                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-                System.IO.File.AppendAllText(Path, $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}");
+                var dir = System.IO.Path.GetDirectoryName(Path)!;
+                System.IO.Directory.CreateDirectory(dir);
+                using var fs = new System.IO.FileStream(Path, System.IO.FileMode.Append, System.IO.FileAccess.Write, System.IO.FileShare.ReadWrite);
+                using var writer = new System.IO.StreamWriter(fs);
+                writer.WriteLine($"{DateTime.Now:HH:mm:ss.fff} {message}");
             }
             catch (Exception error)
             {
-                // A silent logger once made a broken startup look like a blank black window: every
-                // hint disappeared into this catch. When the AppData write fails, the reason goes
-                // to a fallback next to the exe (and to a message box as the last resort).
                 try
                 {
                     var fallback = System.IO.Path.Combine(AppContext.BaseDirectory, "launcher-fallback.log");
-                    System.IO.File.AppendAllText(fallback,
-                        $"{DateTime.Now:HH:mm:ss.fff} [log write failed: {error.Message}] {message}{Environment.NewLine}");
+                    using var fs = new System.IO.FileStream(fallback, System.IO.FileMode.Append, System.IO.FileAccess.Write, System.IO.FileShare.ReadWrite);
+                    using var writer = new System.IO.StreamWriter(fs);
+                    writer.WriteLine($"{DateTime.Now:HH:mm:ss.fff} [log write failed: {error.Message}] {message}");
                 }
                 catch
                 {
@@ -75,36 +76,100 @@ private MainWindow? _window;
 
         // Low-integrity launches (sandboxed terminals, some automation hosts) hand the process a
         // token that cannot write to %LOCALAPPDATA% — the log, the WebView2 profile and the
-        // clipboard store all fail and the window stays black. Explorer starts children at the
-        // user's real integrity, so hop through it once.
+        // clipboard store all fail and the window stays black.
         var integrityRid = Native.CurrentIntegrityRid();
-        if (integrityRid is > 0 and < 0x2000 && Environment.GetEnvironmentVariable("RAYCAST_MINI_NO_RELAUNCH") != "1")
-        {
-            Log.Write($"process integrity is low (0x{integrityRid:X}); relaunching via Explorer");
-            System.Diagnostics.Process.Start("explorer.exe", Environment.ProcessPath ?? "RaycastMini.exe");
-            Shutdown(0);
-            return;
-        }
+        Log.Write($"OnStartup integrityRid=0x{integrityRid:X}");
 
         // Two instances share one WebView2 user-data folder, and the second always fails with
         // 0x800700AA ("resource in use") — usually a leftover instance that only hid itself.
         // Enforce one instance unless a test explicitly opts out.
         if (Environment.GetEnvironmentVariable("RAYCAST_MINI_ALLOW_MULTI") != "1")
         {
-            _singleInstanceMutex = new System.Threading.Mutex(true, @"Local\raycast-mini-singleton", out var createdNew);
+            bool createdNew = false;
+            try
+            {
+                _singleInstanceMutex = new System.Threading.Mutex(true, @"Local\raycast-mini-singleton", out createdNew);
+            }
+            catch (System.Threading.AbandonedMutexException)
+            {
+                // Previous instance crashed without releasing the mutex — we now own it.
+                Log.Write("previous instance abandoned the mutex; taking ownership");
+                createdNew = true;
+            }
+
             if (!createdNew)
             {
-                Log.Write("another instance is already running; exiting");
-                _singleInstanceMutex.Dispose();
+                Log.Write("another instance is already running; signalling existing instance to show");
+                SignalRunningInstance();
+                _singleInstanceMutex?.Dispose();
                 _singleInstanceMutex = null;
                 Shutdown(0);
                 return;
             }
+
+            StartSingleInstanceServer();
         }
 
         await StartLauncherAsyncCore();
     }
 
+    private static void SignalRunningInstance()
+    {
+        try
+        {
+            using var client = new System.IO.Pipes.NamedPipeClientStream(".", "raycast-mini-instance-activation", System.IO.Pipes.PipeDirection.Out);
+            client.Connect(1500);
+            using var writer = new StreamWriter(client);
+            writer.WriteLine("show");
+            writer.Flush();
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"failed to signal existing instance: {ex.Message}");
+        }
+    }
+
+    private void StartSingleInstanceServer()
+    {
+        Task.Run(async () =>
+        {
+            while (!_isShuttingDown)
+            {
+                try
+                {
+                    using var server = new System.IO.Pipes.NamedPipeServerStream(
+                        "raycast-mini-instance-activation",
+                        System.IO.Pipes.PipeDirection.In,
+                        1,
+                        System.IO.Pipes.PipeTransmissionMode.Byte,
+                        System.IO.Pipes.PipeOptions.Asynchronous);
+
+                    await server.WaitForConnectionAsync();
+                    using var reader = new StreamReader(server);
+                    var line = await reader.ReadLineAsync();
+                    Log.Write($"[activation] received command '{line}' from second instance");
+                    if (line == "show")
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            if (_window != null)
+                            {
+                                _window.ShowMainWindow();
+                            }
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (_isShuttingDown) break;
+                    Log.Write($"activation pipe error: {ex.Message}");
+                    await Task.Delay(1000);
+                }
+            }
+        });
+    }
+
+    private volatile bool _isShuttingDown;
     private System.Threading.Mutex? _singleInstanceMutex;
 
     private async Task StartLauncherAsyncCore()
@@ -295,6 +360,7 @@ _window = new MainWindow(_pipe, _backend);
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _isShuttingDown = true;
         SnippetHook.Uninstall();
         _singleInstanceMutex?.ReleaseMutex();
         _singleInstanceMutex?.Dispose();

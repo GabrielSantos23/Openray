@@ -741,6 +741,10 @@ textarea[data-error="true"] {
   background: linear-gradient(140deg, #86b6ff 0%, #3f68e0 100%);
 }
 
+.command-tile--notes {
+  background: linear-gradient(140deg, #ffd479 0%, #e0a63f 100%);
+}
+
 /* ---- Calculator split row (root search + the history view's live row) ---- */
 
 .calc-row {
@@ -1279,4 +1283,57 @@ textarea[data-error="true"] {
 
 .command-form .openwith__search::placeholder {
   color: rgb(255 255 255 / 32%);
+}
+
+/* Row-level actions chevron (Raycast shows it on the row's right edge on hover); clicking it
+   opens the action panel instead of running the row's primary action. */
+.list__rowActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  color: var(--color-text-secondary);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  cursor: pointer;
+}
+
+.list__row:hover .list__rowActions,
+.list__rowActions:hover {
+  opacity: 1;
+}
+
+.list__rowActions:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-primary);
+}
+
+/* Back button inside extension views: Raycast's rounded-square with a left arrow. */
+.back-button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.back-button svg {
+  display: block;
+}
+
+.back-button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.back-button:active {
+  background: rgba(255, 255, 255, 0.2);
 }

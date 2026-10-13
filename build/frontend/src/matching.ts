@@ -45,6 +45,10 @@ export interface FileSearchResult {
   folder: string;
   modifiedTime: number;
   size: number;
+  /** Present on rows from the backend indexer (`fileSearch.search`). */
+  parentFolder?: string;
+  createdTime?: number;
+  contentType?: string;
 }
 
 // Remove diacritics and normalize text
@@ -98,8 +102,9 @@ export function matchText(searchTerm: NormalizedText, target: NormalizedText): M
     };
   }
 
-  // Check for reverse prefix match (needle starts with haystack) - target is prefix of query
-  if (needle.startsWith(haystack)) {
+  // Check for reverse prefix match (needle starts with haystack) - target is prefix of query.
+  // An empty target must not match: entries without a subtitle would otherwise match every query.
+  if (haystack.length > 0 && needle.startsWith(haystack)) {
     // The target is a prefix of the query, high relevance
     return {
       type: "partial",
