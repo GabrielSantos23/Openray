@@ -57,6 +57,17 @@ test("catalog refresh indexes the pinned sources; search lists Windows extension
     assert.equal(byQuery.extensions[0].handle, "plain-store-fixture");
     assert.equal(byQuery.extensions[0].installed, false);
 
+    const paged = store.handlers.search({ query: "", limit: 1, offset: 0 });
+    assert.equal(paged.total, 2);
+    assert.equal(paged.extensions.length, 1);
+    const tail = store.handlers.search({ query: "", limit: 1, offset: 1 });
+    assert.equal(tail.total, 2);
+    assert.equal(tail.extensions.length, 1);
+    assert.notEqual(tail.extensions[0].handle, paged.extensions[0].handle);
+    const beyond = store.handlers.search({ query: "", limit: 1, offset: 5 });
+    assert.equal(beyond.total, 2);
+    assert.equal(beyond.extensions.length, 0);
+
     const categories = store.handlers.categories();
     assert.ok(categories.categories.some((entry) => entry.name === "Developer Tools"));
     assert.ok(categories.categories.some((entry) => entry.name === "Productivity"));

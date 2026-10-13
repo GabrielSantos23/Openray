@@ -22,7 +22,11 @@ const CATALOG_RAW = "https://raw.githubusercontent.com/raycast/extensions";
 const CATALOG_API = "https://api.github.com/repos/raycast/extensions";
 const APP_API_VERSION = "2.4.0.0";
 const DEFAULT_MIN_API_VERSION = "1.25.0";
-const FETCH_CONCURRENCY = 16;
+const FETCH_CONCURRENCY = 32;
+// One stalled CDN connection must not hang a whole catalog refresh (observed: an indefinite fetch
+// pinned the loop for minutes with the UI stuck on "Refreshing…").
+const FETCH_TIMEOUT_MS = 15000;
+const CATALOG_PROGRESS_EVERY = 25;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS catalog_meta (
@@ -264,7 +268,7 @@ function createStore(options) {
   }
 
   function fetchText(url) {
-    return fetch(url, { headers: { "User-Agent": "RaycastMini" } }).then(async (response) => {
+    return fetch(url, { headers: { "User-Agent": "RaycastMini" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }).then(async (response) => {
       if (!response.ok) throw new Error(`${url} -> HTTP ${response.status}`);
       return response.text();
     });
@@ -304,6 +308,13 @@ function createStore(options) {
     setMeta("commit_sha", sha);
     setMeta("refreshed_at", Date.now());
 
+    // Manifests are cached per commit: an unchanged upstream commit re-serves the SQLite rows and
+    // the whole refresh costs one API call instead of one request per extension.
+    if (getMeta("manifests_commit") === sha) {
+      const cached = db.prepare("SELECT COUNT(*) AS count FROM catalog_extensions").get().count;
+      return { commit: sha, handles: cached, fetched: 0, failed: 0, cached: true };
+    }
+
     // Two tree calls list every extension handle at that commit.
     const rootTree = JSON.parse(await fetchText(`${CATALOG_API}/git/trees/${sha}`));
     const extensionsNode = (rootTree.tree ?? []).find((entry) => entry.path === "extensions" && entry.type === "tree");
@@ -311,23 +322,28 @@ function createStore(options) {
     const extensionsTree = JSON.parse(await fetchText(`${CATALOG_API}/git/trees/${extensionsNode.sha}`));
     const handles = (extensionsTree.tree ?? []).filter((entry) => entry.type === "tree").map((entry) => entry.path);
 
-    // Every manifest, fetched from the pinned commit and cached.
+    // Every manifest, fetched from the pinned commit and cached; rows land in SQLite as they
+    // arrive so search serves the partial catalog while the rest is still downloading.
     const now = Date.now();
     let fetched = 0;
+    let failed = 0;
+    const upsert = db.prepare(
+      `INSERT INTO catalog_extensions (handle, name, title, description, author, categories, platforms, version, updated_at, commands_json, fetched_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(handle) DO UPDATE SET name=excluded.name, title=excluded.title, description=excluded.description,
+         author=excluded.author, categories=excluded.categories, platforms=excluded.platforms, version=excluded.version,
+         updated_at=excluded.updated_at, commands_json=excluded.commands_json, fetched_at=excluded.fetched_at`,
+    );
     await mapPool(handles, FETCH_CONCURRENCY, async (handle) => {
       let manifest = null;
       try {
-        manifest = JSON.parse(await fetchText(`${CATALOG_RAW}/${sha}/extensions/${handle}/package.json`));
+        const url = `${CATALOG_RAW}/${sha}/extensions/${handle}/package.json`;
+        manifest = JSON.parse(await fetchText(url).catch(() => fetchText(url)));
       } catch {
-        return; // unparseable manifest — excluded from the catalog, reported in stats
+        failed += 1; // unparseable manifest — excluded from the catalog, reported in stats
+        return;
       }
-      db.prepare(
-        `INSERT INTO catalog_extensions (handle, name, title, description, author, categories, platforms, version, updated_at, commands_json, fetched_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(handle) DO UPDATE SET name=excluded.name, title=excluded.title, description=excluded.description,
-           author=excluded.author, categories=excluded.categories, platforms=excluded.platforms, version=excluded.version,
-           updated_at=excluded.updated_at, commands_json=excluded.commands_json, fetched_at=excluded.fetched_at`,
-      ).run(
+      upsert.run(
         handle,
         manifest.name ?? handle,
         manifest.title ?? manifest.name ?? handle,
@@ -344,8 +360,20 @@ function createStore(options) {
         now,
       );
       fetched += 1;
+      if (fetched % CATALOG_PROGRESS_EVERY === 0) {
+        pushToFrontend("store.catalogProgress", { fetched, total: handles.length, done: false }).catch(() => undefined);
+      }
     });
-    return { commit: sha, handles: handles.length, fetched };
+
+    // Drop rows for extensions that no longer exist upstream at this commit.
+    const alive = new Set(handles);
+    for (const row of db.prepare("SELECT handle FROM catalog_extensions").all()) {
+      if (!alive.has(row.handle)) db.prepare("DELETE FROM catalog_extensions WHERE handle = ?").run(row.handle);
+    }
+    // Only pin the manifest cache when the fetch was complete; any failure re-fetches next time.
+    if (failed === 0) setMeta("manifests_commit", sha);
+    pushToFrontend("store.catalogProgress", { fetched, total: handles.length, done: true }).catch(() => undefined);
+    return { commit: sha, handles: handles.length, fetched, failed, cached: false };
   }
 
   /**
@@ -638,6 +666,8 @@ function createStore(options) {
     search: (params) => {
       const query = String(params?.query ?? "").trim().toLowerCase();
       const category = params?.category ?? null;
+      const limit = Math.min(Math.max(Number(params?.limit) || 50, 1), 500);
+      const offset = Math.max(Number(params?.offset) || 0, 0);
       let rows = db.prepare("SELECT * FROM catalog_extensions ORDER BY title COLLATE NOCASE").all();
       if (category && category !== "all") {
         rows = rows.filter((row) => JSON.parse(row.categories ?? "[]").includes(category));
@@ -664,7 +694,8 @@ function createStore(options) {
           commands: JSON.parse(row.commands_json ?? "[]"),
           installed: Boolean(db.prepare("SELECT 1 FROM installed_extensions WHERE uuid = ?").get(row.handle)),
         }));
-      return { commit: pinnedCommit(), extensions: windows };
+      // Paged: the renderer appends pages as the user scrolls instead of rendering the whole match set.
+      return { commit: pinnedCommit(), total: windows.length, extensions: windows.slice(offset, offset + limit) };
     },
 
     categories: () => {

@@ -3,10 +3,11 @@
 // bar filters the catalog, the detail replaces the list, and the confirm modal mirrors the real
 // install confirmation (Extension / Author / commit).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { RaycastIcon } from "../../icons";
 import { renderMarkdown } from "../../markdown";
 import {
+  onStoreCatalogProgress,
   onStoreInstalled,
   onStoreProgress,
   storeCategories,
@@ -17,6 +18,7 @@ import {
   storeSearch,
   storeUninstall,
   type CatalogExtension,
+  type CatalogProgress,
   type InstallProgress,
   type StoreCategory,
   type StoreDetail,
@@ -35,6 +37,9 @@ const CLASS_LABELS: Record<string, string> = {
   "disabled-mode": "Unavailable",
 };
 
+/** Rows fetched per search request; the list appends more pages as the user scrolls. */
+const PAGE_SIZE = 50;
+
 export function StoreView({
   searchText,
   onSearchTextChange,
@@ -47,11 +52,14 @@ export function StoreView({
   onBack: () => void;
 }) {
   const [extensions, setExtensions] = useState<CatalogExtension[]>([]);
+  const [total, setTotal] = useState(0);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
   const [category, setCategory] = useState<string>("all");
   const [commit, setCommit] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [catalogProgress, setCatalogProgress] = useState<CatalogProgress | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [detail, setDetail] = useState<StoreDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -59,21 +67,31 @@ export function StoreView({
   const [progress, setProgress] = useState<InstallProgress | null>(null);
   const [busyHandle, setBusyHandle] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const loadedRef = useRef({ query: "", category: "all", offset: 0 });
 
   const reload = useCallback(
-    async (query: string, activeCategory: string) => {
+    async (query: string, activeCategory: string, options?: { append?: boolean; spinner?: boolean }) => {
+      const append = options?.append ?? false;
+      if (options?.spinner) setLoading(true);
       try {
+        const offset = append ? loadedRef.current.offset : 0;
         const [result, categoryResult] = await Promise.all([
-          storeSearch(query, activeCategory),
+          storeSearch(query, activeCategory, PAGE_SIZE, offset),
           storeCategories(),
         ]);
-        setExtensions(result.extensions);
+        loadedRef.current = { query, category: activeCategory, offset: offset + result.extensions.length };
+        setExtensions((previous) => {
+          if (!append) return result.extensions;
+          const seen = new Set(previous.map((entry) => entry.handle));
+          return [...previous, ...result.extensions.filter((entry) => !seen.has(entry.handle))];
+        });
+        setTotal(result.total);
         setCommit(result.commit);
         setCategories(categoryResult.categories);
       } catch (error) {
         showToast("Store is unavailable", error instanceof Error ? error.message : String(error));
       } finally {
-        setLoading(false);
+        if (options?.spinner) setLoading(false);
       }
     },
     [showToast],
@@ -81,9 +99,22 @@ export function StoreView({
 
   useEffect(() => {
     setLoading(true);
-    const timer = setTimeout(() => void reload(searchText, category), 150);
+    const timer = setTimeout(() => void reload(searchText, category, { spinner: true }), 150);
     return () => clearTimeout(timer);
   }, [searchText, category, reload]);
+
+  // Catalog refresh progress: manifest rows land in SQLite while the fetch is still running, so
+  // re-query periodically and the list grows live — including for whatever search text is active.
+  const lastLiveQuery = useRef(0);
+  useEffect(() => {
+    return onStoreCatalogProgress((entry) => {
+      setCatalogProgress(entry);
+      if (entry.done || Date.now() - lastLiveQuery.current > 500) {
+        lastLiveQuery.current = Date.now();
+        void reload(searchText, category);
+      }
+    });
+  }, [reload, searchText, category]);
 
   // Install/uninstall completion and progress push from the backend.
   useEffect(() => {
@@ -132,7 +163,12 @@ export function StoreView({
     setRefreshing(true);
     try {
       const result = await storeRefreshCatalog();
-      showToast("Catalog updated", `${result.fetched} extensions at commit ${result.commit.slice(0, 7)}`);
+      showToast(
+        result.cached ? "Catalog is up to date" : "Catalog updated",
+        result.cached
+          ? `${result.handles} extensions at commit ${result.commit.slice(0, 7)}`
+          : `${result.fetched} extensions${result.failed ? `, ${result.failed} failed` : ""} at commit ${result.commit.slice(0, 7)}`,
+      );
       await reload(searchText, category);
     } catch (error) {
       showToast("Could not refresh the catalog", error instanceof Error ? error.message : String(error));
@@ -140,6 +176,30 @@ export function StoreView({
       setRefreshing(false);
     }
   }, [reload, searchText, category, showToast]);
+
+  // First open with an empty cache: start the refresh automatically instead of leaving the user
+  // on an empty list until they find the refresh button.
+  const autoRefreshStarted = useRef(false);
+  useEffect(() => {
+    if (loading || autoRefreshStarted.current || commit !== null) return;
+    autoRefreshStarted.current = true;
+    void refreshCatalog();
+  }, [loading, commit, refreshCatalog]);
+
+  const loadMore = useCallback(() => {
+    if (loading || loadingMore || extensions.length >= total) return;
+    if (loadedRef.current.query !== searchText || loadedRef.current.category !== category) return;
+    setLoadingMore(true);
+    void reload(searchText, category, { append: true }).finally(() => setLoadingMore(false));
+  }, [loading, loadingMore, extensions.length, total, searchText, category, reload]);
+
+  const onListScroll = useCallback(
+    (event: UIEvent<HTMLUListElement>) => {
+      const element = event.currentTarget;
+      if (element.scrollTop + element.clientHeight >= element.scrollHeight - 400) loadMore();
+    },
+    [loadMore],
+  );
 
   const runInstall = useCallback(
     async (handle: string) => {
@@ -251,16 +311,27 @@ export function StoreView({
                 ))}
               </select>
               <button type="button" className="store-toolbar__refresh" onClick={() => void refreshCatalog()} disabled={refreshing}>
-                {refreshing ? "Refreshing…" : "Refresh catalog"}
+                {refreshing
+                  ? catalogProgress && !catalogProgress.done
+                    ? `Loading ${catalogProgress.fetched}/${catalogProgress.total}…`
+                    : "Refreshing…"
+                  : "Refresh catalog"}
               </button>
             </div>
             {rows.length === 0 ? (
-              <div className="state">
-                <div className="state__title">No extensions found</div>
-                <div className="state__message">Try a different search term or refresh the catalog.</div>
-              </div>
+              catalogProgress && !catalogProgress.done && catalogProgress.total > 0 ? (
+                <div className="state">
+                  <div className="state__title">Loading catalog…</div>
+                  <div className="state__message">{catalogProgress.fetched} of {catalogProgress.total} extensions cached — results appear as they arrive.</div>
+                </div>
+              ) : (
+                <div className="state">
+                  <div className="state__title">No extensions found</div>
+                  <div className="state__message">Try a different search term or refresh the catalog.</div>
+                </div>
+              )
             ) : (
-              <ul className="list store-list" ref={listRef}>
+              <ul className="list store-list" ref={listRef} onScroll={onListScroll}>
                 {rows.map((entry, index) => (
                   <li key={entry.handle}>
                     <button
@@ -284,6 +355,11 @@ export function StoreView({
                     </button>
                   </li>
                 ))}
+                {extensions.length < total ? (
+                  <li className="store-list__more" aria-live="polite">
+                    {loadingMore ? "Loading more…" : `${extensions.length} of ${total} — scroll for more`}
+                  </li>
+                ) : null}
               </ul>
             )}
           </>

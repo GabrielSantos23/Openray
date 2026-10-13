@@ -32,7 +32,16 @@ export interface StoreCategory {
 
 export interface StoreSearchResult {
   commit: string | null;
+  /** Total matches on the backend; `extensions` is one page of them. */
+  total: number;
   extensions: CatalogExtension[];
+}
+
+/** Progress of a catalog refresh push (`store.catalogProgress`). */
+export interface CatalogProgress {
+  fetched: number;
+  total: number;
+  done: boolean;
 }
 
 export interface StoreDetailCommand {
@@ -69,8 +78,8 @@ export interface InstallProgress {
   message: string;
 }
 
-export function storeSearch(query: string, category: string | null): Promise<StoreSearchResult> {
-  return ipc.backend("store.search", { query, category }, { module: "backend" }) as Promise<StoreSearchResult>;
+export function storeSearch(query: string, category: string | null, limit = 50, offset = 0): Promise<StoreSearchResult> {
+  return ipc.backend("store.search", { query, category, limit, offset }, { module: "backend" }) as Promise<StoreSearchResult>;
 }
 
 export function storeCategories(): Promise<{ categories: StoreCategory[] }> {
@@ -81,8 +90,8 @@ export function storeDetail(handle: string): Promise<StoreDetail> {
   return ipc.backend("store.detail", { handle }, { module: "backend" }) as Promise<StoreDetail>;
 }
 
-export function storeRefreshCatalog(): Promise<{ commit: string; fetched: number }> {
-  return ipc.backend("store.refreshCatalog", {}, { module: "backend" }) as Promise<{ commit: string; fetched: number }>;
+export function storeRefreshCatalog(): Promise<{ commit: string; handles: number; fetched: number; failed: number; cached: boolean }> {
+  return ipc.backend("store.refreshCatalog", {}, { module: "backend", timeoutMs: 0 }) as Promise<{ commit: string; handles: number; fetched: number; failed: number; cached: boolean }>;
 }
 
 export function storeInstall(handle: string): Promise<unknown> {
@@ -121,4 +130,9 @@ export function onStoreProgress(handler: (progress: InstallProgress) => void): (
 
 export function onStoreInstalled(handler: (payload: { handle: string; removed?: boolean }) => void): () => void {
   return onNotification("store.installed", handler as (data: unknown) => void);
+}
+
+/** Subscribe to catalog refresh progress pushes (rows landing in the cache while fetching). */
+export function onStoreCatalogProgress(handler: (progress: CatalogProgress) => void): () => void {
+  return onNotification("store.catalogProgress", handler as (data: unknown) => void);
 }

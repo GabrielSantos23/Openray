@@ -281,3 +281,12 @@
 .list__disabled-pill {
   color: rgba(255, 159, 10, 0.9);
 }
+
+/* Paged-catalog footer row: shown while more result pages exist below the fold. */
+.store-list__more {
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.4));
+  list-style: none;
+}
