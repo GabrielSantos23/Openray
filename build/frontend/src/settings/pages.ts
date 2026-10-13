@@ -241,6 +241,14 @@ export const PAGES: readonly PageDefinition[] = [
     ],
   },
   {
+    id: "extensions",
+    title: "Extension Preferences",
+    description: "Aliases, hotkeys and preference fields for installed extensions.",
+    icon: "extension",
+    keywords: ["extensions", "aliases", "hotkeys", "preferences", "store"],
+    sections: [],
+  },
+  {
     id: "shortcuts",
     title: "Shortcuts",
     description: "Manage command hotkeys and aliases across Raycast.",
@@ -1070,6 +1078,7 @@ export const SIDEBAR_PAGE_IDS = [
   "general",
   "launcher",
   "shortcuts",
+  "extensions",
   "keyboard",
   "quicklinks",
   "snippets",

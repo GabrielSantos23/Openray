@@ -81,6 +81,14 @@ function createBackend(options) {
     } catch {
       return [];
     }
+    // The store's per-command classification rides on every summary so the renderer can grey out
+    // disabled commands (badge + one-line reason).
+    let compat = null;
+    try {
+      compat = storeHandlers.getSummariesCompat?.()?.compat ?? null;
+    } catch {
+      compat = null;
+    }
     const out = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -88,6 +96,7 @@ function createBackend(options) {
         const manifest = JSON.parse(
           fs.readFileSync(path.join(options.extensionsRoot, entry.name, "package.json"), "utf-8"),
         );
+        const extensionCompat = compat?.[entry.name] ?? null;
         out.push({
           uuid: entry.name,
           id: entry.name,
@@ -96,7 +105,14 @@ function createBackend(options) {
           description: manifest.description ?? "",
           author: manifest.author ?? "local",
           icon: manifest.icon,
-          commands: manifest.commands ?? [],
+          badge: extensionCompat?.badge ?? null,
+          commands: (manifest.commands ?? []).map((command) => ({
+            ...command,
+            disabledReason: extensionCompat?.commands?.[command.name]?.class
+              && extensionCompat.commands[command.name].class !== "compatible"
+              ? extensionCompat.commands[command.name].reason ?? "Not supported"
+              : null,
+          })),
           tools: manifest.tools ?? [],
           path: P.extensionDir(entry.name),
           assetsPath: P.assetsPath(entry.name),
@@ -182,6 +198,7 @@ function createBackend(options) {
       async unload() {
         if (terminated) return;
         terminated = true;
+        rejectPendingWorkers("worker unloaded");
         try {
           await worker.terminate();
         } catch {
@@ -231,8 +248,15 @@ function createBackend(options) {
     });
 
     // A crashed worker is discarded (never pooled), its session torn down, and the failure
-    // surfaces as a `commandException` toast naming the extension (plan §1.3).
+    // surfaces as a `commandException` toast naming the extension (plan §1.3). Every pending
+    // request into the worker rejects, so a death mid-`initialize` cannot hang `loadCommand`.
+    function rejectPendingWorkers(reason) {
+      for (const [, waiter] of callbacks) waiter.reject(new Error(reason));
+      callbacks.clear();
+    }
+
     function reportWorkerCrash(name, message) {
+      rejectPendingWorkers(`worker crashed: ${message}`);
       if (terminated || !sessions.has(workerId)) return;
       sessions.delete(workerId);
       for (const [sessionId, mappedWorkerId] of activeSessions) {

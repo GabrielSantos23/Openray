@@ -20,6 +20,7 @@ import { useExtensionCommand } from "../useExtensionCommand";
 import { alertStore, type ExtensionAlertPayload } from "../alertStore";
 import AlertHost from "../AlertHost";
 import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "../testHooks";
+import { registerAllCommandHotkeys } from "../commandConfig";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
 import {
   hudStore,
@@ -484,6 +485,21 @@ export function MainWindow() {
     return onNotification("windowManagement.hotkey", (raw) => {
       const payload = raw as { commandKey?: string };
       if (!payload.commandKey) return;
+      // Store command hotkeys are keyed `cmd:<uuid>/<command>`; reveal the launcher and open the
+      // command (the WM presets fall through to the geometry runner below).
+      if (payload.commandKey.startsWith("cmd:")) {
+        const [uuid, commandName] = payload.commandKey.slice("cmd:".length).split("/");
+        void ipcRequest("window.showMainWindow", {}, { module: "frontend" }).catch(() => undefined);
+        setExtensions((current) => {
+          const extension = current.find((candidate) => candidate.uuid === uuid);
+          const command = extension?.commands.find((candidate) => candidate.name === commandName);
+          if (extension && command && !command.disabledReason) {
+            setSelected({ kind: "extension", extension, command });
+          }
+          return current;
+        });
+        return;
+      }
       void runWindowManagementCommand(payload.commandKey, { showToast, closeMainWindow });
     });
     // showToast/closeMainWindow are stable callbacks; the subscription lives for the session.
@@ -753,6 +769,21 @@ export function MainWindow() {
       .finally(() => setExtensionsLoading(false));
   }, []);
 
+  // Store installs/uninstalls change the installed set; the backend pushes `store.installed` and
+  // root search re-reads the summaries (compat classification included).
+  useEffect(() => {
+    return onNotification("store.installed", () => {
+      void ipc.backend("extensionHost.getInstalledNodeExtensionSummaries")
+        .then((payload) => setExtensions((payload as { extensions?: ExtensionSummary[] }).extensions ?? []))
+        .catch(() => undefined);
+    });
+  }, []);
+
+  // Command hotkeys live in the host process; re-register the stored ones on renderer mount.
+  useEffect(() => {
+    void registerAllCommandHotkeys();
+  }, []);
+
   const { applications, error: applicationsError, loading: applicationsLoading } = useApplications(true);
 
   // Focus (docs/focus-games-taskbar-spec.md §A): the dynamic session row subscribes to the
@@ -936,23 +967,24 @@ export function MainWindow() {
       commandPanelEntry.kind === "clipboard"
         ? CLIPBOARD_FAVORITE_KEY
         : commandFavoriteKey(commandPanelEntry.extension.uuid, commandPanelEntry.command.name);
-    return [
-      { name: "general", actions: [{ id: "command:open", title: "Open Command", itemId: key }] },
-      {
-        name: "favorites",
-        actions: [
-          {
-            id: "command:favorite",
-            title: isFavorite(key) ? "Remove from Favorites" : "Add to Favorites",
-            itemId: key,
-          },
-        ],
-      },
-      {
-        name: "configure",
-        actions: [{ id: "command:configureCommand", title: "Configure Command", itemId: key }],
-      },
-    ];
+    // Disabled (classifier-disabled) commands cannot be launched — no Open action in the panel.
+    const disabled = commandPanelEntry.kind === "extension" && Boolean(commandPanelEntry.command.disabledReason);
+    const groups: ActionGroup[] = [];
+    if (!disabled) {
+      groups.push({ name: "general", actions: [{ id: "command:open", title: "Open Command", itemId: key }] });
+    }
+    groups.push({
+      name: "favorites",
+      actions: [
+        {
+          id: "command:favorite",
+          title: isFavorite(key) ? "Remove from Favorites" : "Add to Favorites",
+          itemId: key,
+        },
+      ],
+    });
+    groups.push({ name: "configure", actions: [{ id: "command:configureCommand", title: "Configure Command", itemId: key }] });
+    return groups;
   }, [commandPanelEntry, isFavorite]);
 
   // Opening a file hides the launcher first, like every launching action in Raycast.
@@ -1464,6 +1496,11 @@ export function MainWindow() {
           setQuicklinkCreateLink(entry.link);
           setPendingCreateLink(entry.link);
           setSelected(internalCommandEntry("quicklinks", "create"));
+        }
+        else if (entry.kind === "extension" && entry.command.disabledReason) {
+          // Classified-disabled commands cannot be launched (the backend refuses too); the row
+          // explains itself.
+          showToast(entry.command.title, entry.command.disabledReason);
         }
         else if (entry.kind === "extension" && hasArguments(entry.command)) {
           // Show argument input UI
@@ -2275,8 +2312,15 @@ export function MainWindow() {
                             type="button"
                             className="list__row"
                             data-selected={index === selectedIndex}
+                            data-disabled={entry.command.disabledReason ? "true" : undefined}
                             onMouseEnter={() => setSelectedIndex(index)}
-                            onClick={() => setSelected(entry)}
+                            onClick={() => {
+                              if (entry.command.disabledReason) {
+                                showToast(entry.command.title, entry.command.disabledReason);
+                                return;
+                              }
+                              setSelected(entry);
+                            }}
                             onContextMenu={(event) => {
                               event.preventDefault();
                               openRootActionPanel(entry);
@@ -2288,11 +2332,16 @@ export function MainWindow() {
                             <span className="list__text">
                               <span className="list__title">{entry.command.title}</span>
                               <span className="list__subtitle">
-                                {entry.command.description || entry.extension.title}
+                                {entry.command.disabledReason || entry.command.description || entry.extension.title}
                               </span>
                             </span>
                             <span className="list__accessory">
-                                                            <span className="list__command-type">{entry.command.mode ?? "view"}</span>
+                              {entry.command.disabledReason ? (
+                                <span className="pill list__disabled-pill" title={entry.command.disabledReason}>Disabled</span>
+                              ) : entry.extension.badge ? (
+                                <span className="pill" title={entry.extension.badge}>Partial</span>
+                              ) : null}
+                              <span className="list__command-type">{entry.command.mode ?? "view"}</span>
                             </span>
                           </button>
                         </li>

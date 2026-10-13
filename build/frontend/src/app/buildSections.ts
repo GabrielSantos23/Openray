@@ -6,6 +6,7 @@ import type { ApplicationCommand } from "../applications";
 import type { FocusSessionState } from "../focus";
 import { applicationFavoriteKey, commandFavoriteKey, internalFavoriteKey } from "../favorites";
 import { isDevExtensionsEnabled } from "../testHooks";
+import { readCommandAliases } from "../commandConfig";
 import { isLikelyUrl, type QuicklinkEntry } from "../quicklinks";
 import { looksLikeFilePath } from "../fileSearch";
 import { WM_COMMANDS } from "../windowManagement";
@@ -174,6 +175,7 @@ export function buildSections(
 
   // Build searchable entries for extension commands
   const commandSearchables: SearchableEntry[] = [];
+  const commandAliases = readCommandAliases();
   for (const extension of extensions) {
     for (const command of extension.commands ?? []) {
       if (command.mode === "no-view") continue;
@@ -181,10 +183,15 @@ export function buildSections(
       // `raycast-mini:dev-extensions=1`, or the host's `--dev-extensions` / env equivalent.
       if (extension.name === "command-ux-test" && !isDevExtensionsEnabled()) continue;
       const entry: ExtensionEntry = { kind: "extension", extension, command };
+      // A user alias widens the match like an extra keyword (Raycast's per-command aliases).
+      const alias = commandAliases[commandFavoriteKey(extension.uuid, command.name)];
       commandSearchables.push({
         title: command.title,
-        subtitle: command.description ?? extension.title,
-        keywords: generateKeywords(`${extension.title} ${command.title}`, command.description ?? ""),
+        subtitle: command.disabledReason || (command.description ?? extension.title),
+        keywords: [
+          ...generateKeywords(`${extension.title} ${command.title}`, command.description ?? ""),
+          ...(alias ? [alias.toLowerCase()] : []),
+        ],
         rootEntry: entry,
       });
     }

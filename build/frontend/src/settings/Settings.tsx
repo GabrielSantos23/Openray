@@ -54,6 +54,7 @@ import {
 import { Dropdown, HotkeyRecorder, RadioGroup, Switch } from "./controls";
 import { SearchField, SidebarLink, searchResults } from "./sidebar";
 import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
+import { ExtensionPreferences } from "./ExtensionPreferences";
 import { applyPreset, readStoredHotkeys } from "../windowManagement";
 import { WM_COMMANDS } from "../wm-commands";
 
@@ -880,6 +881,7 @@ export function Settings() {
               )
             )}
             {page.id === "translator" ? <TranslatorCustomCommands /> : null}
+            {page.id === "extensions" ? <ExtensionPreferences /> : null}
           </div>
         </div>
       </main>

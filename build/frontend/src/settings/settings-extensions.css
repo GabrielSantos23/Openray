@@ -1,0 +1,55 @@
+/* The Extensions settings page (new class names only). */
+
+.settings-extensions {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings-extensions__command {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-extensions__commandHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-extensions__commandTitle {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-extensions__reason {
+  font-size: 11px;
+  color: rgba(255, 159, 10, 0.85);
+}
+
+.settings-extensions__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-extensions__rowTitle {
+  font-size: 12px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.55));
+}
+
+.settings-extensions__input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  min-width: 180px;
+}

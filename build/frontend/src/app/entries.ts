@@ -15,7 +15,16 @@ export interface ExtensionSummary {
   name: string;
   title: string;
   description?: string;
-  commands: Array<{ name: string; title: string; description?: string; mode?: "view" | "no-view" | "menu-bar" }>;
+  /** Store classification badge ("some features unavailable"), when classified. */
+  badge?: string | null;
+  commands: Array<{
+    name: string;
+    title: string;
+    description?: string;
+    mode?: "view" | "no-view" | "menu-bar";
+    /** Disabled commands carry the one-line reason and cannot be launched, aliased or hotkeyed. */
+    disabledReason?: string | null;
+  }>;
 }
 
 export interface ExtensionEntry {
@@ -44,8 +53,8 @@ export interface ClipboardEntryResult {
  * four Quicklinks commands (create/export/import/search) and four Snippets commands, each opening
  * its own view.
  */
-export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search" | "notes";
-export type InternalCommandName = "search" | "create" | "import" | "export" | "history" | "translate" | "searchFiles" | "open";
+export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search" | "notes" | "store";
+export type InternalCommandName = "search" | "create" | "import" | "export" | "history" | "translate" | "searchFiles" | "open" | "browse";
 
 export interface InternalCommandEntry {
   kind: "internal";
@@ -72,6 +81,7 @@ export const INTERNAL_EXTENSION_META: Record<InternalArea, { title: string; icon
   translator: { title: "Translator", icon: "Globe", tile: "command-tile--translator" },
   "file-search": { title: "File Search", icon: "folder-search", tile: "command-tile--filesearch" },
   notes: { title: "Raycast Notes", icon: "blank-document", tile: "command-tile--notes" },
+  store: { title: "Store", icon: "extension", tile: "command-tile--store" },
 };
 
 export const INTERNAL_COMMANDS: ReadonlyArray<{
@@ -90,6 +100,7 @@ export const INTERNAL_COMMANDS: ReadonlyArray<{
   { area: "snippets", command: "search", title: "Search Snippets", keywords: ["snippets"] },
   { area: "translator", command: "translate", title: "Translate", keywords: ["translator", "translate", "translation"] },
   { area: "file-search", command: "searchFiles", title: "Search Files", keywords: ["file search", "find files", "explorer"] },
+  { area: "store", command: "browse", title: "Store", keywords: ["store", "extensions", "install", "marketplace"] },
   { area: "notes", command: "open", title: "Raycast Notes", keywords: ["notes", "note"] },
   { area: "notes", command: "create", title: "Create Note", keywords: ["notes", "new note"] },
   { area: "notes", command: "search", title: "Search Notes", keywords: ["notes", "search notes"] },
