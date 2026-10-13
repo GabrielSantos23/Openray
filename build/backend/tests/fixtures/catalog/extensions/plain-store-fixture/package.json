@@ -22,5 +22,6 @@
       "description": "Runs",
       "mode": "view"
     }
-  ]
+  ],
+  "icon": "extension-icon.png"
 }

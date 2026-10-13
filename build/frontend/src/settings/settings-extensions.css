@@ -53,3 +53,10 @@
   padding: 4px 8px;
   min-width: 180px;
 }
+
+/* The per-extension heading carries the extension's real icon (store.getIcon data URL). */
+.settings-extensions .settings-section__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

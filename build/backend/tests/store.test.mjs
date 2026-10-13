@@ -45,10 +45,15 @@ test("catalog refresh indexes the pinned sources; search lists Windows extension
   try {
     const refresh = await store.handlers.refreshCatalog();
     assert.equal(refresh.commit, "local-pinned-commit");
-    assert.equal(refresh.fetched, 3);
+    assert.equal(refresh.fetched, 5);
 
     const search = store.handlers.search({ query: "" });
-    assert.deepEqual(search.extensions.map((entry) => entry.handle).sort(), ["ai-store-fixture", "plain-store-fixture"]);
+    assert.deepEqual(search.extensions.map((entry) => entry.handle).sort(), [
+      "ai-store-fixture",
+      "no-compatible-store-fixture",
+      "oauth-store-fixture",
+      "plain-store-fixture",
+    ]);
     const macos = store.handlers.search({ query: "macOS Store Fixture" });
     assert.equal(macos.extensions.length, 0, "macOS-only extension is not listed");
 
@@ -58,14 +63,14 @@ test("catalog refresh indexes the pinned sources; search lists Windows extension
     assert.equal(byQuery.extensions[0].installed, false);
 
     const paged = store.handlers.search({ query: "", limit: 1, offset: 0 });
-    assert.equal(paged.total, 2);
+    assert.equal(paged.total, 4);
     assert.equal(paged.extensions.length, 1);
     const tail = store.handlers.search({ query: "", limit: 1, offset: 1 });
-    assert.equal(tail.total, 2);
+    assert.equal(tail.total, 4);
     assert.equal(tail.extensions.length, 1);
     assert.notEqual(tail.extensions[0].handle, paged.extensions[0].handle);
     const beyond = store.handlers.search({ query: "", limit: 1, offset: 5 });
-    assert.equal(beyond.total, 2);
+    assert.equal(beyond.total, 4);
     assert.equal(beyond.extensions.length, 0);
 
     const categories = store.handlers.categories();
@@ -107,6 +112,179 @@ test("install gate: no confirmation, no install; macOS-only refuses before any s
       /is not available on Windows/,
     );
     assert.equal(fs.readdirSync(extensionsRoot).length, 0, "refused before any download");
+  } finally {
+    cleanup();
+  }
+});
+
+test("compatibility gate: an extension with zero compatible commands refuses before any build", async () => {
+  const { store, extensionsRoot, cleanup } = makeStore();
+  try {
+    await store.handlers.refreshCatalog();
+    await assert.rejects(
+      () => store.handlers.install({ handle: "no-compatible-store-fixture", confirmed: true }),
+      /No compatible commands/,
+    );
+    assert.equal(fs.readdirSync(extensionsRoot).length, 0, "refused before npm install/build");
+    assert.equal(store.handlers.getInstalled().extensions.length, 0, "nothing registered");
+  } finally {
+    cleanup();
+  }
+});
+
+test("getIcon serves the manifest icon from the install tree as a data URL", async () => {
+  const { store, cleanup } = makeStore();
+  try {
+    await store.handlers.refreshCatalog();
+    assert.equal(store.handlers.getIcon({ uuid: "plain-store-fixture" }).icon, null, "nothing installed yet");
+
+    await store.handlers.install({ handle: "plain-store-fixture", confirmed: true });
+    const icon = store.handlers.getIcon({ uuid: "plain-store-fixture" }).icon;
+    assert.ok(icon?.startsWith("data:image/png;base64,"), "png icon resolves to a data URL");
+    assert.equal(store.handlers.getIcon({ uuid: "ai-store-fixture" }).icon, null, "extension without an icon");
+  } finally {
+    cleanup();
+  }
+});
+
+test("OAuth: a command completes a full PKCE round trip in a real worker", async () => {
+  const { store, extensionsRoot, cleanup } = makeStore();
+  try {
+    await store.handlers.refreshCatalog();
+    await store.handlers.install({ handle: "oauth-store-fixture", confirmed: true });
+
+    const captured = [];
+    const backend = createBackend({ pipeName: "store-oauth", apiRoot: API_ROOT, extensionsRoot });
+    backend.setTransport(async (module, method, data) => {
+      captured.push({ module, method, data });
+      return undefined;
+    });
+    backend.setLaunchGate(async (extension, command) => {
+      store.assertLaunchable(extension.uuid, command.name, command.title);
+    });
+    // No real browser in tests: capture the authorization URL the worker opens.
+    backend.overrideHostHandler("open", async (ctx, params) => {
+      captured.push({ method: "open", data: params });
+      return undefined;
+    });
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(extensionsRoot, "oauth-store-fixture", "package.json"), "utf-8"));
+    // No await: loadCommand resolves only when the no-view command finishes, and the command
+    // parks inside authorize until this test plays the provider redirect.
+    const loadPromise = backend.dispatchMessage("backend", "extensionHost.loadCommand", {
+      extension: {
+        uuid: "oauth-store-fixture", name: manifest.name, title: manifest.title, author: manifest.author,
+        commands: manifest.commands, assetsPath: path.join(extensionsRoot, "oauth-store-fixture", "assets"),
+      },
+      command: { name: "probe", title: "Probe", mode: "no-view", type: "command" },
+      preferences: {}, props: {},
+    });
+
+    // The test plays the provider: read the authorization URL, then hit the worker's loopback
+    // redirect server with a code and the state from that URL.
+    let authUrl = null;
+    const urlDeadline = Date.now() + 10000;
+    while (Date.now() < urlDeadline && !authUrl) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      for (const entry of captured) {
+        const target = String(entry.data?.path ?? "");
+        if (entry.method === "open" && target.startsWith("https://provider.example/authorize")) authUrl = target;
+      }
+    }
+    const probeStorage = () => {
+      try {
+        return fs.readFileSync(path.join(extensionsRoot, "oauth-store-fixture", ".storage.json"), "utf-8");
+      } catch {
+        return "(no storage)";
+      }
+    };
+    assert.ok(authUrl, `the command opened the authorization URL (probe storage: ${probeStorage()})`);
+    const url = new URL(authUrl);
+    assert.equal(url.searchParams.get("client_id"), "client-123");
+    assert.equal(url.searchParams.get("code_challenge_method"), "S256");
+    assert.ok(url.searchParams.get("code_challenge"));
+
+    // Wait until the command is parked inside authorize, then play the provider redirect.
+    const storagePath = path.join(extensionsRoot, "oauth-store-fixture", ".storage.json");
+    const readStep = () => {
+      try {
+        return JSON.parse(fs.readFileSync(storagePath, "utf-8"))["oauth-probe-step"] ?? null;
+      } catch {
+        return null;
+      }
+    };
+    const stepDeadline = Date.now() + 10000;
+    while (Date.now() < stepDeadline && readStep() !== "before-authorize") {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(readStep(), "before-authorize", "the command reached authorize");
+
+    // The command finishes and records its outcome in its LocalStorage (.storage.json). Read it
+    // before playing the redirect: if the command already completed with an error, the flow died
+    // before the loopback and the storage carries the reason.
+    const readResult = () => {
+      try {
+        const storage = JSON.parse(fs.readFileSync(storagePath, "utf-8"));
+        return storage["oauth-probe-result"] ? JSON.parse(storage["oauth-probe-result"]) : null;
+      } catch {
+        return null;
+      }
+    };
+    let earlyResult = null;
+    const earlyDeadline = Date.now() + 2000;
+    while (Date.now() < earlyDeadline && !earlyResult) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      earlyResult = readResult();
+    }
+    if (earlyResult) {
+      assert.equal(earlyResult.ok, true, `probe finished early with error: ${earlyResult.error}`);
+    }
+
+    const redirect = new URL(url.searchParams.get("redirect_uri"));
+    // The worker binds the loopback right before parking in authorize; the first connect can
+    // race the listener's accept readiness on Windows, so retry briefly. `node:http` instead of
+    // `fetch`: undici's connect path has refused loopback connects inside the test runner while
+    // the same port answers from any other process.
+    const redirectResponse = await new Promise((resolve, reject) => {
+      const http = require("node:http");
+      const attempt = (left) => {
+        const request = http.get(`${redirect.origin}/?code=test-code-1&state=${encodeURIComponent(url.searchParams.get("state"))}`, (response) => {
+          response.resume();
+          resolve(response);
+        });
+        request.on("error", (error) => {
+          if (left <= 0) {
+            try {
+              const netstat = require("node:child_process").execSync(`netstat -ano | findstr :${redirect.port}`, { encoding: "utf-8" });
+              console.error(`[oauth-diag] pid=${process.pid} netstat:\n${netstat}`);
+            } catch (diagError) {
+              console.error(`[oauth-diag] pid=${process.pid} netstat found nothing for :${redirect.port}`);
+            }
+            reject(new Error(`loopback redirect failed: ${error.message}`));
+          } else setTimeout(() => attempt(left - 1), 250);
+        });
+      };
+      attempt(10);
+    });
+    assert.ok(redirectResponse, "the loopback redirect server accepted the provider callback");
+
+    // The command finishes and records its outcome in its LocalStorage (.storage.json).
+    let result = null;
+    const storageDeadline = Date.now() + 10000;
+    while (Date.now() < storageDeadline && !result) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      result = readResult();
+    }
+    assert.ok(result, "the probe wrote its result");
+    assert.equal(result.ok, true, `probe error: ${result?.error}`);
+    assert.equal(result.authorizationCode, "test-code-1");
+    assert.equal(result.accessToken, "at-123", "snake_case token responses normalize");
+    assert.equal(result.refreshToken, "rt-456");
+    assert.equal(result.expired, false, "a one-hour token is not expired");
+    assert.equal(result.removed, true);
+    const loaded = await loadPromise;
+    assert.ok(loaded.sessionId, "the session registered");
+    await backend.dispatchMessage("backend", "extensionHost.unloadEntryPoint", { sessionId: loaded.sessionId }).catch(() => undefined);
   } finally {
     cleanup();
   }

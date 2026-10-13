@@ -32,6 +32,7 @@ import {
   type ToastState,
 } from "../toastStore";
 import { RaycastIcon } from "../icons";
+import { ExtensionIcon } from "../features/store/useExtensionIcon";
 import { readStoredHotkeys, reregisterStoredHotkeys, runWindowManagementCommand, wmCommandDefinition, wmCommandIcon } from "../windowManagement";
 import {
   cancelFocusSession,
@@ -2327,7 +2328,7 @@ export function MainWindow() {
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="Blocks" size={16} />
+                              <ExtensionIcon uuid={entry.extension.uuid} size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.command.title}</span>

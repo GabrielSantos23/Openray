@@ -117,8 +117,9 @@ test("out-of-scope calls throw UnsupportedApiError in the main thread too", asyn
   // Hooks throw synchronously, like every React hook misuse.
   assert.throws(() => api.useUnstableAI(), { name: "UnsupportedApiError" });
   assert.throws(() => api.useAI(), { name: "UnsupportedApiError" });
-  const client = new api.OAuth.PKCEClient();
-  await assert.rejects(() => client.authorize(), { name: "UnsupportedApiError" });
+  // The real PKCEClient only supports the loopback "web" redirect method; anything else (or no
+  // options at all) is a typed unsupported error.
+  assert.throws(() => new api.OAuth.PKCEClient(), { name: "UnsupportedApiError" });
   assert.equal(typeof api.UnsupportedApiError, "function");
 });
 

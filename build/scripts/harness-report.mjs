@@ -208,8 +208,16 @@ export async function runHarness({ candidates = CANDIDATES, onEvent = () => unde
           }
           await backend.dispatchMessage("backend", "extensionHost.unloadEntryPoint", { sessionId: response.sessionId }).catch(() => undefined);
         } catch (error) {
-          commandReport.harness = "fail";
-          commandReport.note = String(error?.message ?? error).split("\n")[0].slice(0, 300);
+          const message = String(error?.message ?? error);
+          // A compatible command that parks on OAuth sign-in is honest headless behavior, not a
+          // failure: the flow needs the app UI (browser + redirect).
+          if (/OAuth sign-in is unavailable in headless mode/.test(message)) {
+            commandReport.harness = "auth-required";
+            commandReport.note = message.split("\n")[0].slice(0, 300);
+          } else {
+            commandReport.harness = "fail";
+            commandReport.note = message.split("\n")[0].slice(0, 300);
+          }
         }
       }
     } catch (error) {

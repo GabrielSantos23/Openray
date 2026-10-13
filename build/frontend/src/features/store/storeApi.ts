@@ -136,3 +136,8 @@ export function onStoreInstalled(handler: (payload: { handle: string; removed?: 
 export function onStoreCatalogProgress(handler: (progress: CatalogProgress) => void): () => void {
   return onNotification("store.catalogProgress", handler as (data: unknown) => void);
 }
+
+/** The installed extension's manifest icon as a data URL, or null when it has none. */
+export function storeGetIcon(uuid: string): Promise<{ icon: string | null }> {
+  return ipc.backend("store.getIcon", { uuid }, { module: "backend" }) as Promise<{ icon: string | null }>;
+}

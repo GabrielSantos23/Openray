@@ -53,7 +53,7 @@ Statuses:
 | `List` (+`Item`, `Section`, `EmptyView`, `Dropdown`+`Item`/`Section`, `Item.Accessory`, pagination) | supported | command-ux-spec §8 verified. |
 | `LocalStorage` (+`getItem/setItem/removeItem/allItems/clear`) | supported | Per-extension `.storage.json` (backend.js §LocalStorage handlers). |
 | `MenuBarExtra` | out-of-scope | Component exists in clone code but menu-bar commands are out of scope; a menu-bar command is classified disabled and throws when launched. |
-| `OAuth` (all: `PKCEClient`, `AuthorizationOptions`, token storage) | out-of-scope | Namespace present, methods throw; `canAccess(OAuth)` → false. No token ever leaves the machine. |
+| `OAuth.PKCEClient` (Web redirect) | supported | Real PKCE flow (RFC 7636): the backend runs a loopback HTTP server on 127.0.0.1, opens the provider in the browser, catches the redirect, and the worker exchanges/stores tokens in its LocalStorage (snake_case `TokenResponse` accepted). Verified end to end in a real worker (store.test OAuth round trip). |
 | `open` | supported | `shell.openUrl` / `fileSystem.openFile` routes. |
 | `openCommandPreferences` / `openExtensionPreferences` | supported | Renderer routes exist. |
 | `PopToRootType` | supported | Exported since Phase 2. |
@@ -81,10 +81,10 @@ Statuses:
 
 Of the ~60 runtime symbols in the official surface:
 
-- **supported: 31** — `Action`, the seven built-in `Action.*` actions, `ActionPanel` + deprecated aliases, `Alert`/`confirmAlert`, `Cache`, `clearSearchBar`, `Clipboard`, `closeMainWindow`, `Detail`, `environment`, `Form`, `getApplications`, `getPreferenceValues`, `Grid`, `launchCommand`, `LaunchType`, `List`, `LocalStorage`, `open`, `openCommandPreferences`/`openExtensionPreferences`, `PopToRootType`, `popToRoot`, `randomId`, `useId`, `showHUD`, `showInFinder`, `showToast`/`Toast`, `trash`, `useNavigation`.
+- **supported: 32** — `Action`, the seven built-in `Action.*` actions, `ActionPanel` + deprecated aliases, `Alert`/`confirmAlert`, `Cache`, `clearSearchBar`, `Clipboard`, `closeMainWindow`, `Detail`, `environment`, `Form`, `getApplications`, `getPreferenceValues`, `Grid`, `launchCommand`, `LaunchType`, `List`, `LocalStorage`, `OAuth.PKCEClient` (loopback web redirect), `open`, `openCommandPreferences`/`openExtensionPreferences`, `PopToRootType`, `popToRoot`, `randomId`, `useId`, `showHUD`, `showInFinder`, `showToast`/`Toast`, `trash`, `useNavigation`.
 - **partial: 10** — `Action.CreateQuicklink`, `Action.CreateSnippet`, `Clipboard.read` (File content), `Color`, `Icon`, `Image` (Mask), `Keyboard`, `getFavicon`, `captureException`, `updateCommandMetadata`.
 - **missing (exported, throws `UnsupportedApiError`): 8** — `Action.PickDate`, `Action.ToggleQuickLook`, `getSelectedFinderItems`, `getFrontmostApplication`, `getSelectedText`, `getDefaultApplication`, `captureMemorySnapshot`, `useActionPanel`.
-- **out-of-scope (exported, throw; `canAccess` false): 9** — `AI`, `BrowserExtension`, `WindowManagement`, `MenuBarExtra`, `OAuth`, `Tool`, `unstable_AI`/`useUnstableAI`/`useAI`, `preferences`, `Action.InstallMCPServer`.
+- **out-of-scope (exported, throw; `canAccess` false): 9** — `AI`, `BrowserExtension`, `WindowManagement`, `MenuBarExtra`, `OAuth` (`RedirectMethod.App`/`Codeloop` + the free `authorize`), `Tool`, `unstable_AI`/`useUnstableAI`/`useAI`, `preferences`, `Action.InstallMCPServer`.
 - Not shipped: `specialKeys` (was previously mis-reported as supported).
 
 Every Phase-2 "planned" item resolved: `Cache`, `trash`, `showInFinder`, `Action.OpenWith`, `Action.Trash` became supported; `getDefaultApplication` became an honest typed throw (no host route to answer it); `getSelectedText`/`getFrontmostApplication` stubs became typed throws.
@@ -94,7 +94,7 @@ Every Phase-2 "planned" item resolved: `Cache`, `trash`, `showInFinder`, `Action
 1. ~~`AI.ask` → backend `completePrompt`~~ — removed in Phase 2. The old path sent the prompt to a backend method that had no handler, so every call rejected locally; no data ever left the machine. Now a typed throw.
 2. ~~`environment.canAccess` returning true for AI~~ — replaced with the real routing.
 3. ~~`shell.getFrontmostApplication` / `shell.getSelectedText` stubs~~ — the API surface no longer calls them; both throw `UnsupportedApiError`. The host routes still exist but are unreachable from the API.
-4. ~~OAuth handlers in backend.js~~ — unreachable: the API throws before any RPC. The dead host-side `auth.*` dispatch remains as inert code.
+4. ~~OAuth handlers in backend.js~~ — replaced post-Phase-2: `OAuth.PKCEClient` is implemented for the loopback web redirect (backend-side loopback server + browser open; tokens in per-extension LocalStorage). The old inert `auth.*` dispatch is unchanged dead code.
 5. `Cache` persistence: `directory` accepted and ignored (in-memory only) — named limitation, not a mock.
 
 ## @raycast/utils

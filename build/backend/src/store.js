@@ -110,6 +110,29 @@ function createStore(options) {
     }
   }
 
+  /** The installed extension's manifest icon as a data URL (assets/<icon> or <icon>), or null. */
+  function extensionIcon(uuid) {
+    const manifest = readManifest(uuid);
+    const icon = String(manifest?.icon ?? "");
+    if (!icon || icon.includes("..") || path.isAbsolute(icon)) return null;
+    const dir = extensionDir(uuid);
+    for (const candidate of [path.join(dir, "assets", icon), path.join(dir, icon)]) {
+      try {
+        const bytes = fs.readFileSync(candidate);
+        const lower = candidate.toLowerCase();
+        const mime = lower.endsWith(".svg") ? "image/svg+xml"
+          : lower.endsWith(".png") ? "image/png"
+          : lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "image/jpeg"
+          : lower.endsWith(".ico") ? "image/x-icon"
+          : "application/octet-stream";
+        return `data:${mime};base64,${bytes.toString("base64")}`;
+      } catch {
+        /* try next */
+      }
+    }
+    return null;
+  }
+
   function readEntrySource(uuid, commandName) {
     for (const extension of [".tsx", ".ts", ".jsx", ".js", ".mjs"]) {
       const file = path.join(extensionDir(uuid), "src", `${commandName}${extension}`);
@@ -485,6 +508,23 @@ function createStore(options) {
       assertInstallableManifest(manifest);
       fs.writeFileSync(path.join(staging, "package.json"), JSON.stringify(manifest, null, 2));
 
+      // Compatibility gate before any dependency install or build (plan: an extension installs
+      // only if at least one command is compatible). Source-level classification over each
+      // command's reachable source graph; a hopeless extension fails in milliseconds instead of
+      // after a full npm install.
+      const staged = classifyExtension({
+        manifest,
+        commands: (manifest.commands ?? []).map((command) => ({
+          command,
+          entrySource: stagedEntryGraph(staging, command.name),
+          bundleSource: null,
+        })),
+      });
+      if (!staged.installable) {
+        const reasons = [...new Set(Object.values(staged.commands).map((entry) => entry.reason).filter(Boolean))];
+        throw new Error(`No compatible commands — ${reasons.join("; ") || "every command requires unsupported APIs"}`);
+      }
+
       await progress(handle, "build", "Building commands");
       await buildExtension({ apiRoot, targetDir: staging, manifest, onProgress: (step) => progress(handle, step.step, step.message) });
 
@@ -546,6 +586,66 @@ function createStore(options) {
       }
     }
     return null;
+  }
+
+  const SOURCE_EXTENSIONS = [".tsx", ".ts", ".jsx", ".js", ".mjs"];
+
+  function resolveStagedSource(base, spec) {
+    if (!spec.startsWith(".")) return null; // bare specifiers: node_modules, not staged source
+    const target = path.resolve(path.dirname(base), spec);
+    const candidates = [
+      target,
+      ...SOURCE_EXTENSIONS.map((ext) => target + ext),
+      ...SOURCE_EXTENSIONS.map((ext) => path.join(target, `index${ext}`)),
+    ];
+    for (const candidate of candidates) {
+      try {
+        if (fs.statSync(candidate).isFile()) return candidate;
+      } catch {
+        /* next */
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Every staged source text reachable from a command entry through relative imports. The
+   * compatibility gate runs before the bundler exists, and unsupported calls usually live in
+   * shared helpers (an OAuth/AppleScript client), not in the entry file itself — the graph is
+   * what esbuild would bundle, minus node_modules (the post-build classification covers those).
+   */
+  function stagedEntryGraph(staging, commandName) {
+    const seen = new Set();
+    const chunks = [];
+    const visit = (file) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      let text;
+      try {
+        text = fs.readFileSync(file, "utf-8");
+      } catch {
+        return;
+      }
+      chunks.push(text);
+      const importPattern = /(?:import|export)\s[\s\S]*?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)|require\s*\(\s*["']([^"']+)["']\s*\)/g;
+      for (const match of text.matchAll(importPattern)) {
+        const spec = match[1] ?? match[2] ?? match[3];
+        const resolved = spec ? resolveStagedSource(file, spec) : null;
+        if (resolved) visit(resolved);
+      }
+    };
+    for (const extension of SOURCE_EXTENSIONS) {
+      const entry = path.join(staging, "src", `${commandName}${extension}`);
+      try {
+        if (fs.statSync(entry).isFile()) {
+          visit(entry);
+          break;
+        }
+      } catch {
+        /* try next */
+      }
+    }
+    return chunks.length > 0 ? chunks.join("\n") : null;
   }
 
   function readBundleFrom(dir, commandName) {
@@ -624,6 +724,7 @@ function createStore(options) {
       return { extensions: db.prepare("SELECT * FROM extension_classifications").all(), commands: db.prepare("SELECT * FROM command_classifications").all() };
     },
     getSummariesCompat: () => ({ compat: getSummariesCompat() }),
+    getIcon: (params) => ({ icon: extensionIcon(String(params?.uuid ?? "")) }),
     getCommandPreferences: (params) => ({ preferences: getCommandPreferences(params.uuid, params.commandName) }),
     setCommandPreferences: (params) => setCommandPreferences(params.uuid, params.commandName, params.preferences),
 

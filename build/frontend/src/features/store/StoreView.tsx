@@ -41,16 +41,16 @@ const CLASS_LABELS: Record<string, string> = {
 const PAGE_SIZE = 50;
 
 export function StoreView({
-  searchText,
-  onSearchTextChange,
   showToast,
   onBack,
 }: {
-  searchText: string;
-  onSearchTextChange: (value: string) => void;
   showToast: (title: string, message?: string) => void;
   onBack: () => void;
 }) {
+  // Search text is local: the shared page stack is only populated by extension render trees, and
+  // an internal view like this one never pushes a page — a controlled input bound to it would
+  // never update (updateTop no-ops on an empty stack).
+  const [searchText, setSearchText] = useState("");
   const [extensions, setExtensions] = useState<CatalogExtension[]>([]);
   const [total, setTotal] = useState(0);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
@@ -119,31 +119,24 @@ export function StoreView({
   // Install/uninstall completion and progress push from the backend.
   useEffect(() => {
     const offProgress = onStoreProgress((entry) => setProgress(entry));
-    const offInstalled = onStoreInstalled(() => {
+    const offInstalled = onStoreInstalled((payload) => {
       setBusyHandle(null);
       setProgress(null);
       setConfirming(null);
       void reload(searchText, category);
+      // An open detail page must flip its Install/Uninstall button without being reopened.
+      if (detail && payload.handle === detail.handle) {
+        storeDetail(detail.handle).then(setDetail).catch(() => setDetail(null));
+      }
     });
     return () => {
       offProgress();
       offInstalled();
     };
-  }, [reload, searchText, category]);
+  }, [reload, searchText, category, detail]);
 
   const rows = useMemo(() => extensions, [extensions]);
   const selected = rows[selectedIndex] ?? null;
-
-  useEffect(() => {
-    const container = listRef.current;
-    const row = container?.querySelector<HTMLElement>('[data-selected="true"]');
-    if (container && row) {
-      const rowRect = row.getBoundingClientRect();
-      const viewRect = container.getBoundingClientRect();
-      if (rowRect.top < viewRect.top) container.scrollTop -= viewRect.top - rowRect.top + 4;
-      else if (rowRect.bottom > viewRect.bottom) container.scrollTop += rowRect.bottom - viewRect.bottom + 4;
-    }
-  }, [selectedIndex]);
 
   const openDetail = useCallback(
     async (handle: string) => {
@@ -187,19 +180,27 @@ export function StoreView({
   }, [loading, commit, refreshCatalog]);
 
   const loadMore = useCallback(() => {
-    if (loading || loadingMore || extensions.length >= total) return;
+    if (loading || loadingMore || detail || confirming || extensions.length >= total) return;
     if (loadedRef.current.query !== searchText || loadedRef.current.category !== category) return;
     setLoadingMore(true);
     void reload(searchText, category, { append: true }).finally(() => setLoadingMore(false));
-  }, [loading, loadingMore, extensions.length, total, searchText, category, reload]);
+  }, [loading, loadingMore, detail, confirming, extensions.length, total, searchText, category, reload]);
 
   const onListScroll = useCallback(
-    (event: UIEvent<HTMLUListElement>) => {
+    (event: UIEvent<HTMLElement>) => {
       const element = event.currentTarget;
       if (element.scrollTop + element.clientHeight >= element.scrollHeight - 400) loadMore();
     },
     [loadMore],
   );
+
+  // Keep the keyboard selection visible: the scroller is an ancestor (.window__body), so let the
+  // browser walk up to it. Walking into the last rows pulls the next page, like scrolling does.
+  useEffect(() => {
+    const row = listRef.current?.querySelector<HTMLElement>('[data-selected="true"]');
+    row?.scrollIntoView({ block: "nearest" });
+    if (selectedIndex >= rows.length - 5) loadMore();
+  }, [selectedIndex, rows.length, loadMore]);
 
   const runInstall = useCallback(
     async (handle: string) => {
@@ -274,7 +275,7 @@ export function StoreView({
             autoFocus
             value={searchText}
             placeholder={detail ? "" : "Search the Store…"}
-            onChange={(event) => onSearchTextChange(event.target.value)}
+            onChange={(event) => setSearchText(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && selected && !detail) {
                 event.preventDefault();
@@ -289,7 +290,9 @@ export function StoreView({
         </button>
       </header>
 
-      <main className="window__body">
+      {/* The scroll container is `.window__body` (overflow: hidden auto), not the list itself —
+          appending pages must listen here. */}
+      <main className="window__body" onScroll={onListScroll}>
         {loading ? (
           <div className="state">
             <div className="state__title">Loading Store…</div>
@@ -331,7 +334,7 @@ export function StoreView({
                 </div>
               )
             ) : (
-              <ul className="list store-list" ref={listRef} onScroll={onListScroll}>
+              <ul className="list store-list" ref={listRef}>
                 {rows.map((entry, index) => (
                   <li key={entry.handle}>
                     <button

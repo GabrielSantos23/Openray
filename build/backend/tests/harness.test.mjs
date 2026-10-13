@@ -31,7 +31,11 @@ test("harness: all candidates classified compatible load; disabled commands neve
   for (const entry of report.extensions) {
     for (const command of entry.commands) {
       if (command.class === "compatible") {
-        assert.equal(command.harness, "pass", `${entry.handle}/${command.name} must load`);
+        // auth-required: the command loads but parks on OAuth sign-in, which needs the app UI.
+        assert.ok(
+          command.harness === "pass" || command.harness === "auth-required",
+          `${entry.handle}/${command.name} must load (got ${command.harness}: ${command.note})`,
+        );
       } else {
         assert.equal(command.harness, "disabled-by-policy", `${entry.handle}/${command.name} must not launch`);
         assert.ok(command.reason, `${entry.handle}/${command.name} carries a one-line reason`);

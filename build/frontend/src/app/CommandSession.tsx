@@ -301,10 +301,10 @@ export function CommandSession({
     }
     if (entry.area === "store") {
       // The Store view: catalog search, extension detail, Install/Update/Uninstall.
+      // No searchText props: the Store owns its filter locally — internal areas never push a
+      // page, so the shared page-stack search text would never update.
       return (
         <StoreView
-          searchText={searchText}
-          onSearchTextChange={setSearchText}
           showToast={showToast}
           onBack={onBack}
         />

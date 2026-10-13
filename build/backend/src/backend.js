@@ -13,6 +13,7 @@
 
 const fs = require("node:fs");
 const net = require("node:net");
+const http = require("node:http");
 const path = require("node:path");
 const readline = require("node:readline");
 const { exec } = require("node:child_process");
@@ -299,6 +300,62 @@ function createBackend(options) {
   }
 
   // ---------------------------------------------------------------------------------------------
+  // OAuth PKCE loopback redirect service (one shared server, waiters keyed by state).
+  // ---------------------------------------------------------------------------------------------
+
+  const OAUTH_REDIRECT_TIMEOUT_MS = 300_000;
+  let oauthLoopback = null;
+  // One pending sign-in per extension: views refetch and would otherwise open a browser tab on
+  // every attempt. Concurrent authorizes join the pending flow until it resolves or times out.
+  const oauthPendingByExtension = new Map();
+
+  function startOAuthLoopback() {
+    if (oauthLoopback) return Promise.resolve(`http://127.0.0.1:${oauthLoopback.port}`);
+    return new Promise((resolve, reject) => {
+      const server = http.createServer((req, res) => {
+        const url = new URL(req.url ?? "/", "http://127.0.0.1");
+        const code = url.searchParams.get("code");
+        const state = url.searchParams.get("state");
+        const waiter = state ? oauthLoopback.waiters.get(state) : undefined;
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(
+          `<html><body style="background:#1a1a1e;color:#fff;font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0"><p>${
+            waiter && code ? "Signed in. You can close this window." : "Missing authorization code — try again from Raycast Mini."
+          }</p></body></html>`,
+        );
+        if (waiter && code) {
+          oauthLoopback.waiters.delete(state);
+          clearTimeout(waiter.timer);
+          waiter.resolve(code);
+        }
+      });
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        // The backend process is long-lived regardless; unref so the server alone never pins a
+        // short-lived host (or test runner) process open.
+        server.unref();
+        const port = server.address().port;
+        oauthLoopback = { server, port, waiters: new Map() };
+        resolve(`http://127.0.0.1:${port}`);
+      });
+    });
+  }
+
+  function waitForOAuthRedirect(state) {
+    return new Promise((resolve, reject) => {
+      if (!oauthLoopback) {
+        reject(new Error("oauth.authorize: no loopback server (call oauth.redirectOrigin first)"));
+        return;
+      }
+      const timer = setTimeout(() => {
+        oauthLoopback.waiters.delete(state);
+        reject(new Error(`OAuth authorization timed out after ${OAUTH_REDIRECT_TIMEOUT_MS / 1000}s`));
+      }, OAUTH_REDIRECT_TIMEOUT_MS);
+      oauthLoopback.waiters.set(state, { resolve, reject, timer });
+    });
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // Handler tables
   // ---------------------------------------------------------------------------------------------
 
@@ -428,6 +485,35 @@ function createBackend(options) {
     },
     async allLocalStorageItems(ctx) {
       return storage(ctx).then((store) => ({ value: store }));
+    },
+
+    // --- OAuth PKCE redirect service --------------------------------------------------------
+    // The loopback server lives here, in the long-lived backend process, not inside the worker
+    // whose lifetime follows the command session. `OAuth.PKCEClient` in the worker asks for the
+    // redirect origin, then parks on `oauth.authorize` while the backend opens the browser and
+    // waits for the provider's redirect (the worker RPC has no timeout, so parking is safe).
+    async "oauth.redirectOrigin"() {
+      return { origin: await startOAuthLoopback() };
+    },
+    async "oauth.authorize"(ctx, params) {
+      // Headless runs (test harness) have no real UI: fail fast instead of spawning a browser.
+      if (transport && !overriddenHandlers.has("open")) {
+        throw new Error("OAuth sign-in is unavailable in headless mode");
+      }
+      const key = String(ctx.extensionId ?? ctx.extension?.uuid ?? "unknown");
+      const pending = oauthPendingByExtension.get(key);
+      if (pending) return pending;
+      const flow = (async () => {
+        const url = String(params.url ?? "");
+        await hostHandlers["open"](ctx, { path: url });
+        return { authorizationCode: await waitForOAuthRedirect(String(params.state ?? "")) };
+      })();
+      oauthPendingByExtension.set(key, flow);
+      try {
+        return await flow;
+      } finally {
+        oauthPendingByExtension.delete(key);
+      }
     },
 
     async authorizeOAuth(ctx, params) {
@@ -617,6 +703,8 @@ function createBackend(options) {
   const connectedCallbacks = [];
   // Overridable transport: defaults to the named pipe, replaced in tests.
   let transport = null;
+  // Host handlers replaced via overrideHostHandler (tests stub native side effects like `open`).
+  const overriddenHandlers = new Set();
   // One reader per pipe. `index.js` used to attach a second `readline` to the same stream, which
   // raced the one below and swallowed lines.
   let requestHandler = null;
@@ -912,6 +1000,11 @@ function createBackend(options) {
     /** Install the launch gate (the store's classification check); throwing refuses a launch. */
     setLaunchGate(gate) {
       launchGate = gate ?? null;
+    },
+    /** Replace one host handler (tests stub native side effects like `open` this way). */
+    overrideHostHandler(name, handler) {
+      hostHandlers[name] = handler;
+      overriddenHandlers.add(name);
     },
   };
 }

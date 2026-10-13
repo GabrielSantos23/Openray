@@ -7,7 +7,8 @@
 //      original entry source;
 //   3. guard level   — `environment.canAccess(<family>)` in the same source marks that family's
 //      usage optional: the command stays enabled and the runtime answers `false` (store-spec §5,
-//      the real app's behavior).
+//      the real app's behavior). A `process.platform === "win32"` branch marks Mac-only calls
+//      (AppleScript) as guarded: the Windows path is what runs here.
 //
 // Tools are ignored entirely (policy D6) — the caller never hands them here.
 
@@ -18,7 +19,7 @@
  * installed extensions recompute at startup and commands re-enable themselves when we implement
  * an API.
  */
-const COVERAGE_VERSION = 1;
+const COVERAGE_VERSION = 2;
 
 /** A command class: compatible, or disabled with the level that disabled it. */
 const COMMAND_CLASSES = ["compatible", "disabled-manifest", "disabled-api", "disabled-mode"];
@@ -37,11 +38,10 @@ const UNSUPPORTED_MARKERS = [
   { api: "AI.ask", pattern: /\bAI\s*\.\s*ask\b/, reason: "Requires Raycast AI, not supported", guardable: "AI" },
   { api: "AI.askText", pattern: /\bAI\s*\.\s*askText\b/, reason: "Requires Raycast AI, not supported", guardable: "AI" },
   { api: "unstable_AI", pattern: /\buseUnstableAI\b|\bunstable_AI\b|\buseUnstableObjectGeneration\b/, reason: "Requires Raycast AI, not supported", guardable: "AI" },
-  { api: "OAuth", pattern: /\bOAuth\s*\.|\bPKCEClient\b|\buseOAuth\b/, reason: "Requires OAuth, not supported", guardable: "OAuth" },
   { api: "WindowManagement", pattern: /\bWindowManagement\s*\./, reason: "Requires Window Management, not supported", guardable: "WindowManagement" },
   { api: "BrowserExtension", pattern: /\bBrowserExtension\s*\./, reason: "Requires the Raycast browser extension, not supported", guardable: "BrowserExtension" },
   { api: "MenuBarExtra", pattern: /\bMenuBarExtra\b/, reason: "Menu bar commands are not supported", guardable: null },
-  { api: "AppleScript", pattern: /\brunAppleScript\b|\bosascript\b/, reason: "Requires AppleScript (macOS), not supported", guardable: null },
+  { api: "AppleScript", pattern: /\brunAppleScript\b|\bosascript\b/, reason: "Requires AppleScript (macOS), not supported", guardable: "AppleScript" },
   { api: "getSelectedFinderItems", pattern: /\bgetSelectedFinderItems\b/, reason: "Requires Finder (macOS), not supported", guardable: null },
   { api: "Action.PickDate", pattern: /\bAction\s*\.\s*PickDate\b/, reason: "Date picker action is not supported", guardable: null },
   { api: "captureMemorySnapshot", pattern: /\bcaptureMemorySnapshot\b/, reason: "Memory snapshots are not supported", guardable: null },
@@ -50,6 +50,14 @@ const UNSUPPORTED_MARKERS = [
   { api: "getFrontmostApplication", pattern: /\bgetFrontmostApplication\b/, reason: "Reading the frontmost application is not supported in Raycast Mini", guardable: null },
   { api: "useAI", pattern: /from\s+["']@raycast\/utils["'][^\0]*\buseAI\b|\buseAI\s*\(/, reason: "Requires Raycast AI, not supported", guardable: "AI" },
 ];
+
+/**
+ * AppleScript calls are not automatically Mac-only: extensions commonly branch
+ * `process.platform === "win32"` / `platformName === "Windows"` and run a PowerShell (or Web API)
+ * path here. When the reachable source contains such a branch, the Mac-only calls count as
+ * guarded — the Windows path is what runs on this platform.
+ */
+const WINDOWS_BRANCH = /process\s*\.\s*platform\s*===?\s*["']win32["']|platformName\s*(?:===|!==)\s*["'](?:Windows|MacOS)["']|platformName\s*\.\s*includes\s*\(\s*["']Windows["']/;
 
 /** `canAccess(...)` mentioning a guardable family marks that family optional. */
 function detectGuards(sourceText) {
@@ -101,6 +109,11 @@ function classifyCommand({ command, entrySource, bundleSource }, { preview = fal
   // Guard level: a canAccess mention keeps that family's usage optional.
   const guarded = detectGuards(entrySource);
   for (const api of detectGuards(bundleSource)) guarded.add(api);
+
+  // A Windows platform branch makes Mac-only calls (AppleScript) dead code on this platform.
+  if (WINDOWS_BRANCH.test(entrySource ?? "") || WINDOWS_BRANCH.test(bundleSource ?? "")) {
+    guarded.add("AppleScript");
+  }
 
   // Source level: unsupported calls across the entry source and the bundle output.
   const hits = scanUnsupported(entrySource, guarded);

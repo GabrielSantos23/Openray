@@ -89,10 +89,12 @@ test("interval commands are disabled at the manifest level (decision D8)", () =>
   assert.match(result.reason, /Background refresh/);
 });
 
-test("OAuth and WindowManagement markers disable; a canAccess guard keeps them optional", () => {
-  const direct = classifyCommand({ command: { name: "a", mode: "view" }, entrySource: "const t = OAuth.PKCEClient; WindowManagement.getDesktops();" });
+test("OAuth.PKCEClient is supported; WindowManagement markers disable; a canAccess guard keeps them optional", () => {
+  const pkce = classifyCommand({ command: { name: "a", mode: "view" }, entrySource: "const c = new OAuth.PKCEClient({ redirectMethod: 'web' });" });
+  assert.equal(pkce.class, "compatible", "PKCEClient is implemented (loopback OAuth)");
+
+  const direct = classifyCommand({ command: { name: "a", mode: "view" }, entrySource: "WindowManagement.getDesktops();" });
   assert.equal(direct.class, "disabled-api");
-  assert.ok(direct.missingApis.includes("OAuth"));
   assert.ok(direct.missingApis.includes("WindowManagement"));
 
   const guarded = classifyCommand({
@@ -108,6 +110,15 @@ test("AppleScript/osascript markers disable with the macOS reason", () => {
   assert.equal(result.class, "disabled-api");
   assert.ok(result.missingApis.includes("AppleScript"));
   assert.match(result.reason, /AppleScript \(macOS\), not supported/);
+});
+
+test("a Windows platform branch makes AppleScript usage guarded", () => {
+  const result = classifyCommand({
+    command: { name: "a", mode: "view" },
+    entrySource: "if (process.platform === 'win32') { runPowerShellScript('x'); } else { runAppleScript('tell app'); }",
+  });
+  assert.equal(result.class, "compatible", "the Windows path exists; the Mac path never runs here");
+  assert.ok(result.guardedApis.includes("AppleScript"));
 });
 
 function makeStore() {

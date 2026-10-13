@@ -4,7 +4,7 @@
 // (`store.setCommandPreferences`); aliases/hotkeys in localStorage
 // (`raycast-mini:command-aliases` / `-command-hotkeys`), hotkeys registered with the host.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ipc } from "../ipc";
 import { HotkeyRecorder, Switch } from "./controls";
 import "./settings-extensions.css";
@@ -21,6 +21,7 @@ import {
   storeSetCommandPreferences,
 } from "../features/store/storeApi";
 import type { ExtensionSummary } from "../app/entries";
+import { ExtensionIcon } from "../features/store/useExtensionIcon";
 
 interface ManifestPreference {
   name: string;
@@ -40,6 +41,7 @@ export function ExtensionPreferences() {
   const [aliases, setAliases] = useState<Record<string, string>>(() => readCommandAliases());
   const [hotkeys, setHotkeys] = useState<Record<string, string>>(() => readCommandHotkeys());
   const [preferenceValues, setPreferenceValues] = useState<Record<string, Record<string, unknown>>>({});
+  const seenPreferences = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     try {
@@ -48,8 +50,19 @@ export function ExtensionPreferences() {
       };
       const loaded = payload.extensions ?? [];
       setExtensions(loaded);
+      // Reinstalled extensions start with empty stored preferences — drop their seen keys.
+      const liveKeys = new Set<string>();
+      for (const extension of loaded) {
+        for (const command of extension.commands as CommandSummary[]) liveKeys.add(`${extension.uuid}/${command.name}`);
+      }
+      for (const key of seenPreferences.current) {
+        if (!liveKeys.has(key)) seenPreferences.current.delete(key);
+      }
       for (const extension of loaded) {
         for (const command of extension.commands as CommandSummary[]) {
+          const key = `${extension.uuid}/${command.name}`;
+          if (seenPreferences.current.has(key)) continue;
+          seenPreferences.current.add(key);
           void storeGetCommandPreferences(extension.uuid, command.name)
             .then((result) => {
               setPreferenceValues((current) => ({
@@ -67,6 +80,10 @@ export function ExtensionPreferences() {
 
   useEffect(() => {
     void refresh();
+    // The settings window is a separate WebView2 that receives no backend pushes, so poll while
+    // the page is mounted to pick up extensions installed from the Store meanwhile.
+    const interval = setInterval(() => void refresh(), 3000);
+    return () => clearInterval(interval);
   }, [refresh]);
 
   const setAlias = (key: string, alias: string) => {
@@ -93,7 +110,9 @@ export function ExtensionPreferences() {
     <div className="settings-extensions">
       {extensions.map((extension) => (
         <section className="settings-section" key={extension.uuid}>
-          <h2 className="settings-section__title">{extension.title}</h2>
+          <h2 className="settings-section__title">
+            <ExtensionIcon uuid={extension.uuid} size={18} /> {extension.title}
+          </h2>
           {extension.badge ? <p className="settings-section__description">{extension.badge}</p> : null}
           <div className="settings-section__content">
             {(extension.commands as CommandSummary[]).map((command) => {

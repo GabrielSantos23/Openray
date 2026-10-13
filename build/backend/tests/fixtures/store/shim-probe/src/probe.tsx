@@ -3,11 +3,14 @@ import { useEffect, useState } from "react";
 
 type Outcome = { name: string; value: string };
 
-function errorNameOf(run: () => Promise<unknown>): Promise<string> {
-  return run().then(
-    () => "no-throw",
-    (error: Error) => error.name,
-  );
+function errorNameOf(run: () => Promise<unknown> | unknown): Promise<string> {
+  // Promise.resolve().then funnels synchronous throws (constructor misuse) into the rejection path.
+  return Promise.resolve()
+    .then(() => run())
+    .then(
+      () => "no-throw",
+      (error: Error) => error.name,
+    );
 }
 
 export default function Command() {

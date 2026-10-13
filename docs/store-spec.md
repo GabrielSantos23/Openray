@@ -125,3 +125,16 @@ Additional implementation notes:
 - **Harness** (build/scripts/harness-report.mjs + backend/tests/harness.test.mjs): installs the 15 candidate extensions unmodified and launches every command classified compatible in a real worker. The final candidate list maps the plan's §7 themes onto extensions that actually declare Windows (several plan handles do not exist upstream or are macOS-only); see the report in docs/store-implementation-plan.md §10.
 - **Reconciler fix found by the harness**: `resetAfterCommit` now drives the model shipper — the previous wiring only covered the mount update, so any `setState` (how every extension loads its data) never re-rendered.
 - **Cache.subscribe fix found by the harness**: `@raycast/utils` passes `cache.subscribe` unbound to `useSyncExternalStore`; the official Cache `subscribe`/`Subscriber` contract is implemented (instance property, real notifications on set/remove/clear).
+
+## 9. Phase-2 addendum: OAuth (post-Phase-2 decision)
+
+The original policy excluded OAuth (D5). After real-world use the policy changed: `OAuth.PKCEClient` with the **`RedirectMethod.Web`** flow is implemented, because Web-API extensions (Spotify Player and similar) are unusable without it and the user asked for exactly this: install the extension, block only the Mac-only and AI features.
+
+| # | Decision | Why |
+|---|---|---|
+| D9 | `OAuth.PKCEClient` implements the full PKCE flow (RFC 7636) for `RedirectMethod.Web`: the **backend process** (not the worker) runs one shared loopback HTTP server on `127.0.0.1:<random>`, opens the provider in the browser, catches the redirect (waiters keyed by `state`, 300s timeout), and resolves the authorization code back into the worker. Tokens are stored in the extension's LocalStorage (`.storage.json`), `setTokens` accepts both camelCase `TokenSetOptions` and raw snake_case `TokenResponse`, `getTokens().isExpired()` uses a 30s buffer. | The real app redirects through `raycast.com/redirect` + a deep link back into the app; the clone has no custom-protocol host, and the loopback is what providers like Spotify accept for desktop apps anyway. The server lives in the backend because the worker's lifetime follows the command session. |
+| D10 | `RedirectMethod.App`/`Codeloop` and the free `OAuth.authorize` throw a typed unsupported error (no custom-protocol host integration). | Honest scope line. |
+| D11 | AppleScript markers count as **guarded** when the reachable source branches on `process.platform === "win32"` (or `platformName === "Windows"/"MacOS"`): the Windows path is what runs on this platform. Spotify Player's playback commands fall back to a PowerShell/Web-API path and stay enabled. | The static classifier otherwise marks Windows-working commands "Requires AppleScript". Runtime typed errors remain the backstop for misjudged cases. |
+| D12 | The install gate ("install only if ≥1 compatible command") stays, computed over each command's **reachable source graph** (entry + relative imports, pre-build). | Blocks hopeless installs in milliseconds with their real reason, instead of after a full npm install. |
+
+`environment.platformName` answers `"Windows"` (worker shim). Classifier `COVERAGE_VERSION` is 2 — installed extensions reclassify at the next app start and OAuth-only commands re-enable.

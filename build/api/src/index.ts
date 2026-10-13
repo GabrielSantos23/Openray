@@ -780,6 +780,10 @@ export const environment = {
   supportPath: process.env.SUPPORT_PATH,
   appearance: "dark" as "light" | "dark",
   textSize: "medium" as "small" | "medium" | "large",
+  /** The clone only ships for Windows today; extensions branch their platform-specific code on it. */
+  get platformName(): "MacOS" | "Windows" {
+    return process.platform === "darwin" ? "MacOS" : "Windows";
+  },
   /** Only menu-bar commands expose reactive `preferences`; everything else reads
    * `getPreferenceValues()`. Menu-bar commands are out of scope, so this is absent by design. */
   get launchType() {
@@ -850,6 +854,177 @@ export async function launchCommand(options: {
 export async function open(target: string, application?: string) {
   await request("open", { path: target, app: application });
 }
+
+// -------------------------------------------------------------------------------------------
+// OAuth — `OAuth.PKCEClient` implements the real PKCE flow (RFC 7636) end to end: the backend
+// process runs a loopback HTTP server on 127.0.0.1, opens the provider in the browser, and
+// resolves the redirect back into the worker; tokens persist in the extension's LocalStorage.
+// This is what makes Web-API extensions (Spotify and similar) work; the real app's
+// `raycast.com/redirect` server round trip is replaced by the loopback, which providers like
+// Spotify accept for desktop apps. `RedirectMethod.App`/`Codeloop` have no host integration
+// and throw a typed error.
+// -------------------------------------------------------------------------------------------
+
+export enum RedirectMethod {
+  Web = "web",
+  App = "app",
+  Codeloop = "codeloop",
+}
+
+export interface TokenSet {
+  accessToken: string;
+  refreshToken?: string;
+  idToken?: string;
+  expiresIn?: number;
+  scope?: string;
+  updatedAt: Date;
+  isExpired(): boolean;
+}
+
+interface StoredTokenSet {
+  accessToken: string;
+  refreshToken?: string;
+  idToken?: string;
+  expiresIn?: number;
+  scope?: string;
+  updatedAt: string;
+}
+
+const TOKEN_TTL_BUFFER_MS = 30_000;
+
+function base64url(bytes: Buffer): string {
+  return bytes.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function normalizeStoredTokens(input: Record<string, unknown>): StoredTokenSet {
+  const accessToken = (input.accessToken ?? input.access_token) as string | undefined;
+  if (!accessToken) throw new Error("OAuth.setTokens: accessToken is required");
+  return {
+    accessToken,
+    refreshToken: (input.refreshToken ?? input.refresh_token) as string | undefined,
+    idToken: (input.idToken ?? input.id_token) as string | undefined,
+    expiresIn: (input.expiresIn ?? input.expires_in) as number | undefined,
+    scope: input.scope as string | undefined,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function reviveTokenSet(stored: StoredTokenSet): TokenSet {
+  const updatedAt = new Date(stored.updatedAt);
+  return {
+    accessToken: stored.accessToken,
+    refreshToken: stored.refreshToken,
+    idToken: stored.idToken,
+    expiresIn: stored.expiresIn,
+    scope: stored.scope,
+    updatedAt,
+    isExpired() {
+      if (!stored.expiresIn) return false;
+      return Date.now() >= updatedAt.getTime() + stored.expiresIn * 1000 - TOKEN_TTL_BUFFER_MS;
+    },
+  };
+}
+
+export class PKCEClient {
+  redirectMethod: RedirectMethod;
+  providerName: string;
+  providerIcon?: unknown;
+  providerId: string;
+  description?: string;
+  /** Mirrors the real client's `isAuthorizing`: concurrent authorize calls join the pending one
+   * instead of opening another browser tab (extension views refetch and would loop). */
+  private pendingAuthorize: Promise<{ authorizationCode: string }> | null = null;
+
+  constructor(options?: {
+    redirectMethod: RedirectMethod;
+    providerName: string;
+    providerIcon?: unknown;
+    providerId?: string;
+    description?: string;
+  }) {
+    if (!options || options.redirectMethod !== RedirectMethod.Web) {
+      throwUnsupported("OAuth.PKCEClient");
+    }
+    this.redirectMethod = options.redirectMethod;
+    this.providerName = options.providerName;
+    this.providerIcon = options.providerIcon;
+    this.description = options.description;
+    this.providerId = options.providerId ?? options.providerName.toLowerCase().replace(/\s+/g, "-");
+  }
+
+  private tokensKey(): string {
+    return `oauth:tokens:${this.providerId}`;
+  }
+
+  async authorizationRequest(options: {
+    endpoint: string;
+    clientId: string;
+    scope?: string;
+    extraParameters?: Record<string, string>;
+  }) {
+    const { randomBytes, createHash } = await import("node:crypto");
+    const state = base64url(randomBytes(16));
+    const codeVerifier = base64url(randomBytes(48));
+    const codeChallenge = base64url(createHash("sha256").update(codeVerifier).digest());
+    const redirect = await request<{ origin: string }>("oauth.redirectOrigin", {});
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: options.clientId,
+      redirect_uri: redirect.origin,
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+      ...(options.scope ? { scope: options.scope } : {}),
+      ...(options.extraParameters ?? {}),
+    });
+    const url = new URL(options.endpoint);
+    url.search = params.toString();
+    return {
+      codeChallenge,
+      codeVerifier,
+      state,
+      redirectURI: redirect.origin,
+      toURL: () => url.toString(),
+    };
+  }
+
+  async authorize(input: { toURL(): string; state?: string } | { url: string; state?: string }): Promise<{ authorizationCode: string }> {
+    if (this.pendingAuthorize) return this.pendingAuthorize;
+    const flow = (async () => {
+      const url = "toURL" in input ? input.toURL() : input.url;
+      const state = input.state ?? new URL(url).searchParams.get("state") ?? "";
+      const result = await request<{ authorizationCode: string }>("oauth.authorize", { url, state });
+      return { authorizationCode: result.authorizationCode };
+    })();
+    this.pendingAuthorize = flow;
+    try {
+      return await flow;
+    } finally {
+      this.pendingAuthorize = null;
+    }
+  }
+
+  async setTokens(options: Record<string, unknown>): Promise<void> {
+    await request("setLocalStorageItem", { key: this.tokensKey(), value: JSON.stringify(normalizeStoredTokens(options)) });
+  }
+
+  async getTokens(): Promise<TokenSet | undefined> {
+    const result = await request<{ value: string | null }>("getLocalStorageItem", { key: this.tokensKey() });
+    if (!result.value) return undefined;
+    try {
+      return reviveTokenSet(JSON.parse(result.value));
+    } catch {
+      return undefined;
+    }
+  }
+
+  async removeTokens(): Promise<void> {
+    await request("removeLocalStorageItem", { key: this.tokensKey() });
+  }
+}
+
+export const OAuth = { RedirectMethod, PKCEClient };
+export type { TokenSet };
 
 export async function openExtensionPreferences() {
   await request("openExtensionPreferences", {});
@@ -1020,32 +1195,6 @@ export const WindowManagement = {
   },
   async setWindowBounds(..._args: unknown[]): Promise<never> {
     throwUnsupported("WindowManagement.setWindowBounds");
-  },
-};
-
-/**
- * Out-of-scope: OAuth. `PKCEClient` constructs (imports resolve) but every method throws; no
- * token ever leaves the machine and no browser window is opened.
- */
-export const OAuth = {
-  RedirectMethod: { Web: "web", AppUri: "app-uri" } as Record<string, string>,
-  async authorize(..._args: unknown[]): Promise<never> {
-    throwUnsupported("OAuth.authorize");
-  },
-  PKCEClient: class {
-    constructor(_options?: unknown) {}
-    async authorize(..._args: unknown[]): Promise<never> {
-      throwUnsupported("OAuth.PKCEClient.authorize");
-    }
-    async getTokens(): Promise<never> {
-      throwUnsupported("OAuth.PKCEClient.getTokens");
-    }
-    async setTokens(): Promise<void> {
-      throwUnsupported("OAuth.PKCEClient.setTokens");
-    }
-    async removeTokens(): Promise<void> {
-      throwUnsupported("OAuth.PKCEClient.removeTokens");
-    }
   },
 };
 

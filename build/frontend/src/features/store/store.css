@@ -290,3 +290,14 @@
   color: var(--text-tertiary, rgba(255, 255, 255, 0.4));
   list-style: none;
 }
+
+/* Native <select> popup: without an explicit dark color-scheme Chromium paints the option
+   list white regardless of the select's own background. */
+.store-toolbar__select {
+  color-scheme: dark;
+}
+
+.store-toolbar__select option {
+  background-color: #1f1f23;
+  color: rgba(255, 255, 255, 0.85);
+}
