@@ -66,6 +66,13 @@ private MainWindow? _window;
     private NamedPipeBridge? _pipe;
     private ClipboardMonitor? _clipboard;
 
+    /// <summary>Secondary windows (Settings) forward their renderer's backend requests here.</summary>
+    public async Task<System.Text.Json.JsonElement?> RequestBackendAsync(string method, System.Text.Json.JsonElement? data)
+    {
+        if (_pipe is null) return null;
+        return await _pipe.RequestAsync("backend", method, data);
+    }
+
     /// <summary>`--dev-extensions` / RAYCAST_MINI_DEV_EXTENSIONS=1: reveal internal test extensions.</summary>
     public static bool DevExtensions { get; set; }
 

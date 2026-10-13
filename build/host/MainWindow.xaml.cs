@@ -667,7 +667,9 @@ public partial class MainWindow : Window
             _settingsWindow.Activate();
             return;
         }
-        _settingsWindow = new SettingsWindow(_backend.FrontendRoot);
+        _settingsWindow = new SettingsWindow(
+            _backend.FrontendRoot,
+            (method, data) => ((App)System.Windows.Application.Current).RequestBackendAsync(method, data));
         _settingsWindow.Show();
     }
 

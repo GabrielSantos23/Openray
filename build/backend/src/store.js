@@ -205,6 +205,8 @@ function createStore(options) {
     const refreshed = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+      // Legacy installs may predate the runtime links; repair them opportunistically.
+      ensureRuntimeLinksInDir(extensionDir(entry.name));
       const existing = db
         .prepare("SELECT coverage_version FROM extension_classifications WHERE uuid = ?")
         .get(entry.name);
@@ -215,6 +217,30 @@ function createStore(options) {
       }
     }
     return refreshed;
+  }
+
+  /**
+   * Junction `@raycast/api` and `react` inside an installed tree to the app's own copies. Node
+   * resolves requires from the extension upward BEFORE NODE_PATH, so a stray `node_modules` in
+   * the extensions root (left by the pre-store dev flow) would shadow the app's API with a stale
+   * copy — `Cache`/`OAuth` missing, hooks crashing on a second React instance. The junctions
+   * pin every install to exactly the API bundle the runtime runs.
+   */
+  function ensureRuntimeLinksInDir(dir) {
+    try {
+      const nodeModules = path.join(dir, "node_modules");
+      fs.mkdirSync(path.join(nodeModules, "@raycast"), { recursive: true });
+      const links = [
+        [path.join(apiRoot, "node_modules", "@raycast", "api"), path.join(nodeModules, "@raycast", "api")],
+        [path.join(apiRoot, "node_modules", "react"), path.join(nodeModules, "react")],
+      ];
+      for (const [target, link] of links) {
+        if (!fs.existsSync(target) || fs.existsSync(link)) continue;
+        fs.symlinkSync(target, link, "junction");
+      }
+    } catch {
+      /* best effort: NODE_PATH still resolves when no stray parent exists */
+    }
   }
 
   function getCommandClassification(uuid, commandName) {
@@ -527,6 +553,7 @@ function createStore(options) {
 
       await progress(handle, "build", "Building commands");
       await buildExtension({ apiRoot, targetDir: staging, manifest, onProgress: (step) => progress(handle, step.step, step.message) });
+      ensureRuntimeLinksInDir(staging);
 
       // Classification runs against the staged tree before it becomes visible.
       const classification = classifyExtension({

@@ -27,6 +27,7 @@ public sealed class SettingsWindow : Window
     private const double DefaultHeight = 700;
 
     private readonly WebView2 _webView = new();
+    private readonly WebViewBridge _bridge;
     private readonly string _frontendRoot;
     private readonly string _boundsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -34,7 +35,7 @@ public sealed class SettingsWindow : Window
 
     private Rect? _restoreBounds;
 
-    public SettingsWindow(string frontendRoot)
+    public SettingsWindow(string frontendRoot, Func<string, System.Text.Json.JsonElement?, Task<System.Text.Json.JsonElement?>>? backendDispatch = null)
     {
         _frontendRoot = frontendRoot;
 
@@ -47,6 +48,20 @@ public sealed class SettingsWindow : Window
         ResizeMode = ResizeMode.CanResize;
         ShowInTaskbar = true;
         UseLayoutRounding = true;
+
+        // The settings page talks to the backend through the same IPC bridge the launcher uses;
+        // without it the page's `ipc.backend(...)` calls all fail and e.g. the extensions page
+        // would stay empty forever.
+        if (backendDispatch != null)
+        {
+            _bridge = new WebViewBridge(_webView);
+            _bridge.Install((method, _jsonParams, data, isBackend) =>
+                isBackend ? backendDispatch(method, data) : Task.FromResult<System.Text.Json.JsonElement?>(null));
+        }
+        else
+        {
+            _bridge = new WebViewBridge(_webView);
+        }
 
         // Opaque: the settings page paints its own surfaces on top of this colour, matching
         // Raycast's #1f1f1f window background.

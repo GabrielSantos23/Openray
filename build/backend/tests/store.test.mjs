@@ -132,6 +132,38 @@ test("compatibility gate: an extension with zero compatible commands refuses bef
   }
 });
 
+test("installs junction the app's @raycast/api and react over any stray parent node_modules", async () => {
+  const { store, extensionsRoot, cleanup } = makeStore();
+  try {
+    await store.handlers.refreshCatalog();
+    await store.handlers.install({ handle: "plain-store-fixture", confirmed: true });
+    const apiLink = path.join(extensionsRoot, "plain-store-fixture", "node_modules", "@raycast", "api");
+    assert.equal(
+      fs.readlinkSync(apiLink),
+      path.join(API_ROOT, "node_modules", "@raycast", "api"),
+      "@raycast/api junctions to the app's copy",
+    );
+    assert.equal(
+      fs.readlinkSync(path.join(extensionsRoot, "plain-store-fixture", "node_modules", "react")),
+      path.join(API_ROOT, "node_modules", "react"),
+      "react junctions to the app's copy",
+    );
+    // The pre-store dev flow left a stale @raycast/api in the extensions root; it must not win.
+    const stale = path.join(extensionsRoot, "node_modules", "@raycast", "api");
+    fs.mkdirSync(stale, { recursive: true });
+    fs.writeFileSync(path.join(stale, "package.json"), JSON.stringify({ name: "@raycast/api", main: "index.js" }));
+    fs.writeFileSync(path.join(stale, "index.js"), "module.exports = {};");
+    const requireHere = createRequire(path.join(extensionsRoot, "plain-store-fixture", "noop.js"));
+    assert.equal(
+      requireHere.resolve("@raycast/api"),
+      path.join(API_ROOT, "node_modules", "@raycast", "api", "index.js"),
+      "resolution from the extension dir picks the junction over the stale parent",
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 test("getIcon serves the manifest icon from the install tree as a data URL", async () => {
   const { store, cleanup } = makeStore();
   try {
