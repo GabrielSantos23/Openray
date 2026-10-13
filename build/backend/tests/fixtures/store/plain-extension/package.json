@@ -1,0 +1,20 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "store-plain-fixture",
+  "title": "Store Plain Fixture",
+  "description": "Pipeline fixture: one view command with a file: dependency",
+  "icon": "icon.png",
+  "author": "fixture",
+  "platforms": ["Windows", "macOS"],
+  "commands": [
+    {
+      "name": "search",
+      "title": "Fixture Search",
+      "description": "Lists two rows",
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "fixture-helper": "file:../fixture-helper"
+  }
+}

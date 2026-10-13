@@ -31,7 +31,12 @@ function paths(options) {
       return path.join(options.extensionsRoot, uuid);
     },
     commandEntry(extension, command) {
-      return path.join(options.extensionsRoot, extension.uuid, "dist", `${command.name}.js`);
+      // Store-installed extensions bundle flat (`<uuid>/<command>.js`, the real app's layout);
+      // dev extensions keep their `dist/` output. Flat wins when both exist.
+      const root = path.join(options.extensionsRoot, extension.uuid);
+      const flat = path.join(root, `${command.name}.js`);
+      if (fs.existsSync(flat)) return flat;
+      return path.join(root, "dist", `${command.name}.js`);
     },
     toolEntry(extension, tool) {
       return path.join(options.extensionsRoot, extension.uuid, "tools", `${tool.name}.js`);
