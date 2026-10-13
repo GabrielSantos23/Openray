@@ -77,9 +77,11 @@ function scanUnsupported(text, guarded) {
 
 /**
  * Classify one command. `entrySource` is the original entry file text; `bundleSource` is the
- * bundled output text (both optional but at least one should be present).
+ * bundled output text (both optional but at least one should be present). With `preview` (the
+ * Store detail's manifest-only view) the "entry point not found" case is skipped — sources are
+ * only fetched at install time.
  */
-function classifyCommand({ command, entrySource, bundleSource }) {
+function classifyCommand({ command, entrySource, bundleSource }, { preview = false } = {}) {
   const mode = command.mode ?? "view";
 
   // Manifest level first — the cheapest signals decide without any source scan.
@@ -92,7 +94,7 @@ function classifyCommand({ command, entrySource, bundleSource }) {
   if (Array.isArray(command.platforms) && command.platforms.length > 0 && !command.platforms.includes("Windows")) {
     return { class: "disabled-manifest", missingApis: [], guardedApis: [], reason: `${command.title ?? command.name} is not available on Windows`, mode };
   }
-  if (!entrySource && !bundleSource) {
+  if (!preview && !entrySource && !bundleSource) {
     return { class: "disabled-manifest", missingApis: [], guardedApis: [], reason: "Command entry point not found", mode };
   }
 
@@ -118,10 +120,10 @@ function classifyCommand({ command, entrySource, bundleSource }) {
  * `commands` entries: `{ command: manifestCommand, entrySource, bundleSource }`.
  * Tools entries in `manifest.tools` are ignored (policy D6).
  */
-function classifyExtension({ manifest, commands }) {
+function classifyExtension({ manifest, commands }, options = {}) {
   const commandClassifications = {};
   for (const { command, entrySource, bundleSource } of commands) {
-    commandClassifications[command.name] = classifyCommand({ command, entrySource, bundleSource });
+    commandClassifications[command.name] = classifyCommand({ command, entrySource, bundleSource }, options);
   }
   const names = Object.keys(commandClassifications);
   const compatible = names.filter((name) => commandClassifications[name].class === "compatible");
