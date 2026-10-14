@@ -1,3 +1,5 @@
+> **ARCHIVED (FlowKey migration M2, 2026-10-14):** the Raycast Store was removed; extensions come from the FlowKey library (see flowkey-migration-plan.md). Kept for reference.
+
 # Store spec — how the real Raycast for Windows installs, builds, stores and loads Store extensions
 
 Evidence sources (all analysis-only, no execution of native code):

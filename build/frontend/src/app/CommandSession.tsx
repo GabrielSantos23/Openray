@@ -16,6 +16,7 @@ import {
 } from "../commandPages";
 import { onNotification, openSettings } from "../ipc";
 import { isDevExtensionsEnabled, overrideTestHooks } from "../testHooks";
+import { readFlowkeyPreferences } from "../features/extensions/preferences";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
 import { RaycastIcon } from "../icons";
 import { ClipboardHistoryView } from "../features/clipboard/ClipboardHistoryView";
@@ -24,9 +25,6 @@ import { SnippetsView, type SnippetsCommandName } from "../features/snippets/Sni
 import { CalculatorHistoryView } from "../features/calculator/CalculatorHistoryView";
 import { TranslateView, type TranslateSeed } from "../features/translator/TranslateView";
 import { SearchFilesView } from "../features/fileSearch/SearchFilesView";
-import { StoreView } from "../features/store/StoreView";
-import { storeGetCommandPreferences } from "../features/store/storeApi";
-import "../features/store/store.css";
 import { WindowManagementArgsView } from "../features/windowManagement/WindowManagementArgsView";
 import { FocusCategoriesSession, FocusFormView, FocusImportView } from "../features/focus/FocusViews";
 import { GameLauncherView } from "../features/games/GameLauncherView";
@@ -75,16 +73,12 @@ export function CommandSession({
     if (!panelOpen) searchInputRef.current?.focus();
   }, [panelOpen]);
 
-  // Store-installed commands launch with their stored preferences (`store.getCommandPreferences`);
-  // null means "still loading" and holds the launch until the values are in.
-  const storePreferences = useStorePreferences(
-    entry.kind === "extension" ? entry.extension.uuid : null,
-    entry.kind === "extension" ? entry.command.name : null,
-  );
+  // Extensions launch with the user's stored FlowKey preference values (localStorage; absent
+  // keys fall back to the manifest defaults inside the worker).
   const command = useExtensionCommand(
-    entry.kind === "extension" && storePreferences !== null ? entry.extension : null,
-    entry.kind === "extension" && storePreferences !== null ? entry.command : null,
-    storePreferences ?? {},
+    entry.kind === "extension" ? entry.extension : null,
+    entry.kind === "extension" ? entry.command : null,
+    entry.kind === "extension" ? readFlowkeyPreferences(entry.extension.uuid) : {},
   );
 
   // The renderer-side page stack (Raycast's `z.mainRouter.context.nodeExtensionStack`): pushed
@@ -296,17 +290,6 @@ export function CommandSession({
           onBack={onBack}
           closeMainWindow={closeWindow}
           applications={applications}
-        />
-      );
-    }
-    if (entry.area === "store") {
-      // The Store view: catalog search, extension detail, Install/Update/Uninstall.
-      // No searchText props: the Store owns its filter locally — internal areas never push a
-      // page, so the shared page-stack search text would never update.
-      return (
-        <StoreView
-          showToast={showToast}
-          onBack={onBack}
         />
       );
     }
@@ -655,34 +638,3 @@ export function moveInGrid(ids: string[], rowWidths: number[], currentIndex: num
 
 
 
-/**
- * Stored per-command preferences (`store.getCommandPreferences`): `null` while loading, the
- * (possibly empty) preference map once fetched. Local SQLite — resolves in a tick.
- */
-function useStorePreferences(
-  uuid: string | null,
-  commandName: string | null,
-): Record<string, unknown> | null {
-  const [preferences, setPreferences] = useState<Record<string, unknown> | null>(null);
-  const uuidKey = uuid ?? "";
-  const commandKey = commandName ?? "";
-  useEffect(() => {
-    if (!uuidKey || !commandKey) {
-      setPreferences({});
-      return;
-    }
-    let cancelled = false;
-    setPreferences(null);
-    void storeGetCommandPreferences(uuidKey, commandKey)
-      .then((result) => {
-        if (!cancelled) setPreferences(result.preferences ?? {});
-      })
-      .catch(() => {
-        if (!cancelled) setPreferences({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [uuidKey, commandKey]);
-  return preferences;
-}

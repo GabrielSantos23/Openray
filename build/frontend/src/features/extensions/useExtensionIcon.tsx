@@ -1,10 +1,10 @@
-// Extension icon hook: resolves an installed extension's manifest icon (via `store.getIcon`,
-// served from the install tree on disk) and caches it per uuid for the session so root search,
-// settings and the Store view share one fetch per extension.
+// Extension icon hook (re-homed from the Store's useExtensionIcon in M2): resolves an installed
+// extension's manifest icon (via `backend.getExtensionIcon`, read from the install tree on disk)
+// and caches it per uuid for the session so root search and settings share one fetch.
 
 import { useEffect, useState } from "react";
 import { RaycastIcon } from "../../icons";
-import { storeGetIcon } from "./storeApi";
+import { ipc } from "../../ipc";
 
 const cache = new Map<string, string>();
 
@@ -22,11 +22,12 @@ export function useExtensionIcon(uuid: string | null | undefined): string | null
       return;
     }
     let alive = true;
-    storeGetIcon(uuid)
+    ipc.backend("getExtensionIcon", { uuid }, { module: "backend" })
       .then((result) => {
+        const icon = (result as { icon: string | null }).icon;
         if (!alive) return;
-        if (result.icon) cache.set(uuid, result.icon);
-        setIcon(result.icon);
+        if (icon) cache.set(uuid, icon);
+        setIcon(icon);
       })
       .catch(() => undefined);
     return () => {

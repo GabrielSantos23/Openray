@@ -10,13 +10,27 @@ import type { FallbackCommand, FileSearchResult } from "../matching";
 import type { InlineSectionResult } from "../inlineSections";
 import { CLIPBOARD_AREA } from "../clipboardHistory";
 
+export interface ExtensionPreference {
+  name: string;
+  title: string;
+  type: string;
+  required?: boolean;
+  description?: string;
+  placeholder?: string;
+  default?: unknown;
+  label?: string;
+  options?: { title?: string; value?: string }[];
+  data?: { title?: string; value?: string }[];
+}
+
 export interface ExtensionSummary {
   uuid: string;
   name: string;
   title: string;
   description?: string;
-  /** Store classification badge ("some features unavailable"), when classified. */
-  badge?: string | null;
+  /** FlowKey manifest preferences schema, for the settings page. */
+  preferences?: ExtensionPreference[];
+  isFlowkey?: boolean;
   commands: Array<{
     name: string;
     title: string;
@@ -53,8 +67,8 @@ export interface ClipboardEntryResult {
  * four Quicklinks commands (create/export/import/search) and four Snippets commands, each opening
  * its own view.
  */
-export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search" | "notes" | "store";
-export type InternalCommandName = "search" | "create" | "import" | "export" | "history" | "translate" | "searchFiles" | "open" | "browse";
+export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search" | "notes";
+export type InternalCommandName = "search" | "create" | "import" | "export" | "history" | "translate" | "searchFiles" | "open";
 
 export interface InternalCommandEntry {
   kind: "internal";
@@ -81,7 +95,6 @@ export const INTERNAL_EXTENSION_META: Record<InternalArea, { title: string; icon
   translator: { title: "Translator", icon: "Globe", tile: "command-tile--translator" },
   "file-search": { title: "File Search", icon: "folder-search", tile: "command-tile--filesearch" },
   notes: { title: "Raycast Notes", icon: "blank-document", tile: "command-tile--notes" },
-  store: { title: "Store", icon: "extension", tile: "command-tile--store" },
 };
 
 export const INTERNAL_COMMANDS: ReadonlyArray<{
@@ -100,7 +113,6 @@ export const INTERNAL_COMMANDS: ReadonlyArray<{
   { area: "snippets", command: "search", title: "Search Snippets", keywords: ["snippets"] },
   { area: "translator", command: "translate", title: "Translate", keywords: ["translator", "translate", "translation"] },
   { area: "file-search", command: "searchFiles", title: "Search Files", keywords: ["file search", "find files", "explorer"] },
-  { area: "store", command: "browse", title: "Store", keywords: ["store", "extensions", "install", "marketplace"] },
   { area: "notes", command: "open", title: "Raycast Notes", keywords: ["notes", "note"] },
   { area: "notes", command: "create", title: "Create Note", keywords: ["notes", "new note"] },
   { area: "notes", command: "search", title: "Search Notes", keywords: ["notes", "search notes"] },

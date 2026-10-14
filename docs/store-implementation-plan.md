@@ -1,3 +1,5 @@
+> **ARCHIVED (FlowKey migration M2, 2026-10-14):** the Raycast Store was removed; extensions come from the FlowKey library (see flowkey-migration-plan.md). Kept for reference.
+
 # Store implementation plan (Phase 2 proposal — awaiting approval)
 
 Everything here builds on docs/store-spec.md (REA evidence) and docs/api-coverage.md. Work happens in the worktree `C:\Users\gabs\.t3\scratch\RaycastMini-store`, branch `feature/store`.

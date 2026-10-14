@@ -139,6 +139,23 @@ test("manifest.json extensions surface in allExtensions with FlowKey command map
   }
 });
 
+test("A3: store.* RPCs fail with the typed removed error, never a silent no-op", async () => {
+  const root = await stageFixture();
+  try {
+    const backend = createBackend({ pipeName: `flowkey-store-removed-${++pipeSeq}`, apiRoot: API_ROOT, extensionsRoot: root });
+    await assert.rejects(
+      () => backend.dispatchMessage("backend", "store.search", { query: "x" }),
+      /store\.search: the Raycast Store was removed/,
+    );
+    await assert.rejects(
+      () => backend.dispatchMessage("backend", "store.getCommandPreferences", { uuid: UUID, commandName: "open" }),
+      /the Raycast Store was removed/,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
+});
+
 test(
   "flowkey worker round trip: bundle loads, List renders through the adapter, preferences flatten",
   withFixture(async ({ backend, root, rendered }) => {

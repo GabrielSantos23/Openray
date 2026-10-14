@@ -66,8 +66,7 @@ function createBackend(options) {
   let gamesHandlers = {};
   let taskbarHandlers = {};
   let notesHandlers = {};
-  let storeHandlers = {};
-  // Set by index.js to the store's classification gate; loadCommand refuses disabled commands.
+  // Set by index.js to a launch gate; loadCommand refuses commands the gate rejects.
   let launchGate = null;
 
   // ---------------------------------------------------------------------------------------------
@@ -81,14 +80,8 @@ function createBackend(options) {
     } catch {
       return [];
     }
-    // The store's per-command classification rides on every summary so the renderer can grey out
-    // disabled commands (badge + one-line reason).
-    let compat = null;
-    try {
-      compat = storeHandlers.getSummariesCompat?.()?.compat ?? null;
-    } catch {
-      compat = null;
-    }
+    // The store's per-command classification used to ride on every summary (badge + one-line
+    // reason for greyed-out commands); the Store is gone, so summaries simply never carry one.
     const out = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -117,6 +110,7 @@ function createBackend(options) {
             tools: [],
             path: P.extensionDir(entry.name),
             assetsPath: P.assetsPath(entry.name),
+            preferences: fk.preferences ?? [],
             isFlowkey: true,
           });
           continue;
@@ -124,7 +118,6 @@ function createBackend(options) {
         const manifest = JSON.parse(
           fs.readFileSync(path.join(options.extensionsRoot, entry.name, "package.json"), "utf-8"),
         );
-        const extensionCompat = compat?.[entry.name] ?? null;
         out.push({
           uuid: entry.name,
           id: entry.name,
@@ -133,13 +126,10 @@ function createBackend(options) {
           description: manifest.description ?? "",
           author: manifest.author ?? "local",
           icon: manifest.icon,
-          badge: extensionCompat?.badge ?? null,
+          badge: null,
           commands: (manifest.commands ?? []).map((command) => ({
             ...command,
-            disabledReason: extensionCompat?.commands?.[command.name]?.class
-              && extensionCompat.commands[command.name].class !== "compatible"
-              ? extensionCompat.commands[command.name].reason ?? "Not supported"
-              : null,
+            disabledReason: null,
           })),
           tools: manifest.tools ?? [],
           path: P.extensionDir(entry.name),
@@ -892,15 +882,47 @@ function createBackend(options) {
     },
 
     async getInstalledNodeExtensionSummaries() {
-      // The store's per-command classification rides along (badge + disabled reasons) so root
-      // search can grey out disabled commands; extensions with no classification simply lack it.
-      let compat = null;
-      try {
-        compat = storeHandlers.getSummariesCompat?.()?.compat ?? null;
-      } catch {
-        compat = null;
+      // `compat` (the store's per-command classification) is gone with the Store; root search
+      // treats every installed extension as launchable.
+      return { extensions: await allExtensions(), compat: null };
+    },
+
+    // An installed extension's manifest icon as a data URL (re-homed from the Store's
+    // `store.getIcon`); `iconName` carries FlowKey lucide icon names for the RaycastIcon fallback.
+    async getExtensionIcon(_ctx, params) {
+      const uuid = String(params?.uuid ?? "");
+      if (!uuid || uuid.includes("..") || uuid.includes("/") || uuid.includes("\\")) {
+        return { icon: null, iconName: null };
       }
-      return { extensions: await allExtensions(), compat };
+      const dir = P.extensionDir(uuid);
+      let icon = "";
+      let iconName = null;
+      for (const manifestName of ["package.json", "manifest.json"]) {
+        try {
+          const manifest = JSON.parse(fs.readFileSync(path.join(dir, manifestName), "utf-8"));
+          icon = String(manifest.icon ?? "");
+          if (typeof manifest.iconName === "string") iconName = manifest.iconName;
+          break;
+        } catch {
+          /* try the other manifest kind */
+        }
+      }
+      if (!icon || icon.includes("..") || path.isAbsolute(icon)) return { icon: null, iconName };
+      for (const candidate of [path.join(dir, "assets", icon), path.join(dir, icon)]) {
+        try {
+          const bytes = fs.readFileSync(candidate);
+          const lower = candidate.toLowerCase();
+          const mime = lower.endsWith(".svg") ? "image/svg+xml"
+            : lower.endsWith(".png") ? "image/png"
+            : lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "image/jpeg"
+            : lower.endsWith(".ico") ? "image/x-icon"
+            : "application/octet-stream";
+          return { icon: `data:${mime};base64,${bytes.toString("base64")}`, iconName };
+        } catch {
+          /* try next */
+        }
+      }
+      return { icon: null, iconName };
     },
   };
 
@@ -1110,11 +1132,10 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
-      // Store (`store.*`): catalog, install/update/uninstall, classifications, command
-      // preferences — all persisted in this process (store.sqlite under the data dir).
+      // Store (`store.*`): removed with the Store (FlowKey migration M2). Typed error, never a
+      // silent no-op, so stale callers (old frontend bundle, saved hotkeys) surface honestly.
       if (method.startsWith("store.")) {
-        const handler = storeHandlers[method.slice("store.".length)];
-        if (handler) return handler(data ?? {});
+        throw new Error(`${method}: the Raycast Store was removed; extensions are installed from the FlowKey library`);
       }
 
       // Native `.NET` operations (clipboard, shell, and Raycast's internal Applications extension).
@@ -1208,11 +1229,7 @@ function createBackend(options) {
     registerNotesHandler(handlers) {
       notesHandlers = handlers ?? {};
     },
-    /** Install the store handler table (catalog, install, classifications, preferences). */
-    registerStoreHandler(handlers) {
-      storeHandlers = handlers ?? {};
-    },
-    /** Install the launch gate (the store's classification check); throwing refuses a launch. */
+    /** Install the launch gate (optional); throwing refuses a launch. */
     setLaunchGate(gate) {
       launchGate = gate ?? null;
     },

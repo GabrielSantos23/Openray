@@ -1,3 +1,5 @@
+> **ARCHIVED (FlowKey migration M2, 2026-10-14):** the Raycast Store was removed; extensions come from the FlowKey library (see flowkey-migration-plan.md). Kept for reference.
+
 # @raycast/api coverage in RaycastMini
 
 Source of truth: official `@raycast/api@2.7.3` npm package, `types/index.d.ts` (9,712 lines) — the complete public surface. The `llms-api.txt` / `llms-utils.txt` files referenced in the task no longer exist upstream (the `gh-pages` branch is gone; raw URLs 404 as of 2026-10-11), so the type definitions are the API-docs source used. Statuses reflect Phase 2 (Store) completion, 2026-10-13.

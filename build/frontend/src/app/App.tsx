@@ -32,7 +32,7 @@ import {
   type ToastState,
 } from "../toastStore";
 import { RaycastIcon } from "../icons";
-import { ExtensionIcon } from "../features/store/useExtensionIcon";
+import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
 import { readStoredHotkeys, reregisterStoredHotkeys, runWindowManagementCommand, wmCommandDefinition, wmCommandIcon } from "../windowManagement";
 import {
   cancelFocusSession,
@@ -2339,8 +2339,6 @@ export function MainWindow() {
                             <span className="list__accessory">
                               {entry.command.disabledReason ? (
                                 <span className="pill list__disabled-pill" title={entry.command.disabledReason}>Disabled</span>
-                              ) : entry.extension.badge ? (
-                                <span className="pill" title={entry.extension.badge}>Partial</span>
                               ) : null}
                               <span className="list__command-type">{entry.command.mode ?? "view"}</span>
                             </span>
