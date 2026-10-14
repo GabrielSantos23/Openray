@@ -2,7 +2,11 @@
 
 Decision being implemented: the Raycast Store is retired and `@raycast/api` is replaced by the
 FlowKey library as the only extension API. Reverse engineering of the real Raycast continues for UX
-parity only. This document is Phase 1 (read-only); no application code changes until it is approved.
+parity only. Phase 1 produced the inventory below; Phase 2 executes the milestones in the order the
+plan owner approved (§6), with the adjustments baked in: Store removal comes before the Spotify
+work, the OAuth vault uses a loopback redirect with bring-your-own client id (no raycast.com
+dependency), data migration moves (never deletes) RaycastMini-owned files into a backup folder, and
+every milestone ends green with test counts reported.
 
 Sources read for this plan:
 
@@ -11,290 +15,229 @@ Sources read for this plan:
 | npm `@flowkey-cli/native-sdk@0.5.2` | Types, manifest validation, capability groups (`src/types.ts` 569 L, `capabilities.ts` 541 L). |
 | npm `@flowkey-cli/react-ui@0.3.0` | React components + reconciler host (react-reconciler **0.33**, React 19 semantics), serializer, hooks. |
 | npm `@flowkey-cli/cli@0.4.0` | esbuild packaging with **shim aliases** (`react`, `react/jsx-runtime`, `@flowkey-cli/react-ui`, `@flowkey-cli/native-sdk` → runtime shims reading `globalThis.__FLOWKEY_HOST__`), `.flowkey` zip packaging, manifest validation. |
-| GitHub `GabrielSantos23/flowkey-launcher` @ main | `flowkey-native/sidecar` (stdio JSON-lines child process, protocol v1), `flowkey-native/shell` (WPF shell, 116 C# files incl. `SpotifyAuthConfig.cs`), `flowkey-native/contract` (pinned fixtures), `flowkey-native/extensions/*` (native apps, calculator, clipboard-history, emoji, google-translate, lucide-icons, obsidian-notes, quicklinks, snippets, **spotify**, system, window-switcher), `flowkey-native/docs/*`. |
+| GitHub `GabrielSantos23/flowkey-launcher` @ main | `flowkey-native/sidecar` (stdio JSON-lines child process, protocol v1), `flowkey-native/shell` (WPF shell incl. `SpotifyAuthConfig.cs`), `flowkey-native/contract` (pinned fixtures), `flowkey-native/extensions/*` (apps, calculator, clipboard-history, emoji, google-translate, lucide-icons, obsidian-notes, quicklinks, snippets, **spotify**, system, window-switcher), `flowkey-native/docs/*`. |
 | This repo @ `feature/store` (7a53739) | Everything inventoried below. |
 
 Safety state already applied:
 
-- `feature/store` last commit `7a53739` tagged **`archive/store-final`**. No git remote exists
-  (verified: `git remote | wc -l` = 0), so the tag is local-only — nothing to push.
-- `main` is fully merged into `feature/store` (`git merge-base --is-ancestor main feature/store`
-  passes), so `feature/store` is the right base: it carries every fix from the Store phase.
-- New worktree `C:\Users\gabs\.t3\scratch\RaycastMini-flowkey` on new branch
-  **`feature/flowkey-lib`**, branched from `feature/store` @ `7a53739`. The main working directory
-  was not touched.
+- `feature/store` last commit `7a53739` tagged **`archive/store-final`**. No git remote exists, so
+  per the plan owner's adjustment **git bundles** are created before M2 under
+  `C:\Users\gabs\Documents\RaycastMini-backups\` (`raycastmini-archive-store-final.bundle`,
+  `raycastmini-feature-flowkey-lib.bundle`).
+- `main` is fully merged into `feature/store`; the working branch **`feature/flowkey-lib`**
+  (worktree `C:\Users\gabs\.t3\scratch\RaycastMini-flowkey`) branches from it. The main working
+  directory is never touched. Before every milestone: merge the latest committed `main` into
+  `feature/flowkey-lib` and report conflicts (expected: none — main's changes are launcher-side).
 
-## 1. Store inventory (everything that goes away)
+## 1. Store inventory (everything that goes away, in M2)
 
 ### Backend (`build/backend/src/`)
 
 | File | Store role | Removal notes |
 |---|---|---|
-| `store.js` (~800 L) | SQLite schema (`catalog_meta`, `catalog_extensions`, `installed_extensions`, `extension_classifications`, `command_classifications`, `command_preferences` in `store.sqlite`), GitHub catalog refresh (pinned commit, 2 tree calls + 3,4k manifest fetches), install pipeline gates, staging/backup/rollback install, uninstall, update check, per-command classification persistence, launch gate (`assertLaunchable`), command preferences, `getIcon` (data URL from `assets/<icon>`), runtime junctions (`ensureRuntimeLinksInDir`). | Delete. The one-time migration drops the six tables. `getIcon` and the junction logic are worth re-creating for the FlowKey installer (see §5). |
-| `store-bundler.js` (~250 L) | npm install in staging (win32 `shell: true`), esbuild bundling per command (`jsx: automatic`, externals `@raycast/api`, `react`, `react/jsx-runtime`, `react-dom`, `react-reconciler`), host-owned package stripping, source graph walking (`stagedEntryGraph`). | Delete. FlowKey's CLI does the equivalent with shim aliases; our port of it replaces this. |
-| `classifier.js` (~250 L) | COVERAGE_VERSION 2, unsupported-API markers, `classifyCommand`/`classifyExtension`, guard detection. | Delete. FlowKey gates by manifest (`nativeMethods`, `httpHosts`, consent), not by source scanning. |
-| `backend.js` | `storeHandlers` + `registerStoreHandler` + `setLaunchGate`, store dispatch branch (`store.*`), `getInstalledNodeExtensionSummaries` (compat payload), worker crash reporting, OAuth handlers (`oauth.redirectOrigin`, `oauth.authorize` + clipboard handshake — kept, re-homed), `getApplications` worker route, `reportWorkerCrash`. | Surgical: remove store-specific parts; keep everything the FlowKey host needs (worker supervision, OAuth vault, clipboard, applications). |
-| `index.js` | `createStore` wiring, `setLaunchGate`, `syncClassifications()` bootstrap, `RAYCAST_MINI_DATA_DIR`. | Remove store lines; data-dir logic stays. |
+| `store.js` (~800 L) | SQLite schema (`catalog_meta`, `catalog_extensions`, `installed_extensions`, `extension_classifications`, `command_classifications`, `command_preferences` in `store.sqlite`), GitHub catalog refresh, install pipeline (staging/backup/rollback), uninstall, update check, classification persistence, launch gate, command preferences, `getIcon`, runtime junctions (`ensureRuntimeLinksInDir`). | Delete. Junction logic is re-created for FlowKey installs (§4). |
+| `store-bundler.js` (~250 L) | npm install in staging, esbuild bundling per command, host-owned package stripping, source-graph walking. | Delete. FlowKey builds bundles with shim aliases; no runtime npm install. |
+| `classifier.js` (~250 L) | COVERAGE_VERSION 2, unsupported-API markers, classification, guard detection. | Delete. FlowKey gates by manifest + consent. |
+| `backend.js` | `storeHandlers` + `registerStoreHandler` + `setLaunchGate`, `store.*` dispatch, `getInstalledNodeExtensionSummaries` compat payload, worker crash reporting (kept), OAuth handlers (kept, re-designed per §4), `getApplications` worker route (kept). | Surgical removal of store parts. |
+| `index.js` | `createStore` wiring, `setLaunchGate`, `syncClassifications()` bootstrap. | Remove store lines; data-dir logic stays. |
 
 ### Frontend (`build/frontend/src/`)
 
 | File | Store role |
 |---|---|
-| `features/store/StoreView.tsx` (~450 L) | Full-window Store view: search, categories, detail, install confirm, progress, update/uninstall. |
-| `features/store/storeApi.ts` | `store.*` typed RPC wrappers + push subscriptions (`onStoreProgress`, `onStoreInstalled`, `onStoreCatalogProgress`). |
+| `features/store/StoreView.tsx` | Full-window Store view. |
+| `features/store/storeApi.ts` | `store.*` RPC wrappers + push subscriptions. |
 | `features/store/store.css` | Store styles. |
-| `features/store/useExtensionIcon.tsx` | Icon hook — **keep** (re-homed; FlowKey extensions carry icons too). |
-| `app/CommandSession.tsx` | `entry.area === "store"` route, `useStorePreferences` launch gating, store.css import. |
-| `app/App.tsx` | `store.installed` push → summaries re-fetch; compat pills/disabled rows; junction of store-installed commands in root search. |
-| `app/entries.ts` | `InternalArea`/`InternalCommandName` "store"/"browse", `INTERNAL_EXTENSION_META.store`, `INTERNAL_COMMANDS` Store row, `ExtensionSummary` badge/disabledReason. |
-| `app/buildSections.ts` | Aliases as keywords; disabledReason subtitles. |
-| `settings/ExtensionPreferences.tsx` + `settings-extensions.css` | Per-extension aliases/hotkeys/preferences + polling (the settings window's IPC bridge itself stays — it fixed a real gap). |
-| `settings/Settings.tsx`, `settings/pages.ts` | "Extension Preferences" page registration (page stays; content becomes FlowKey extension settings). |
+| `features/store/useExtensionIcon.tsx` | Icon hook — **kept**, re-homed for FlowKey installs. |
+| `app/CommandSession.tsx` | Store route + `useStorePreferences` gating. |
+| `app/App.tsx` | `store.installed` push, compat pills/disabled rows. |
+| `app/entries.ts` | "store" internal area + command row. |
+| `settings/ExtensionPreferences.tsx` (+ css), `settings/Settings.tsx`, `settings/pages.ts` | Extensions settings page (page stays; content becomes FlowKey extension settings). |
 
-### Host (`build/host/`) — nothing Store-specific. The settings-window IPC bridge
-(`RequestBackendAsync`) stays: FlowKey extension settings need the same pipe.
+### Host (`build/host/`) — nothing Store-specific. The settings-window IPC bridge stays.
 
 ### Scripts, tests, docs, data
 
-- `build/scripts/harness-report.mjs` (~260 L) + `harness-quiet.mjs`: 15-candidate GitHub-catalog harness. Delete; replaced by FlowKey contract tests (§4/§6).
-- `build/scripts/install-extension.ps1`: dev-extension installer (@raycast/api shape). Rewrite for `.flowkey` packages.
-- `build/scripts/build.ps1`: builds "the `@raycast/api` runtime". Reword + retarget.
-- Tests: `build/backend/tests/store.test.mjs` (10), `classifier.test.mjs` (11), `store-bundler.test.mjs` (4), `gating.test.mjs` (3), `harness.test.mjs` (1, 20 min), `fixtures/catalog/*` (6 fixture extensions), `fixtures/classifier/*` (6), `fixtures/store/*` (3). All deleted with the Store; their living assertions (worker round trip, OAuth handshake, junctions) move into the FlowKey contract tests (§4).
-- Docs: `docs/store-spec.md` (REA findings — keep as historical REA record, mark archived), `docs/store-implementation-plan.md` (mark archived), `docs/api-coverage.md` (the @raycast/api coverage table — archived with the shim; FlowKey capability table replaces it going forward).
-- Data (RaycastMini-owned only): `%LOCALAPPDATA%\RaycastMini\store.sqlite` (drop the six tables — one-time migration), `%LOCALAPPDATA%\RaycastMini\extensions\<handle>` for Store installs (spotify-player, lucide-icons, command-ux-test, toast-playground, 1f0a1b2c-…), and the stray `%LOCALAPPDATA%\RaycastMini\extensions\node_modules` (the pre-Store dev-flow leftover that shadowed the API). Nothing under `~/.config/raycast` or the MSIX folders is ever touched.
+- `build/scripts/harness-report.mjs` + `harness-quiet.mjs`: GitHub-catalog harness. Deleted in M2;
+  replaced by FlowKey contract tests.
+- `build/scripts/install-extension.ps1`: @raycast-shape dev installer. Replaced by the FlowKey
+  installer in M2.
+- `build/scripts/build.ps1`: wording retargeted in M4.
+- Tests removed in M2: `store.test.mjs`, `classifier.test.mjs`, `store-bundler.test.mjs`,
+  `gating.test.mjs`, `harness.test.mjs`, `fixtures/catalog/*`, `fixtures/classifier/*`,
+  `fixtures/store/*`. Still-valid assertions (worker RPC round trip, LocalStorage persistence,
+  typed unsupported errors) move into the FlowKey contract tests in M1 (§6, acceptance A1).
+- Docs: `docs/store-spec.md`, `docs/api-coverage.md`, `docs/store-implementation-plan.md` marked
+  **archived REA records** (they remain the only files allowed to name the excluded strings).
+- Data (RaycastMini-owned only): `%LOCALAPPDATA%\RaycastMini\store.sqlite`,
+  `%LOCALAPPDATA%\RaycastMini\extensions\<handle>` Store installs, and the stray
+  `%LOCALAPPDATA%\RaycastMini\extensions\node_modules`. **Moved, not deleted** — see §6 (M2).
 
 ## 2. `@raycast/api` / `@raycast/utils` inventory
 
-`@raycast/utils` has **zero** imports in this repo (it appeared only inside Store-installed
-third-party bundles, which go away with the Store). `@raycast/api` appears in:
+`@raycast/utils` has zero imports in this repo (it only appeared inside Store-installed
+third-party bundles). `@raycast/api` appears in:
 
-| Location | What it is |
+| Location | Disposition |
 |---|---|
-| `build/api/` — the shim itself: `src/index.ts` (1,471 L: environment/canAccess, AI/OAuth/BrowserExtension/WindowManagement namespaces, Cache, LocalStorage, Clipboard, Toast/HUD/Alert, Keyboard, Action/ActionPanel, List/Detail/Grid/Form components, `showHUD`/`showToast`/`confirmAlert`/`open`/`trash`/`showInFinder`/`launchCommand`/`getApplications`…), `src/runtime/{model,reconciler,render,rpc,navigation}.ts` (2,537 L total: headless React renderer to `ray-*` JSON models, callback ids, navigation stack), `src/unsupported.ts`. | The whole thing is replaced by the FlowKey library + a thin sidecar. Anything FlowKey lacks that our renderer needs is ported INTO the FlowKey package (§5), not kept as a shim. |
-| `build/api/package.json` | Package literally named `@raycast/api` (deps: react 18.3.1, react-reconciler 0.29.2) + `package-lock.json` with the same name. | Renamed/replaced by the FlowKey package (§4); lockfile regenerated. |
-| `build/backend/src/worker-entry.js` | Worker entry: `require(<apiRoot>/node_modules/@raycast/api)`. | Replaced by the FlowKey worker bootstrap (host globals + shims). |
-| `build/backend/src/backend.js` | `NODE_PATH = <apiRoot>/node_modules` (the hook that makes extension requires resolve), worker `resourceLimits`, comments referencing `yIr`/Raycast's api bundle. | NODE_PATH dies with the shim (FlowKey resolves via junctions/host globals — see §4); comments rewritten. |
-| `build/backend/src/store-bundler.js`, `store.js`, `classifier.js` | Externals list, marker patterns, harness references. | Deleted with the Store. |
-| `build/extensions/command-ux-test/` | The one internal @raycast/api consumer (navigation stack, forms, alerts, grid, accessories test extension) + its `build.mjs` externals + `package.json` (`$schema: raycast.com/schemas/extension.json`). | Ported to the FlowKey API as the contract-test extension (M1). |
-| `build/backend/tests/fixtures/**` (catalog, classifier, store) | Fixture extensions importing `@raycast/api`. | Deleted/replaced with FlowKey fixtures. |
-| `build/backend/tests/api-shim.test.mjs` | Shim behavior tests (canAccess routing, Cache, preferences, typed throws, OAuth). | The still-true assertions (worker RPC, LocalStorage, typed errors) move to FlowKey contract tests; the rest die with the shim. |
-| `build/scripts/harness-report.mjs`, `install-extension.ps1`, `build.ps1` | Candidate list pinned to `raycast/extensions` raw URLs; dev installer; build wording. | Deleted/rewritten (§1, §6). |
-| `build/frontend/src/icons.tsx` | Two comments noting the Icon names mirror `@raycast/api`'s Lucide spellings. | Comment rewrite (the icon names themselves stay — they are Lucide names). |
-| Data: `build/api/node_modules/@raycast/api/index.js` | The committed built bundle. | Removed with the shim. |
+| `build/api/` — the shim (`src/index.ts` 1,471 L, `src/runtime/{model,reconciler,render,rpc,navigation}.ts`), `src/unsupported.ts` | Replaced by the FlowKey library. `runtime/rpc.ts` (our own worker↔backend JSON-RPC) is **moved** into the FlowKey worker, not deleted. |
+| `build/api/package.json` (+ `package-lock.json`) named `@raycast/api` (react 18.3.1, react-reconciler 0.29.2) | Renamed/replaced; lockfile deleted (gate: lockfiles must not carry the name). |
+| `build/backend/src/worker-entry.js` | Replaced by the FlowKey worker bootstrap. |
+| `build/backend/src/backend.js` | `NODE_PATH` wiring + worker-data flags rewritten; comments updated. |
+| `build/backend/src/{store-bundler,store,classifier}.js` | Deleted with the Store (M2). |
+| `build/extensions/command-ux-test/` (+ its `build.mjs` externals, `package.json` `$schema`) | Ported to `defineReactExtension` in M1; stays dev-flag-only, never shipped. |
+| `build/backend/tests/fixtures/**` (catalog/classifier/store) | Deleted in M2; FlowKey fixtures replace them. |
+| `build/backend/tests/api-shim.test.mjs` | Still-valid assertions migrated in M1 (acceptance A1); file deleted in M4. |
+| `build/scripts/harness-report.mjs`, `install-extension.ps1`, `build.ps1` | M2/M4 as above. |
+| `build/frontend/src/icons.tsx` | Two comments rewritten (icon names are Lucide's — they stay). |
+| `build/api/node_modules/@raycast/api/index.js` | The committed built bundle — removed with the shim (M4). |
 
-## 3. FlowKey library surface vs. what we use today
+## 3. FlowKey library surface (what we adopt)
 
-### Message contract (protocol v1, pinned by `contract/*.fixture.json`)
+- **Message contract (protocol v1, pinned by `contract/*.fixture.json`)**: sidecar over stdio JSON
+  lines. `HostMessage`: `init`, `search`, `action`, `preferences`, `nativeResult`, `webCall`,
+  `webAbort`. `SidecarMessage`: `ready`, `ui`/`uiPush`, `error`, `ack`, `nativeCall`,
+  `windowCommand`, `launchCommand`, `webView`, `webResult`, `log`.
+- **Extension model**: `manifest.json` (id, commands with `mode: "view" | "background"`,
+  `arguments[]`, `preferences[]`, `nativeMethods[]`, `httpHosts[]`, `oauth[]`, `fsPaths[]`,
+  `uriSchemes[]`); `.flowkey` zip packaging with zip-slip/size caps, semver-newer install rule,
+  per-capability consent enforced per native call.
+- **Runtime**: bundles load with `globalThis.__FLOWKEY_HOST__` = `{ react, reactJsx, reactUi,
+  nativeSdk }` installed before import; build-time shims alias `react`, `react/jsx-runtime`,
+  `@flowkey-cli/react-ui`, `@flowkey-cli/native-sdk` to globals readers — one React copy by
+  construction; react-reconciler 0.33 (React 19 semantics — `use` works).
+- **React surface**: `defineReactExtension({ manifest, component })`; `CommandProps` =
+  `{ query, filterValue, commandId, arguments, preferences, environment, window, native,
+  capabilities, signal }`; hooks `usePromise/useFetch/useDebounce/useCachedState/useLocalStorage/
+  useCachedPromise/withCache`; components `List/Detail/Grid/Form` + `ActionPanel/Action`, strict
+  prop whitelists, serializer errors on unknown props.
+- **UI trees**: `ListTree` (sections/items: keywords, accessories, pane, per-item detail, empty
+  view, filter dropdown, isLoading, searchBarPlaceholder, server pagination), `DetailTree` (fields
+  with link/tags kinds, markdown, mediaKeys), `GridTree`, `FormTree` (10 field kinds,
+  `submitActionId`).
+- **Capabilities**: `http.fetch/fetchJson/upload` (allowlist), `clipboard` (incl. history/paste),
+  `storage`, `cache`, **`oauth` (vaulted host-side; tokens never reach the extension; `http.fetch`
+  injects via `options.auth`)**, `secrets`, `shell`, `fs` (scoped globs, trash), `apps`, `media`
+  (SMTC), `image.fetch`, `system.selectedText`, `hud`, `toast`, `alert.confirm`.
 
-- Transport: sidecar is a **stdio JSON-lines child process** of the shell. `HostMessage`: `init`
-  (protocol version, extensionsDir, preferences, disabled extensions), `search` (requestId,
-  extensionId, query, commandId, filterValue, arguments), `action` (actionId, item, formValues),
-  `preferences` (updated values), `nativeResult`, `webCall`/`webAbort` (WebView2 mode bridge).
-  `SidecarMessage`: `ready` (extensions + load failures), `ui`/`uiPush` (UiTree), `error`, `ack`,
-  `nativeCall` (extension asks the shell to do something), `windowCommand`
-  (closeMainWindow/popToRoot/clearSearchBar), `launchCommand`, `webView`, `webResult`, `log`.
-- Mapping to ours: our backend↔host named pipe and worker RPC map 1:1 (init ≈ loadCommand context,
-  search ≈ initialize + render, action ≈ nativeCallback, nativeCall/nativeResult ≈ our
-  request/result). The contract is JSON, ours is JSON — the adapter is structural, not conceptual.
+## 4. Integration approach (as approved)
 
-### Extension model
-
-- `manifest.json` at package root: `id`, `name`, `version`, `description`, `icon` (emoji), `entry`
-  (bundled `main.js`), `commands[]` (`id`, `title`, `keywords`, `mode: "view" | "background"`,
-  `ui: "tree" | "web"`, `arguments[]`, `disabledByDefault`, `interval` ≥ 60 s), `nativeMethods[]`
-  (exact or `ns.*`), `httpHosts[]`, `oauth[]` (provider ids), `fsPaths[]` (globs with
-  `{{preference}}` interpolation), `uriSchemes[]`, `preferences[]`. Validated twice (SDK + shell)
-  and pinned by `contract/manifest.fixture.json`.
-- Packages: `.flowkey` = plain zip (zip-slip, 32 MB/entry, 64 MB total, 512 entries caps,
-  semver-strictly-newer install rule, per-capability consent stored at install and enforced per
-  native call). Installed to `%LOCALAPPDATA%\FlowKey.Shell\extensions\<id>\` — we keep our own root.
-
-### Runtime (sidecar)
-
-- Node child process; loads bundles with `globalThis.__FLOWKEY_HOST__` = `{ react, reactJsx,
-  reactUi, nativeSdk }` installed BEFORE the bundle import; build-time shims alias `react`,
-  `react/jsx-runtime`, `@flowkey-cli/react-ui`, `@flowkey-cli/native-sdk` to modules that read the
-  globals — one React copy by construction (this is the clean answer to the dual-React crash we
-  fought with NODE_PATH stripping, and react-reconciler 0.33 brings React 19 semantics — the `use`
-  hook works).
-- `defineReactExtension({ manifest, component })` — component receives `CommandProps`:
-  `{ query, filterValue, commandId, arguments, preferences, environment, window, native, capabilities, signal }`.
-- `SearchHandlers` shape for tree-mode extensions: `search(query, ctx) → UiTree`, `onAction(actionId, item, ctx, formValues) → UiTree | null`, `command(commandId, ctx)` for background commands.
-- Background schedules: `interval` commands re-run by the sidecar for its lifetime.
-- Web mode (`ui: "web"`): WebView2 surface with `webView`/`webCall`/`webResult` bridging.
-
-### UI trees (what the renderer receives)
-
-`ListTree` (sections/items with `id`, `title`, `subtitle`, `keywords`, `accessories` (text + color),
-`pane` (preview fields), `actions`, per-item `detail` (preview/image), `emptyView`, `filter`
-dropdown, `isLoading`, `searchBarPlaceholder`, server `pagination`), `DetailTree` (fields with
-link/tags/separator kinds, markdown description, `mediaKeys`), `GridTree`, `FormTree` (10 field
-kinds incl. datepicker/tagpicker/filepicker, shell-owned editing state, `submitActionId`).
-Strict prop whitelists enforced by the serializer (`unknown prop 'x' on <y>` errors).
-
-### Capabilities (typed groups over `nativeCall`, consent-gated per manifest)
-
-`http.fetch/fetchJson/upload` (manifest `httpHosts` allowlist), `clipboard` (read/write/paste +
-full history management incl. pasteEntry/editEntry), `storage` (per-extension KV), `cache` (TTL,
-disposable), **`oauth` (vaulted host-side: `authorize/status/disconnect`; tokens never reach the
-extension; `http.fetch` injects via `options.auth`)**, `secrets`, `shell.openUrl/openPath/revealPath`,
-`fs` (manifest-scoped globs, trash included), `apps.list/launch/frontmost/defaultFor`,
-`media.current/control` (play/pause/next/previous via SMTC), `image.fetch` (download+downscale+cache
-→ `file:` URI), `system.selectedText` (UIA first, Ctrl+C fallback), `hud.show`, `toast.show`,
-`alert.confirm`.
-
-### What our internal extensions use today vs. FlowKey equivalents
-
-Our internal extensions (calculator, translator, clipboard-history, quicklinks, snippets, notes,
-focus, games, taskbar, file-search, window-states) are **backend-native modules** that emit our
-`ray-*` model directly — they consume no `@raycast/api` at all, so the grep gate does not force
-their rewrite. The ones the user wants ported from FlowKey (spotify, lucide-icons) come with
-FlowKey-native implementations already written against the capability surface above.
-
-Gaps that matter for parity with what we already ship (details in §5):
-
-| Our feature today | FlowKey equivalent | Gap |
-|---|---|---|
-| `ray-*` model: navigation stack (push/pop pages), metadata panes, dropdown filter, inline sections, form validation errors, action shortcuts | `UiTree` covers list/detail/grid/form + item pane/detail + filter + actions with `push`; no navigation **stack** semantics beyond `push`, no form field validation errors, no per-field icons in metadata | Adapter + library additions (§5) |
-| API shim: `confirmAlert`, `Cache` LRU, `LocalStorage`, `Keyboard.Shortcut.Common`, `getPreferenceValues`, `launchCommand` with launchContext | `alert.confirm`, `cache`, `storage`, action `shortcut`, manifest preferences, `launchCommand(commandId, query)` | launchContext / launch arguments mapping (small addition) |
-| OAuth: PKCE with per-extension token storage (`@raycast/api` shape) | Vaulted `oauth.*` + `http.fetch` `auth` injection | Port our PKCE machinery into the shell's vault routes; Spotify = bring-your-own client id (`SpotifyAuthConfig` pattern) |
-| Clipboard history (OCR, paste, pin…) | `clipboard.history` capability + clipboard-history extension | Our backend's clipboard-store stays; capability route maps onto it |
-| `media` playback (Spotify) | `media.current/control` (SMTC) | New host route (Windows SMTC — new native code) |
-| `system.selectedText` | `system.selectedText` (UIA + Ctrl+C fallback) | New host route |
-| Image fetch/downscale | `image.fetch` | New host route |
-| Worker-per-command crash isolation | Sidecar is single-process (one extension crash kills all) | Keep our worker_threads topology under the FlowKey contract (§4) |
-
-## 4. Integration approach
-
-### What we adopt
-
-1. **The FlowKey packages, vendored as `@flowkey-mini/*`** (no "raycast" in any name):
-   `@flowkey-mini/native-sdk` (types + manifest validation + capabilities), `@flowkey-mini/react-ui`
-   (components + reconciler host + serializer + hooks), `@flowkey-mini/cli` (esbuild shims +
-   packaging). They are ports of `@flowkey-cli/*` from the FlowKey repo with attribution notes kept
-   (MIT-style headers preserved; third-party derivations — e.g. the reconciler host pattern — keep
-   their notes). Vendoring (copying into `build/flowkey/`) rather than an npm dependency keeps the
-   repo self-contained and lets us extend the library (§5) without forks of a remote.
-2. **Worker topology stays ours; the contract becomes FlowKey's.** Our `worker_threads` give
-   per-command crash isolation that FlowKey's in-process sidecar lacks. So: the worker entry boots
-   `installHostGlobals()` (React 19 + react-ui + native-sdk instances), loads the extension bundle,
-   and speaks the FlowKey HostMessage/SidecarMessage contract with the backend over the existing
-   worker RPC. The backend translates: `init` ↔ loadCommand context, `search` ↔ query pushes,
-   `action` ↔ nativeCallback, `nativeCall` ↔ backend hostHandlers (with the manifest consent gate),
-   `ui`/`uiPush` ↔ render pushes.
-3. **Renderer: UiTree adapter.** A backend-side adapter converts `UiTree` → our existing `ray-*`
-   wire model (list sections/items/accessories/detail map ~1:1; grid/form map to grid/form models;
-   `push` maps to a synthetic navigation page; actions map to callback ids). The frontend keeps its
-   renderer; FlowKey trees light it up without a frontend rewrite. Diff/gzip transport unchanged.
-4. **Manifest + consent gate.** The backend validates manifests with the ported
-   `validateManifest`, stores the accepted capability set per install, and enforces
-   `nativeMethods`/`httpHosts`/`fsPaths` per native call (the classifier's job, done the FlowKey
-   way).
-5. **OAuth vault.** Our PKCE backend work (the raycast.com/redirect + clipboard handshake) is
-   re-homed as the shell-side vault: `oauth.authorize/status/disconnect` routes keyed by provider,
-   tokens never entering the extension, `http.fetch` `auth` injection. Spotify uses FlowKey's
-   bring-your-own-client-id pattern (`spotify-auth.json` in the data dir / env var, optional fixed
-   redirect port).
-6. **CLI.** Port `@flowkey-cli/cli` as `@flowkey-mini/cli` (build/validate/package) and a
-   `install-extension.ps1` replacement that installs `.flowkey` packages (or dev folders) into our
-   extensions root with the consent step.
-
-### Alternatives considered
-
-- **Keep the @raycast/api shim and add FlowKey beside it** — rejected: two extension APIs to
-  maintain, and the shim's React 18.3.1 ceiling is exactly what blocks Spotify views (`use`).
-- **Run FlowKey's sidecar child-process as-is inside our backend** — most faithful, but it collapses
-  crash isolation (one broken extension kills every extension) and duplicates Node processes; our
-  worker topology already solves what the sidecar solves.
-- **Render FlowKey UiTree natively in the frontend (skip our model)** — largest churn in the
-  frontend for zero user-visible gain; the UiTree→model adapter gives parity now and the renderer
-  can adopt the trees natively later if needed.
-- **npm dependencies instead of vendoring** — FlowKey is versioned 0.x and we need library
-  extensions (§5); vendoring with attribution keeps us in control and the repo self-contained.
+1. **Vendored packages** `@flowkey-mini/{native-sdk,react-ui,cli}` under `build/flowkey/`, ported
+   from `@flowkey-cli/*` with attribution; `build/flowkey/NOTICE.md` records source package names
+   and versions (native-sdk 0.5.2, react-ui 0.3.0, cli 0.4.0), the FlowKey repo commit, the license
+   status (checked at vendoring time; FlowKey's repo carries a LICENSE file — recorded verbatim
+   there; if it has none, NOTICE says so explicitly) and every third-party note that came with the
+   code. Syncing later = re-copy the changed package sources, re-apply our library additions (kept
+   in clearly marked sections), re-run the contract tests.
+2. **Worker topology stays ours** (per-command `worker_threads` crash isolation); the message
+   contract becomes FlowKey's. The FlowKey worker boots host globals, loads the bundle, renders via
+   `ReactRoot` + `ActionRegistry`, and speaks HostMessage/SidecarMessage over our worker RPC. The
+   backend enforces the manifest consent gate per native call.
+3. **UiTree → `ray-*` adapter** in the backend keeps the renderer unchanged (§6 acceptance A2
+   lists the covered shapes and reports anything our renderer cannot express yet).
+4. **OAuth vault (no raycast.com anywhere)**: `redirect_uri` is a **loopback listener on 127.0.0.1**
+   (configurable fixed port via the provider config, random port otherwise), `client_id` is
+   bring-your-own per provider (`<dataDir>/oauth/<provider>.json` or env var, the FlowKey
+   `SpotifyAuthConfig` pattern), tokens are vaulted host-side, `http.fetch` injects them via
+   `options.auth`. The old raycast.com/redirect + clipboard handshake and its tests are dropped.
+5. **Build**: `@flowkey-mini/cli` (vendored) builds extension bundles with the shim aliases;
+   `install-extension.ps1` becomes the FlowKey installer (dev folders or `.flowkey` zips).
+6. **Package name**: `@flowkey-mini/*` — no "raycast" anywhere in names, ids or schemas.
 
 ## 5. Extension migration
 
-### Ports from the FlowKey repo (user-requested, hand-written against FlowKey)
-
-| Extension | What it needs | Notes |
+| Extension | Needs | Milestone |
 |---|---|---|
-| **spotify** (`flowkey-native/extensions/spotify`, ~30 source files + 10 test files) | `http.fetch` (7 allowlisted hosts), vaulted `oauth` (spotify, BYO client id), `secrets`, `image.fetch`, `hud.show`, `media.current/control`, `storage.*`, `clipboard.write` | FlowKey's own Spotify port replaces the raycast one entirely — no OAuth-in-extension, playback via `media.control` (SMTC), cover art via `image.fetch`. Needs: the OAuth vault (our PKCE work re-homed), `media.*` host route (new, SMTC), `image.fetch` host route (new), `secrets` host route (DPAPI or file-based). |
-| **lucide-icons** (`flowkey-native/extensions/lucide-icons`) | `storage`/`cache`, list/grid views, copy actions | Smallest end-to-end port — migration pilot (M2). |
+| `command-ux-test` (ours) | Full UI-surface coverage as `defineReactExtension` | M1 |
+| **lucide-icons** (port from FlowKey) | storage/cache, list/grid, copy actions, icons | M3 |
+| **spotify** (port from FlowKey) | vaulted `oauth` (spotify, BYO client id), `http.fetch` (7 hosts), `secrets`, `image.fetch`, `hud`, `media.current/control`, `storage.*`, `clipboard.write` | M5 (5a vault+routes → 5b SMTC → 5c port) |
+| backend-native internal extensions (calculator, translator, clipboard-history, quicklinks, snippets, notes, focus, games, taskbar, file-search, window-states) | no `@raycast/api` usage — unaffected by the gate | opportunistic later |
 
-### Our own extensions
+Library additions forced by the ports (built into `@flowkey-mini/*` / the backend, clearly marked
+in the vendored sources): navigation-stack mapping in the adapter, `media.*` + `image.fetch` +
+`secrets` + `system.selectedText` host routes, the OAuth vault, alias/hotkey reuse for FlowKey
+commands.
 
-- `command-ux-test` → ported to `defineReactExtension` as the **contract-test extension** (M1):
-  exercises list/detail/grid/form, actions, arguments, preferences, filter, pagination — the
-  FlowKey equivalent of the old shim-probe.
-- The backend-native internal extensions (calculator, translator, clipboard-history, quicklinks,
-  snippets, notes, focus, games, taskbar, file-search, window-states) consume no `@raycast/api`;
-  they keep working unchanged and migrate to FlowKey trees opportunistically later. The grep gate
-  does not require them.
+## 6. Milestones, acceptance tests, data migration
 
-### Library additions the ports force (FlowKey gaps we add in `@flowkey-mini/*`)
+Baseline test counts (recorded before M1, all green):
 
-1. `UiTree` → `ray-*` model coverage: metadata pane fields already exist; add navigation-stack
-   mapping (FlowKey `push` → our page stack) and form validation-error transport if a port needs it.
-2. `Keyboard.Shortcut.Common` equivalents as action `shortcut` presets (our host already parses
-   Ctrl/Alt/Shift only).
-3. Vaulted OAuth providers: `spotify` first (our PKCE + clipboard handshake behind
-   `oauth.authorize`), provider registry in the shell config.
-4. `media.*` host routes (SMTC) — new C# in the host, capability methods in the SDK.
-5. `image.fetch` host route (download + downscale + cache under the data dir).
-6. `secrets` host route (DPAPI-encrypted file under the data dir).
-7. `system.selectedText` host route (UIA; optional Ctrl+C fallback).
-8. Alias/hotkey surfaces for FlowKey commands in root search (reuses our existing aliases/hotkeys
-   stores — they are keyed by extension/command ids).
+| Suite | Count |
+|---|---|
+| `build/backend` tests (`node --test tests/*.test.mjs` minus the 20-min harness) | 29 pass / 0 fail (store 10, classifier 11, gating 3, bundler 4, api-shim 5 — counts shift when Store suites leave) |
+| render-model suite (`build/tests/*.test.mjs`) | 4 files green |
+| frontend `tsc --noEmit && vite build` | clean |
+| harness (20 min, network) | superseded in M2 by contract tests |
 
-## 6. Removal order (milestones, each ending green + committed)
+### M1 — library in (command-ux-test port; nothing removed)
 
-- **M0 — safety (done before this plan):** `archive/store-final` tag; `feature/flowkey-lib`
-  worktree from `feature/store`.
-- **M1 — library in:** vendor `@flowkey-mini/{native-sdk,react-ui,cli}` under `build/flowkey/` with
-  attribution; worker entry boots host globals + loads a bundle by manifest; contract tests
-  (manifest fixtures pinned to `contract/*.fixture.json`; a worker round trip renders a List tree
-  through the adapter; action invocation round trip). `command-ux-test` ported. Nothing removed yet.
-- **M2 — first real extension:** lucide-icons ported end-to-end (root search entry, detail, copy
-  actions, settings preferences via the IPC bridge). Store UI still present but unused.
-- **M3 — spotify:** OAuth vault + `media`/`image`/`secrets`/`selectedText` host routes; spotify
-  ported; BYO client id (`spotify-auth.json`); playback verified against the isolated instance.
-- **M4 — Store removed:** delete `store.js`, `store-bundler.js`, `classifier.js`, store frontend
-  (StoreView/storeApi/store.css), store routes in `backend.js`/`index.js`, harness scripts, store
-  tests/fixtures, Store root-search entries and settings page content; one-time migration drops the
-  six `store.sqlite` tables and deletes RaycastMini's own installed-extension folders + the stray
-  extensions-root `node_modules` (never touches `~/.config/raycast` or MSIX); `getIcon`/
-  junction logic re-created for the FlowKey installer.
-- **M5 — shim + aliases removed:** delete `build/api/` (shim + runtime + built bundle),
-  `worker-entry.js` api require, `NODE_PATH` wiring, `command-ux-test` @raycast shape, fixtures;
-  rename/repoint `build.ps1`; icon comment rewrite; **grep gate** (below) passes; full suites green;
-  isolated instance verified (pipe + data dir + extensions root isolated, hotkey caveat as before).
+- Vendor `@flowkey-mini/*` + NOTICE + vendor deps (react 19, react-reconciler 0.33, scheduler) under
+  `build/flowkey/vendor/`; FlowKey worker (`flowkey-worker.js`) + UiTree→`ray-*` adapter
+  (`flowkey-adapter.js`) + manifest consent gate; `command-ux-test` ported (dev-flag only, never
+  shipped).
+- **A1 contract tests** (`flowkey-contract.test.mjs`): manifest validation against FlowKey's pinned
+  fixtures' rules; worker round trip renders a List tree through the adapter (assert the produced
+  `ray-*` model); action invocation round trip (registry id → handler → new tree); LocalStorage
+  persistence via the worker RPC; typed unsupported-capability errors; migrate the still-valid
+  api-shim assertions listed in §2.
+- **A2 adapter tests**: every tree kind — list with sections, accessories, item detail + metadata
+  pane, grid (flat + sections), form (field kinds + submitActionId), push navigation, empty view,
+  filter dropdown, pagination. Report (in the commit message + final report) anything our renderer
+  cannot express yet instead of dropping it.
 
-### One-time data migration (M4)
+### M2 — Store removed
 
-`store.sqlite`: `DROP TABLE IF EXISTS` for the six Store tables (the file itself stays — other
-stores live elsewhere; store.sqlite holds only Store tables, so dropping leaves an empty DB that
-can be deleted outright). `%LOCALAPPDATA%\RaycastMini\extensions\<handle>` folders for Store
-installs are deleted (RaycastMini-owned). The extensions-root `node_modules` (stale dev-flow
-artifact) is deleted. Aliases/hotkeys stores keep their entries; orphans are pruned by id.
+- Delete: `store.js`, `store-bundler.js`, `classifier.js`, store routes in `backend.js`/`index.js`,
+  `features/store/*` (except useExtensionIcon → re-homed), store entries/routes in
+  `entries.ts`/`CommandSession.tsx`/`App.tsx`/`buildSections.ts`, settings page store content,
+  harness scripts, store/classifier/bundler/gating tests + fixtures, `install-extension.ps1`
+  (replaced by the FlowKey installer), store docs marked archived.
+- **A3**: all remaining suites green; root search + settings render FlowKey extensions
+  (`command-ux-test` behind the dev flag); the old `store.*` RPC returns a typed "removed" error.
+- **A4 data migration (move, not delete; idempotent; logged)**: move `store.sqlite`, the
+  Store-installed extension folders and the stale extensions-root `node_modules` into
+  `%LOCALAPPDATA%\RaycastMini\_removed-store-backup\`, writing `migration-log.json` (source →
+  destination per item). Re-running the migration moves nothing and rewrites the log. The folder is
+  user-deletable at any time; deleting it only removes the retired Store's data.
+
+### M3 — lucide-icons pilot
+
+- Port `flowkey-native/extensions/lucide-icons`; root-search entry, detail, copy actions,
+  preferences via the settings bridge.
+- **A5**: e2e test launches the pilot in a worker through the normal path and asserts the rendered
+  tree; manual check listed for the isolated instance.
+
+### M4 — shim, aliases, NODE_PATH removed; grep gate
+
+- Delete `build/api/` (shim + runtime + built bundle + lockfile), `worker-entry.js`'s api require,
+  `NODE_PATH` wiring, old fixtures; `rpc.ts` already moved in M1; `build.ps1` + icon comments
+  rewritten.
+- **A6 grep gate (git grep over tracked files, excluding only docs/ files explicitly marked
+  archived/REA):**
+
+```
+git grep -I -n -i -E "@raycast/api|@raycast/utils|raycast/extensions|raycast\.com" -- . ":(exclude)docs/store-spec.md" ":(exclude)docs/api-coverage.md" ":(exclude)docs/store-implementation-plan.md"
+```
+
+  must return zero hits (product name "RaycastMini" is allowed and never matches these patterns).
+  Run with output in the final report.
+
+### M5 — Spotify
+
+- **M5a**: OAuth vault (loopback redirect 127.0.0.1, configurable fixed port, BYO client id via
+  `<dataDir>/oauth/spotify.json` or `FLOWKEY_SPOTIFY_CLIENT_ID`), `http.fetch` allowlist +
+  `auth` injection, `secrets`, `image.fetch` host routes. **A7**: vault flow test (authorize →
+  loopback receive → token exchange against a stub provider → `http.fetch` injects the token).
+- **M5b**: `media.current/control` host route (Windows SMTC, new file `MediaControl.cs`, small
+  NativeHost.cs hook). **A8**: capability test with the session metadata.
+- **M5c**: the Spotify extension port (search, library, now-playing, player background commands,
+  lyrics). **A9**: contract tests for the non-network pieces (models, store) + isolated-instance
+  manual checklist.
+- **M5d**: `system.selectedText` only if something we ship needs it.
 
 ## 7. Final gate
 
-After M5, a grep over the repo must return **zero hits** for `@raycast/api`, `@raycast/utils` and
-`raycast/extensions` across:
-
-- all code (`*.ts`, `*.tsx`, `*.js`, `*.mjs`, `*.cjs`, `*.cs`),
-- configs and manifests (`*.json` incl. `package.json` files and lockfiles, `*.ps1`, `.gitignore`,
-  `.zcodeignore`),
-- tests and fixtures.
-
-Allowed to keep the strings: the REA spec documents (`docs/store-spec.md`, `docs/api-coverage.md`,
-`docs/store-implementation-plan.md`) as historical analysis records, clearly marked as archived.
-`build/api/package-lock.json` is regenerated/deleted with the package rename, since a lockfile
-keeps the old name alive. The gate command is recorded in the plan and run with output in the
-Phase 2 final report:
-
-```
-grep -rniE "@raycast/api|@raycast/utils|raycast/extensions" \
-  --include="*.ts" --include="*.tsx" --include="*.js" --include="*.mjs" --include="*.cjs" \
-  --include="*.cs" --include="*.json" --include="*.ps1" build/ | grep -v node_modules
-```
+The gate from §6 (A6) runs over all tracked files with the three archived REA docs excluded; zero
+hits required. Product name "RaycastMini" is fine. The command and its (empty) output appear in the
+final report, together with: what was removed, what was migrated, test counts before/after per
+suite, backup paths, pending items.
