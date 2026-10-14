@@ -35,7 +35,11 @@ function Icon({ icon, fallback = "AppWindow" }: { icon?: unknown; fallback?: str
       </span>
     );
   }
-  if (typeof source === "string" && /\.(png|jpg|jpeg|gif|svg|webp)$/i.test(source) && !source.startsWith("icon://")) {
+  if (
+    typeof source === "string" &&
+    (/\.(png|jpg|jpeg|gif|svg|webp)$/i.test(source) || source.startsWith("data:image/")) &&
+    !source.startsWith("icon://")
+  ) {
     return (
       <span className="icon" aria-hidden>
         <img src={source} alt="" width={16} height={16} />

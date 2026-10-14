@@ -576,9 +576,9 @@ function createBackend(options) {
           return { status: response.status, headers: Object.fromEntries(response.headers.entries()), bodyText };
         }
         case "clipboard.read":
-          return getClipboard(ctx).then((value) => ({ text: value?.value ?? null }));
+          return hostHandlers.getClipboard(ctx).then((value) => ({ text: value?.value ?? null }));
         case "clipboard.write":
-          return setClipboard(ctx, { text: String(call.text ?? "") });
+          return hostHandlers.setClipboard(ctx, { text: String(call.text ?? "") });
         case "storage.get": {
           const store = await storage(ctx);
           const raw = store[`flowkey:${call.key}`];
@@ -616,7 +616,7 @@ function createBackend(options) {
           return {};
         case "shell.openUrl":
         case "shell.openPath":
-          return open(ctx, { path: String(call.url ?? call.path ?? "") });
+          return hostHandlers.open(ctx, { path: String(call.url ?? call.path ?? "") });
         case "shell.revealPath":
           return dispatch("backend", "shell.revealFile", { path: String(call.path ?? "") });
         case "apps.list": {
@@ -625,9 +625,9 @@ function createBackend(options) {
           return { apps: apps.map((app) => ({ id: app.id ?? app.path, name: app.name })) };
         }
         case "hud.show":
-          return showHUD(ctx, { title: String(call.title ?? "") });
+          return hostHandlers.showHUD(ctx, { title: String(call.title ?? "") });
         case "toast.show":
-          return showToast(ctx, { title: String(call.title ?? ""), message: call.message, style: call.style === "failure" ? "failure" : "success" });
+          return hostHandlers.showToast(ctx, { title: String(call.title ?? ""), message: call.message, style: call.style === "failure" ? "failure" : "success" });
         case "alert.confirm":
           return new Promise((resolve) => {
             const alertId = `fkalert${flowkeyAlertSeq++}`;
@@ -643,7 +643,7 @@ function createBackend(options) {
               }
             }, 120_000);
             timeout.unref?.();
-            return showAlert(ctx, {
+            return hostHandlers.showAlert(ctx, {
               title: String(call.title ?? ""),
               message: call.message,
               primaryAction: { title: call.confirmTitle ?? "Confirm", onAction: okId },

@@ -1,0 +1,59 @@
+{
+  "id": "lucide-icons",
+  "name": "Lucide Icons",
+  "version": "1.0.0",
+  "description": "Search the Lucide icon set as a grid; copy names, SVG or components.",
+  "icon": "command-icon.png",
+  "commands": [
+    {
+      "id": "open",
+      "title": "Search Icons",
+      "keywords": ["lucide", "icons", "svg", "design"],
+      "mode": "view",
+      "icon": "command-icon.png",
+      "iconColor": "#0EA5E9"
+    }
+  ],
+  "nativeMethods": ["clipboard.write", "clipboard.paste", "hud.show", "shell.openUrl"],
+  "httpHosts": [],
+  "preferences": [
+    {
+      "name": "primaryAction",
+      "type": "dropdown",
+      "title": "Primary action",
+      "description": "Action run when pressing enter on an icon.",
+      "default": "copy-name",
+      "required": false,
+      "options": [
+        {
+          "value": "copy-name",
+          "title": "Copy Name"
+        },
+        {
+          "value": "copy-svg",
+          "title": "Copy SVG"
+        },
+        {
+          "value": "paste-svg",
+          "title": "Paste SVG"
+        },
+        {
+          "value": "copy-component",
+          "title": "Copy Component"
+        },
+        {
+          "value": "open-in-browser",
+          "title": "Open In Browser"
+        }
+      ]
+    },
+    {
+      "name": "pascalCaseName",
+      "type": "checkbox",
+      "title": "Copy name in Pascal case",
+      "description": "Copy the icon name using Pascal case (e.g. LucideIconName).",
+      "default": false,
+      "required": false
+    }
+  ]
+}
