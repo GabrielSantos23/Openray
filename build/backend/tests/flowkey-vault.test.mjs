@@ -2,7 +2,7 @@
 // URL, the loopback callback server (real HTTP), the token exchange/refresh (stubbed fetch), the
 // per-provider token files, and the backend routes (secrets round trip through a real worker,
 // http.fetch auth-injection consent checks, image.fetch allowlist, oauth.status on an empty
-// vault). These tests replace the removed raycast.com clipboard-handshake tests.
+// vault). These tests replace the removed clipboard-handshake tests.
 //
 // No external network: token endpoints are stubbed; the loopback server is 127.0.0.1.
 

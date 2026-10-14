@@ -1,0 +1,366 @@
+{
+  "id": "spotify",
+  "name": "Spotify",
+  "version": "0.1.0",
+  "description": "Search Spotify, browse your library, and control playback.",
+  "icon": "🎧",
+  "commands": [
+    {
+      "id": "search",
+      "title": "Spotify Search",
+      "keywords": [
+        "music",
+        "song",
+        "artist",
+        "album"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "view"
+    },
+    {
+      "id": "your-library",
+      "title": "Your Library",
+      "keywords": [
+        "spotify",
+        "saved"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "view"
+    },
+    {
+      "id": "now-playing",
+      "title": "Now Playing",
+      "keywords": [
+        "spotify",
+        "player"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "view"
+    },
+    {
+      "id": "queue",
+      "title": "Spotify Queue",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "view"
+    },
+    {
+      "id": "devices",
+      "title": "Spotify Devices",
+      "keywords": [
+        "spotify",
+        "connect"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "view"
+    },
+    {
+      "id": "just-play",
+      "title": "Just Play",
+      "keywords": [
+        "spotify",
+        "play"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "toggle-play-pause",
+      "title": "Toggle Play/Pause",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "next",
+      "title": "Next Track",
+      "keywords": [
+        "spotify",
+        "skip"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "previous",
+      "title": "Previous Track",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "like",
+      "title": "Like Current Track",
+      "keywords": [
+        "spotify",
+        "heart"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "dislike",
+      "title": "Dislike Current Track",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "toggle-shuffle",
+      "title": "Toggle Shuffle",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "cycle-repeat",
+      "title": "Cycle Repeat",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "replay",
+      "title": "Replay Track",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "volume-0",
+      "title": "Volume 0%",
+      "keywords": [
+        "spotify",
+        "mute"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "volume-25",
+      "title": "Volume 25%",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "volume-50",
+      "title": "Volume 50%",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "volume-75",
+      "title": "Volume 75%",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "volume-100",
+      "title": "Volume 100%",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "volume-up",
+      "title": "Volume Up",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "volume-down",
+      "title": "Volume Down",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "start-radio",
+      "title": "Start Radio",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "current-track",
+      "title": "Current Track",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "view"
+    },
+    {
+      "id": "copy-url",
+      "title": "Copy Track URL",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "copy-artist-and-title",
+      "title": "Copy Artist and Title",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "copy-embed",
+      "title": "Copy Embed Code",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "skip-15",
+      "title": "Skip 15 Seconds",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "back-15",
+      "title": "Back 15 Seconds",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "background"
+    },
+    {
+      "id": "add-playing-to-playlist",
+      "title": "Add Playing Song to Playlist",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "view"
+    },
+    {
+      "id": "remove-playing-from-playlist",
+      "title": "Remove Playing Song from Playlist",
+      "keywords": [
+        "spotify"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "view"
+    },
+    {
+      "id": "find-lyrics",
+      "title": "Find Lyrics",
+      "keywords": [
+        "spotify",
+        "lyrics"
+      ],
+      "icon": "spotify",
+      "iconColor": "#1DB954",
+      "mode": "view"
+    }
+  ],
+  "nativeMethods": [
+    "http.fetch",
+    "clipboard.write",
+    "oauth.authorize",
+    "oauth.status",
+    "oauth.disconnect",
+    "secrets.get",
+    "secrets.set",
+    "secrets.delete",
+    "image.fetch",
+    "hud.show",
+    "media.current",
+    "media.control",
+    "storage.*"
+  ],
+  "httpHosts": [
+    "api.spotify.com",
+    "i.scdn.co",
+    "mosaic.scdn.co",
+    "thisis-images.scdn.co",
+    "misc.scdn.co",
+    "lrclib.net",
+    ".spotifycdn.com"
+  ],
+  "oauth": [
+    "spotify"
+  ],
+  "preferences": [
+    {
+      "name": "clientId",
+      "type": "password",
+      "title": "Spotify client id",
+      "description": "Paste the client id of your own Spotify app (developer.spotify.com/dashboard). Register http://127.0.0.1/callback as its redirect URI.",
+      "required": false
+    }
+  ]
+}
