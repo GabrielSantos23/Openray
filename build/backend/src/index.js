@@ -42,7 +42,6 @@ const { createNotes } = require("./notes");
 const config = {
   // Must match host/NamedPipeBridge.cs
   pipeName: process.env.RAYCAST_MINI_PIPE ?? "raycast-mini-ipc",
-  apiRoot: process.env.RAYCAST_MINI_API_ROOT ?? path.join(__dirname, "..", "..", "api"),
   frontendRoot: process.env.RAYCAST_MINI_FRONTEND_ROOT ?? path.join(__dirname, "..", "..", "frontend"),
   extensionsRoot:
     process.env.RAYCAST_MINI_EXTENSIONS_ROOT ??
@@ -51,7 +50,6 @@ const config = {
 
 const backend = createBackend({
   pipeName: config.pipeName,
-  apiRoot: config.apiRoot,
   frontendRoot: config.frontendRoot,
   extensionsRoot: config.extensionsRoot,
 });
@@ -196,8 +194,7 @@ console.log(
     ready: true,
     pipe: config.pipeName,
     extensionsRoot: config.extensionsRoot,
-    apiRoot: config.apiRoot,
-  }),
+    }),
 );
 
 process.on("uncaughtException", (error) => console.error("[backend] uncaught", error));

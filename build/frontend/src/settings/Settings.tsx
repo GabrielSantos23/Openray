@@ -1053,10 +1053,10 @@ function CommitTextarea({
 /** Rows whose "action" is a real link or a no-op with a visible outcome. */
 function runRowAction(row: RowDefinition): void {
   const links: Record<string, string> = {
-    website: "https://www.raycast.com",
-    "slack-community": "https://raycast.com/community",
-    "open-changelog": "https://www.raycast.com/changelog",
-    "send-feedback": "mailto:support@raycast.com",
+    website: "https://github.com/GabrielSantos23/RaycastMini",
+    "slack-community": "https://github.com/GabrielSantos23/RaycastMini",
+    "open-changelog": "https://github.com/GabrielSantos23/RaycastMini/releases",
+    "send-feedback": "https://github.com/GabrielSantos23/RaycastMini/issues",
   };
   const target = links[row.id];
   if (target) window.open(target, "_blank", "noopener");

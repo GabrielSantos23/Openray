@@ -1,5 +1,5 @@
 // A4 (docs/flowkey-migration-plan.md M2): the Store artifact migration moves — never deletes —
-// store.sqlite (+ wal/shm), Store-installed extension folders (identified by the @raycast $schema
+// store.sqlite (+ wal/shm), Store-installed extension folders (identified by the Store $schema
 // marker in package.json) and the stale extensions-root node_modules into
 // `<dataRoot>/_removed-store-backup/`, writes migration-log.json, and is idempotent: re-running
 // moves nothing and rewrites the log. Dev extensions (no $schema) and unrelated files stay put.
@@ -24,7 +24,7 @@ function stage({ withStoreDb = true, withStoreExtension = true, withDevExtension
     fs.mkdirSync(path.join(dir, "assets"), { recursive: true });
     fs.writeFileSync(
       path.join(dir, "package.json"),
-      JSON.stringify({ $schema: "https://raycast.com/schema/raycast-extension.json", name: "spotify-player", commands: [] }),
+      JSON.stringify({ $schema: "https://raycast.example/schema/raycast-extension.json", name: "spotify-player", commands: [] }),
     );
     fs.writeFileSync(path.join(dir, "search.js"), "bundle");
     if (withIcon) fs.writeFileSync(path.join(dir, "assets", "icon.png"), "png");
@@ -88,12 +88,12 @@ test("a source re-appearing after a previous run lands under a fresh name, never
   assert.equal(fs.readFileSync(path.join(dataRoot, "_removed-store-backup", "store.sqlite"), "utf-8"), "db");
 });
 
-test("isStoreInstalledExtension: only the @raycast $schema marker qualifies; manifest.json-only dirs are dev", () => {
+test("isStoreInstalledExtension: only the Store $schema marker qualifies; manifest.json-only dirs are dev", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "store-migration-probe-"));
   try {
     const storeOne = path.join(root, "store-one");
     fs.mkdirSync(storeOne);
-    fs.writeFileSync(path.join(storeOne, "package.json"), JSON.stringify({ $schema: "https://raycast.com/schema/raycast-extension.json" }));
+    fs.writeFileSync(path.join(storeOne, "package.json"), JSON.stringify({ $schema: "https://raycast.example/schema/raycast-extension.json" }));
     const devOne = path.join(root, "dev-one");
     fs.mkdirSync(devOne);
     fs.writeFileSync(path.join(devOne, "manifest.json"), JSON.stringify({ id: "dev-one" }));

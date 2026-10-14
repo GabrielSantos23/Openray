@@ -229,7 +229,7 @@ function createTranslator({ pushToFrontend, dataRoot, fetchImpl, now = () => Dat
   }
 
   /**
-   * The provider call. The shipped backend posts to `backend.raycast.com/api/v1/translations`;
+   * The provider call. The shipped app posts to its own translation endpoint;
    * that endpoint needs a Raycast account, so the free Google endpoint stands in behind this one
    * swappable function. Response shape: `[[["Hola","hello",…],…], null, "es", …]`.
    */

@@ -1,8 +1,8 @@
 // The FlowKey extension worker. One worker per running command (crash isolation), speaking the
 // FlowKey contract to the backend over the worker RPC:
 //
-//   backend -> worker: initialize / nativeCallback / terminate (same methods the @raycast/api
-//                      worker answered, so the backend session machinery is shared)
+//   backend -> worker: initialize / nativeCallback / terminate (the same methods the previous
+//                      api-shim worker answered, so the backend session machinery is shared)
 //   worker -> backend: `render` pushes (UiTree already adapted to the ray-* model), `nativeCall`
 //                      (capability calls — the backend enforces the manifest consent gate)
 //

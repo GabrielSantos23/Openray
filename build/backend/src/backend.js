@@ -1,13 +1,8 @@
 // The extension host proper: worker pool + handler tables + named-pipe transport.
 //
-// Mirrors Raycast's `backend/index.mjs`:
-//   * `yIr = join(node_modules, "@raycast", "api", "index.js")` is the worker entry point.
-//   * `new Worker(yIr, { workerData, env: { NODE_PATH: â€¦/api/node_modules, â€¦ },
-//     resourceLimits: { maxOldGenerationSizeMb: 100 } })`
-//   * pool `YI = { dev: [], prod: [] }`, prewarm sizes 1/1, max 8.
-//   * worker message loop routes `Notify` -> `wY`, `Request` -> `wIr` + reply, `Result` -> resolver.
-//   * handler table `VOe` (render/renderEmpty/renderSuspense/showToast/â€¦) and
-//     `z.frontend.extensionHost.<method>` for the renderer-facing side.
+// Mirrors Raycast's `backend/index.mjs` where the shapes match: one worker per running command,
+// pool keyed dev/prod, worker message loop routes Notify/Request/Result, and the
+// `z.frontend.extensionHost.<method>` renderer-facing handler table.
 
 "use strict";
 
@@ -18,7 +13,6 @@ const readline = require("node:readline");
 const { exec } = require("node:child_process");
 const { Worker } = require("node:worker_threads");
 
-const WORKER_ENTRY = path.join(__dirname, "worker-entry.js");
 
 /** Mirrors `kn(e)` / `yq(e,t,n)` / `Fd()` from Raycast's backend. */
 function paths(options) {
@@ -51,7 +45,7 @@ function createBackend(options) {
   const P = paths(options);
   const sessions = new Map(); // workerId -> { worker, context }
   const activeSessions = new Map(); // sessionId -> workerId
-  const pool = { "ray-dev": [], "ray-prod": [], "fk-dev": [], "fk-prod": [] };
+  const pool = { "fk-dev": [], "fk-prod": [] };
   const pushSubscribers = new Set();
   // `clipboard.<method>` + `clipboardHistory.<method>`; installed by `index.js`.
   let clipboardHandlers = {};
@@ -86,8 +80,8 @@ function createBackend(options) {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       try {
-        // FlowKey extensions declare manifest.json (commands keyed by `id`); @raycast ones
-        // package.json. Both land in the same summary shape the renderer consumes.
+        // FlowKey extensions declare manifest.json (commands keyed by `id`); both kinds land in
+        // the same summary shape the renderer consumes.
         const flowkeyManifestPath = path.join(options.extensionsRoot, entry.name, "manifest.json");
         if (fs.existsSync(flowkeyManifestPath)) {
           const fk = JSON.parse(fs.readFileSync(flowkeyManifestPath, "utf-8"));
@@ -115,26 +109,6 @@ function createBackend(options) {
           });
           continue;
         }
-        const manifest = JSON.parse(
-          fs.readFileSync(path.join(options.extensionsRoot, entry.name, "package.json"), "utf-8"),
-        );
-        out.push({
-          uuid: entry.name,
-          id: entry.name,
-          name: manifest.name,
-          title: manifest.title ?? manifest.name,
-          description: manifest.description ?? "",
-          author: manifest.author ?? "local",
-          icon: manifest.icon,
-          badge: null,
-          commands: (manifest.commands ?? []).map((command) => ({
-            ...command,
-            disabledReason: null,
-          })),
-          tools: manifest.tools ?? [],
-          path: P.extensionDir(entry.name),
-          assetsPath: P.assetsPath(entry.name),
-        });
       } catch {
         /* not an extension */
       }
@@ -154,46 +128,21 @@ function createBackend(options) {
   // Worker lifecycle (the `t2` class in Raycast).
   // ---------------------------------------------------------------------------------------------
 
-  const FLOWKEY_WORKER_ENTRY = path.resolve(options.apiRoot, "..", "flowkey", "worker", "dist", "flowkey-worker.js");
+  const FLOWKEY_WORKER_ENTRY = path.resolve(__dirname, "..", "..", "flowkey", "worker", "dist", "flowkey-worker.js");
 
-  function createWorker({ isDevelopment = false, appearance = "dark", flowkey = false } = {}) {
+  function createWorker({ isDevelopment = false } = {}) {
     const workerId = `w_${Math.random().toString(36).slice(2, 10)}`;
     const callbacks = new Map();
     let context = null;
     let terminated = false;
     let nextId = 1;
-    const kind = flowkey ? "fk" : "ray";
+    const kind = "fk";
 
-    const worker = flowkey
-      ? new Worker(FLOWKEY_WORKER_ENTRY, {
-          workerData: { extensionsRoot: options.extensionsRoot, isDevelopment },
-          env: { ...process.env, NODE_ENV: isDevelopment ? "development" : "production" },
-          resourceLimits: { maxOldGenerationSizeMb: 100 },
-        })
-      : new Worker(WORKER_ENTRY, {
-          workerData: {
-            apiRoot: options.apiRoot,
-            extensionsRoot: options.extensionsRoot,
-            isDevelopment,
-            // The clone has no AI, browser extension, or window-management integration — the same
-            // flag values the real app produces without a pro subscription (docs/store-spec.md §5).
-            canAccessAI: false,
-            canAccessBetterAIModels: false,
-            isBrowserExtensionInstalled: false,
-            canAccessWindowManagement: false,
-            appearance,
-            textSize: "medium",
-          },
-          env: {
-            ...process.env,
-            NODE_ENV: isDevelopment ? "development" : "production",
-            // THE hook that makes `require("@raycast/api")` resolve inside the extension bundle.
-            NODE_PATH: path.join(options.apiRoot, "node_modules"),
-            RAYCAST_VERSION: "2.4.0.0",
-            RAYCAST_SCHEME: "raycast",
-          },
-          resourceLimits: { maxOldGenerationSizeMb: 100 },
-        });
+    const worker = new Worker(FLOWKEY_WORKER_ENTRY, {
+      workerData: { extensionsRoot: options.extensionsRoot, isDevelopment },
+      env: { ...process.env, NODE_ENV: isDevelopment ? "development" : "production" },
+      resourceLimits: { maxOldGenerationSizeMb: 100 },
+    });
 
     function sendRequest(method, params) {
       if (terminated) return Promise.reject(new Error("worker terminated"));
@@ -209,7 +158,6 @@ function createBackend(options) {
       worker,
       isDevelopment,
       kind,
-      appearance,
       get context() {
         return context;
       },
@@ -355,10 +303,10 @@ function createBackend(options) {
 
   /**
    * While a sign-in is pending, watch the clipboard for the provider's redirect URL. The redirect
-   * goes to `raycast.com/redirect` (the URI every extension's provider has registered), whose page
-   * hands the response to the real app through the `raycast://` protocol — the clone completes the
-   * same handshake when the user copies that page's URL (Ctrl+L, Ctrl+C). Matching is keyed on the
-   * pending state, so unrelated clipboard content can never complete a flow.
+   * goes to a loopback URI on this machine (the M5a vault design), whose address-bar URL the
+   * user copies — the clone completes the same handshake when that URL lands on the clipboard
+   * (Ctrl+L, Ctrl+C). Matching is keyed on the pending state, so unrelated clipboard content
+   * can never complete a flow.
    */
   function ensureOAuthClipboardPolling() {
     if (oauthClipboardTimer) return;
@@ -656,12 +604,12 @@ function createBackend(options) {
     },
 
     // --- OAuth PKCE redirect service --------------------------------------------------------
-    // The redirect goes to `raycast.com/redirect` (registered by every extension's provider —
-    // a loopback URI is rejected with "Not matching configuration"). While the sign-in page is
-    // open, the backend watches the clipboard for the copied redirect URL and completes the
-    // handshake when its `state` matches (see ensureOAuthClipboardPolling).
+    // The redirect goes to a loopback URI on this machine (127.0.0.1, fixed configurable port —
+    // the M5a vault design). While the sign-in page is open, the backend watches the clipboard
+    // for the copied redirect URL and completes the handshake when its `state` matches
+    // (see ensureOAuthClipboardPolling). M5a replaces this with a real loopback server.
     async "oauth.redirectOrigin"() {
-      return { redirectURI: "https://raycast.com/redirect?packageName=Extension" };
+      return { redirectURI: "http://127.0.0.1:42749/oauth/callback" };
     },    async "oauth.authorize"(ctx, params) {
       // Headless runs (test harness) have no real UI: fail fast instead of spawning a browser.
       if (transport && !overriddenHandlers.has("open")) {
@@ -778,16 +726,17 @@ function createBackend(options) {
       // The store's classification gate: disabled commands never reach a worker.
       if (launchGate) await launchGate(extension, command);
 
-      // FlowKey extensions declare themselves with a root manifest.json (@raycast ones with a
-      // package.json) and run in the FlowKey worker against the @flowkey-mini library.
+      // Extensions declare themselves with a root manifest.json and run in the FlowKey worker
+      // against the @flowkey-mini library. The api shim is gone (M4) — an extension without a
+      // manifest is a typed error, never a silent fallback.
       const flowkeyManifestPath = path.join(P.extensionDir(extension.uuid), "manifest.json");
-      const isFlowkey = fs.existsSync(flowkeyManifestPath);
-      const flowkeyManifest = isFlowkey
-        ? JSON.parse(fs.readFileSync(flowkeyManifestPath, "utf-8"))
-        : null;
+      if (!fs.existsSync(flowkeyManifestPath)) {
+        throw new Error(`extension ${extension.uuid} has no manifest.json; only FlowKey extensions are supported`);
+      }
+      const flowkeyManifest = JSON.parse(fs.readFileSync(flowkeyManifestPath, "utf-8"));
 
       const isDevelopment = Boolean(debug);
-      const worker = takeFromPool(isDevelopment, isFlowkey ? "fk" : "ray") ?? createWorker({ isDevelopment, flowkey: isFlowkey });
+      const worker = takeFromPool(isDevelopment, "fk") ?? createWorker({ isDevelopment });
       const sessionId = worker.id;
       activeSessions.set(sessionId, worker.id);
       sessions.set(worker.id, worker);
@@ -803,7 +752,6 @@ function createBackend(options) {
         entryPointMode: command.mode ?? "view",
         entryPoint: command,
         extension,
-        appearance: worker.appearance,
         preferences,
         argumentValues: props ?? {},
         namedExport: command.namedExport,
@@ -824,17 +772,13 @@ function createBackend(options) {
       });
 
       try {
-        if (isFlowkey) {
-          await worker.initialize({
-            ...context,
-            flowkey: {
-              bundlePath: path.join(P.extensionDir(extension.uuid), flowkeyManifest.entry ?? "main.js"),
-              manifest: flowkeyManifest,
-            },
-          });
-        } else {
-          await worker.initialize(context);
-        }
+        await worker.initialize({
+          ...context,
+          flowkey: {
+            bundlePath: path.join(P.extensionDir(extension.uuid), flowkeyManifest.entry ?? "main.js"),
+            manifest: flowkeyManifest,
+          },
+        });
       } catch (error) {
         await worker.unload();
         sessions.delete(worker.id);
@@ -842,17 +786,6 @@ function createBackend(options) {
         throw error;
       }
 
-      if (context.entryPointMode === "no-view" && !isFlowkey) {
-        // `if (mode === "no-view" && !deferNoViewUnload) unload()` in Raycast. FlowKey background
-        // commands park until their work finishes — the worker decides when it is done.
-        setImmediate(() => {
-          if (sessions.has(worker.id)) {
-            sessions.delete(worker.id);
-            activeSessions.delete(sessionId);
-            worker.unload().catch(() => undefined);
-          }
-        });
-      }
 
       return { sessionId };
     },

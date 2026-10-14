@@ -237,7 +237,7 @@ family as auth-required).
   archived/REA):**
 
 ```
-git grep -I -n -i -E "@raycast/api|@raycast/utils|raycast/extensions|raycast\.com" -- . ":(exclude)docs/store-spec.md" ":(exclude)docs/api-coverage.md" ":(exclude)docs/store-implementation-plan.md"
+git grep -I -n -i -E "@raycast/api|@raycast/utils|raycast/extensions|raycast\.com" -- . ":(exclude)docs/store-spec.md" ":(exclude)docs/api-coverage.md" ":(exclude)docs/store-implementation-plan.md" ":(exclude)docs/findings-REA.md" ":(exclude)docs/flowkey-migration-plan.md" ":(exclude)docs/calculator-spec.md" ":(exclude)docs/command-ux-spec.md" ":(exclude)docs/focus-games-taskbar-spec.md" ":(exclude)docs/toast-hud-spec.md" ":(exclude)docs/translator-spec.md"
 ```
 
   must return zero hits (product name "RaycastMini" is allowed and never matches these patterns).

@@ -1105,7 +1105,7 @@ function CreateQuicklinkForm({
           type="button"
           tabIndex={-1}
           className="command-guide-link"
-          onClick={() => void ipc.backend("shell.openUrl", { url: "https://manual.raycast.com/quicklinks" }, { module: "backend" })}
+          onClick={() => void ipc.backend("shell.openUrl", { url: "https://github.com/GabrielSantos23/RaycastMini#readme" }, { module: "backend" })}
         >
           Quicklinks Guide
         </button>

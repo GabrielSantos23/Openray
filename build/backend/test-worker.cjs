@@ -15,7 +15,6 @@ const extensionsRoot = path.join(buildRoot, "extensions");
 
 const backend = createBackend({
   pipeName: "raycast-mini-test",
-  apiRoot: path.join(buildRoot, "api"),
   frontendRoot: path.join(buildRoot, "frontend"),
   extensionsRoot,
 });
@@ -24,10 +23,10 @@ const backend = createBackend({
   const extensions = await backend.allExtensions();
   console.log("installed extensions:", extensions.map((e) => `${e.name} (${e.commands.length} commands)`).join(", "));
 
-  const target = extensions.find((extension) => extension.name === "hello-list");
-  if (!target) throw new Error("hello-list not installed");
+  const target = extensions.find((extension) => extension.name === "Lucide Icons");
+  if (!target) throw new Error("Lucide Icons not installed");
 
-  const command = target.commands.find((entry) => entry.name === "index");
+  const command = target.commands.find((entry) => entry.name === "open");
 
 // Bypass the named pipe for the request path; intercept the render notification.
 backend.setTransport(async (module, method, data) => {

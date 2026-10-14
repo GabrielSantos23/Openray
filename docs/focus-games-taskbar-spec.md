@@ -1,3 +1,5 @@
+> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not RaycastMini's implementation.
+
 # Focus, Games, Windows Taskbar — behavioral spec
 
 Reverse-engineered from the shipped Windows build `Raycast.Raycast_2.4.0.0_x64__qypenmj9wpt2a`.

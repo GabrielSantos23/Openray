@@ -1,12 +1,7 @@
-# Builds everything: the `@raycast/api` runtime, the sample extension, the TypeScript frontend and
-# the .NET launcher.
+# Builds every FlowKey extension, the TypeScript frontend and the .NET launcher.
+# (The extension worker bundle builds separately: build/flowkey/worker/build.mjs.)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-
-Write-Host "==> @raycast/api"
-Push-Location (Join-Path $root "api")
-node build.mjs
-Pop-Location
 
 foreach ($extension in Get-ChildItem -Path (Join-Path $root "extensions") -Directory) {
   Write-Host "==> extension: $($extension.Name)"

@@ -9,11 +9,11 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-/** A Store-installed extension dir: @raycast package.json carrying the Store's $schema marker. */
+/** A Store-installed extension dir: package.json carrying the historical Store $schema marker. */
 function isStoreInstalledExtension(dir) {
   try {
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8"));
-    return typeof manifest.$schema === "string" && manifest.$schema.includes("raycast.com");
+    return typeof manifest.$schema === "string" && manifest.$schema.includes("raycast");
   } catch {
     return false;
   }

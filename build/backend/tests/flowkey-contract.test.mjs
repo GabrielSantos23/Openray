@@ -4,10 +4,9 @@
 // sessions, preference flattening, and the typed nativeCall error paths (undeclared method,
 // declared-but-unimplemented).
 //
-// This suite also carries the api-shim assertions that stay valid after the @raycast/api removal
+// This suite also carries the shim-era assertions that stayed valid after the api shim removal
 // (adjustment 7): storage semantics persist to disk, and out-of-contract calls fail with typed
-// errors that reach the host — never silent no-ops. The @raycast-specific probes (canAccess, AI,
-// hooks) die with the shim in M4.
+// errors that reach the host — never silent no-ops. The shim-specific probes died with the shim in M4.
 //
 // No network: the fixture declares an empty httpHosts allowlist and exercises only storage.
 

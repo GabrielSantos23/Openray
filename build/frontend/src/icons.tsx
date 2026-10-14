@@ -4,7 +4,7 @@
 // `frontend/internal-extensions-C7AXi5Nw.js` names its action icons `app-window-list`, `folder`,
 // `copy-clipboard`, `shield-04`, `person`, `clock`, `x-mark-circle`, `eye-disabled`,
 // `arrow-clockwise`, `trash`, `star`, `cog`, `game-controller` … and every one of those is a Lucide
-// icon under a different spelling. `@raycast/api`'s `<Icon.X />` names are Lucide names too
+// icon under a different spelling. the classic `<Icon.X />` names are Lucide names too
 // (Bird, Text, CopyClipboard, Link, Person, Trash, Star, Search, …).
 //
 // So: one registry that maps Raycast's names onto the Lucide component that draws them.
@@ -157,7 +157,7 @@ const REGISTRY: Record<string, IconComponent> = {
   about: Info,
   account: User,
 
-  // ---- @raycast/api <Icon.X /> names ------------------------------------------------------
+  // ---- classic <Icon.X /> names ------------------------------------------------------
   Bird: Bird,
   Text: Type,
   CopyClipboard: Clipboard,

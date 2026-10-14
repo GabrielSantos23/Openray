@@ -47,7 +47,6 @@ export const FEATURED_LIBRARY: ReadonlyArray<{ name: string; link: string }> = O
   { name: "Search Dribbble", link: 'https://dribbble.com/search/{argument name="Query"}' },
   { name: "Search Giphy", link: 'https://giphy.com/{argument name="Query"}' },
   { name: "Search LinkedIn", link: 'https://www.linkedin.com/search/results/all/?keywords={argument name="Query"}' },
-  { name: "Raycast Manual", link: "https://manual.raycast.com" },
   {
     name: "Search Translate",
     link:

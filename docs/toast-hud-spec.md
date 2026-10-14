@@ -1,3 +1,5 @@
+> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not RaycastMini's implementation.
+
 # Raycast Toast / HUD Spec (reverse-engineered)
 
 Target: Raycast 2.4.0.0 (MSIX), extracted frontend chunks in `../artifacts/frontend/`,

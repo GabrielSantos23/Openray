@@ -10,7 +10,7 @@ const source = path.join(root, "frontend", "src", "clipboardHistory.ts");
 // The renderer's TypeScript is transpiled by esbuild, the same as the real build, so this exercises the
 // shipped function rather than a hand-copied variant.
 const { build } = await import(
-  pathToFileURL(path.join(root, "api", "node_modules", "esbuild", "lib", "main.js")).href
+  pathToFileURL(path.join(root, "flowkey", "vendor", "node_modules", "esbuild", "lib", "main.js")).href
 );
 const result = await build({
   entryPoints: [source],

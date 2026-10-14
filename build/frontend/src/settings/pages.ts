@@ -1045,7 +1045,7 @@ export const PAGES: readonly PageDefinition[] = [
         rows: [
           { id: "raycast-updates", title: "Raycast Updates", control: "action", action: "Check for Updates", value: VERSION },
           { id: "open-changelog", title: "Open Changelog", control: "action", action: "Open Changelog" },
-          { id: "website", title: "Website", control: "action", action: "raycast.com" },
+          { id: "website", title: "Website", control: "action", action: "github.com/GabrielSantos23/RaycastMini" },
           { id: "slack-community", title: "Slack Community", control: "action", action: "Join Slack" },
           { id: "send-feedback", title: "Send Feedback", control: "action", action: "Send Email" },
         ],

@@ -1,3 +1,5 @@
+> **ARCHIVED (REA reference):** reverse-engineering findings for the retired Raycast Store work; kept for the migration record.
+
 # Raycast (Windows) — Reverse engineering findings
 
 Target: `Raycast.Raycast_2.4.0.0_x64__qypenmj9wpt2a` (MSIX, `C:\Program Files\WindowsApps\...`).

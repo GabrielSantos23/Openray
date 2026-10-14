@@ -1,4 +1,4 @@
-// Worker <-> backend JSON-RPC over the parentPort. Ported from the @raycast/api runtime's
+// Worker <-> backend JSON-RPC over the parentPort. Ported from the api-shim runtime's
 // `runtime/rpc.ts` (same wire shape: registerMethod for host-initiated calls, request/notify for
 // worker-initiated ones) so the backend's session machinery works with both worker kinds.
 "use strict";

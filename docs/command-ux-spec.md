@@ -1,3 +1,5 @@
+> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not RaycastMini's implementation.
+
 # Raycast Command UX Spec — navigation, forms, alerts, detail, grid, list
 
 Target: Raycast 2.4.0.0 (MSIX). Sources: extracted frontend chunks (`../artifacts/frontend/`),
