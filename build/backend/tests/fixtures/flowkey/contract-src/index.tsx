@@ -9,6 +9,8 @@ export default defineReactExtension({
   component: (props: CommandProps) => {
     const [storageEcho, setStorageEcho] = useState("(pending)");
     const [count, setCount] = useState(0);
+    const [secretEcho, setSecretEcho] = useState("(no secret read)");
+    const [oauthEcho, setOauthEcho] = useState("(no oauth status)");
 
     useEffect(() => {
       let cancelled = false;
@@ -43,6 +45,51 @@ export default defineReactExtension({
               <Action title="Increment" onAction={() => setCount((value) => value + 1)} />
               <Action title="Declared but unimplemented" onAction={() => props.native.call("system.selectedText")} />
               <Action title="Undeclared method" onAction={() => props.native.call("fs.read", { path: "C:/x" })} />
+            </ActionPanel>
+          }
+        />
+        <List.Item
+          id="vault"
+          title="Vault"
+          subtitle={`secret=${secretEcho} oauth=${oauthEcho}`}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Save secret"
+                onAction={async () => {
+                  await props.capabilities.secrets.set("probe-key", "probe-value");
+                  const value = await props.capabilities.secrets.get<string>("probe-key");
+                  setSecretEcho(value ?? "(null)");
+                }}
+              />
+              <Action
+                title="OAuth status"
+                onAction={async () => {
+                  const status = await props.native.call("oauth.status", { provider: "spotify" });
+                  setOauthEcho(JSON.stringify(status));
+                }}
+              />
+              <Action
+                title="OAuth status undeclared"
+                onAction={() => props.native.call("oauth.status", { provider: "other" })}
+              />
+              <Action title="Authorize headless" onAction={() => props.capabilities.oauth.authorize("spotify")} />
+              <Action
+                title="Image bad host"
+                onAction={() => props.native.call("image.fetch", { url: "https://evil.example/x.png" })}
+              />
+              <Action
+                title="Fetch auth undeclared"
+                onAction={() =>
+                  props.native.call("http.fetch", { url: "https://api.spotify.com/v1/me", auth: "other" })
+                }
+              />
+              <Action
+                title="Fetch auth not signed in"
+                onAction={() =>
+                  props.native.call("http.fetch", { url: "https://api.spotify.com/v1/me", auth: "spotify" })
+                }
+              />
             </ActionPanel>
           }
         />

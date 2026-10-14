@@ -11,7 +11,9 @@ const net = require("node:net");
 const path = require("node:path");
 const readline = require("node:readline");
 const { exec } = require("node:child_process");
+const crypto = require("node:crypto");
 const { Worker } = require("node:worker_threads");
+const flowkeyVault = require("./flowkey-vault");
 
 
 /** Mirrors `kn(e)` / `yq(e,t,n)` / `Fd()` from Raycast's backend. */
@@ -43,6 +45,7 @@ function paths(options) {
 
 function createBackend(options) {
   const P = paths(options);
+  const dataRoot = options.dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
   const sessions = new Map(); // workerId -> { worker, context }
   const activeSessions = new Map(); // sessionId -> workerId
   const pool = { "fk-dev": [], "fk-prod": [] };
@@ -274,18 +277,6 @@ function createBackend(options) {
     bucket?.push(worker);
   }
 
-  // ---------------------------------------------------------------------------------------------
-  // OAuth PKCE loopback redirect service (one shared server, waiters keyed by state).
-  // ---------------------------------------------------------------------------------------------
-
-  const OAUTH_REDIRECT_TIMEOUT_MS = 300_000;
-  // One pending sign-in per extension: views refetch and would otherwise open a browser tab on
-  // every attempt. Concurrent authorizes join the pending flow until it resolves or times out.
-  const oauthPendingByExtension = new Map();
-  // Pending authorization responses keyed by the PKCE state.
-  const oauthWaiters = new Map();
-  let oauthClipboardTimer = null;
-
   // FlowKey per-extension transient caches (`cache.*` capability) and pending alert.confirm
   // promises whose resolution rides the normal nativeCallback path.
   const flowkeyCaches = new Map();
@@ -300,55 +291,6 @@ function createBackend(options) {
   }
   const pendingFlowkeyAlerts = new Map();
   let flowkeyAlertSeq = 0;
-
-  /**
-   * While a sign-in is pending, watch the clipboard for the provider's redirect URL. The redirect
-   * goes to a loopback URI on this machine (the M5a vault design), whose address-bar URL the
-   * user copies — the clone completes the same handshake when that URL lands on the clipboard
-   * (Ctrl+L, Ctrl+C). Matching is keyed on the pending state, so unrelated clipboard content
-   * can never complete a flow.
-   */
-  function ensureOAuthClipboardPolling() {
-    if (oauthClipboardTimer) return;
-    oauthClipboardTimer = setInterval(async () => {
-      if (oauthWaiters.size === 0) return;
-      let text;
-      try {
-        // Through the handler table so tests can stub the clipboard like any native route.
-        const result = await hostHandlers.getClipboard({}, {});
-        text = typeof result === "string" ? result : (result?.value ?? "");
-      } catch {
-        return; // clipboard unavailable this tick
-      }
-      if (typeof text !== "string" || !text.includes("state=")) return;
-      for (const match of text.matchAll(/https?:\/\/[^\s"'<>]+/g)) {
-        let url;
-        try {
-          url = new URL(match[0]);
-        } catch {
-          continue;
-        }
-        const state = url.searchParams.get("state");
-        const code = url.searchParams.get("code");
-        if (!state || !code || !oauthWaiters.has(state)) continue;
-        const waiter = oauthWaiters.get(state);
-        oauthWaiters.delete(state);
-        clearTimeout(waiter.timer);
-        waiter.resolve(code);
-      }
-    }, 1500);
-    oauthClipboardTimer.unref();
-  }
-
-  function waitForOAuthRedirect(state) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        oauthWaiters.delete(state);
-        reject(new Error(`OAuth authorization timed out after ${OAUTH_REDIRECT_TIMEOUT_MS / 1000}s`));
-      }, OAUTH_REDIRECT_TIMEOUT_MS);
-      oauthWaiters.set(state, { resolve, reject, timer });
-    });
-  }
 
   // ---------------------------------------------------------------------------------------------
   // Handler tables
@@ -514,9 +456,21 @@ function createBackend(options) {
             declared.startsWith(".") ? host.endsWith(declared.slice(1)) || host === declared.slice(1) : host === declared,
           );
           if (!allowedHost) throw new Error(`http.fetch: ${host} is not in the manifest httpHosts`);
+          const headers = { ...(call.headers ?? {}) };
+          if (call.auth) {
+            // Token injection: the vault adds the Authorization header backend-side; the token
+            // itself never crosses the extension bridge.
+            const provider = String(call.auth);
+            if (!(ctx.flowkeyManifest?.oauth ?? []).includes(provider)) {
+              throw new Error(`http.fetch: provider ${provider} is not declared in the manifest oauth list`);
+            }
+            const tokens = await flowkeyVault.getValidToken(dataRoot, provider);
+            if (!tokens) throw new Error(`http.fetch: provider ${provider} is not signed in; run oauth.authorize first`);
+            headers.Authorization = `Bearer ${tokens.accessToken}`;
+          }
           const response = await fetch(url, {
             method: call.method ?? "GET",
-            headers: call.headers ?? {},
+            headers,
             body: call.body,
             signal: AbortSignal.timeout(30_000),
           });
@@ -598,62 +552,76 @@ function createBackend(options) {
               dismissAction: { title: call.cancelTitle ?? "Cancel", onAction: cancelId },
             });
           });
+        case "secrets.get":
+          return { value: readSecrets(ctx)[String(call.key)] ?? null };
+        case "secrets.set":
+          return writeSecrets(ctx, { ...readSecrets(ctx), [String(call.key)]: String(call.value ?? "") });
+        case "secrets.delete": {
+          const secrets = { ...readSecrets(ctx) };
+          delete secrets[String(call.key)];
+          return writeSecrets(ctx, secrets);
+        }
+        case "oauth.authorize":
+        case "oauth.status":
+        case "oauth.disconnect":
+          return hostHandlers[method](ctx, call);
+        case "image.fetch": {
+          const url = String(call.url ?? "");
+          let imgHost;
+          try { imgHost = new URL(url).host; } catch { throw new Error(`image.fetch: invalid url ${url}`); }
+          const hosts = ctx.flowkeyManifest?.httpHosts ?? [];
+          const allowed = hosts.some((declared) =>
+            declared.startsWith(".") ? imgHost.endsWith(declared.slice(1)) || imgHost === declared.slice(1) : imgHost === declared,
+          );
+          if (!allowed) throw new Error(`image.fetch: ${imgHost} is not in the manifest httpHosts`);
+          const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+          if (!response.ok) throw new Error(`image.fetch: HTTP ${response.status} for ${url}`);
+          const bytes = Buffer.from(await response.arrayBuffer());
+          const hash = crypto.createHash("sha1").update(url).digest("hex");
+          const ext = (url.split("?")[0].match(/\.(png|jpe?g|webp|gif)$/i) ?? [])[1] ?? "jpg";
+          const cacheDir = path.join(dataRoot, "oauth", "image-cache");
+          fs.mkdirSync(cacheDir, { recursive: true });
+          const file = path.join(cacheDir, `${hash}.${ext}`);
+          if (!fs.existsSync(file)) fs.writeFileSync(file, bytes);
+          return { ok: true, uri: `file:///${file.replace(/\\/g, "/")}` };
+        }
         default:
           throw new Error(`FlowKey native method ${method} is not implemented yet`);
       }
     },
 
-    // --- OAuth PKCE redirect service --------------------------------------------------------
-    // The redirect goes to a loopback URI on this machine (127.0.0.1, fixed configurable port —
-    // the M5a vault design). While the sign-in page is open, the backend watches the clipboard
-    // for the copied redirect URL and completes the handshake when its `state` matches
-    // (see ensureOAuthClipboardPolling). M5a replaces this with a real loopback server.
+    // --- OAuth vault (M5a): BYO client id + loopback PKCE; tokens never reach the extension ---
     async "oauth.redirectOrigin"() {
-      return { redirectURI: "http://127.0.0.1:42749/oauth/callback" };
-    },    async "oauth.authorize"(ctx, params) {
+      return { redirectURI: `http://127.0.0.1:${flowkeyVault.DEFAULT_REDIRECT_PORT}/oauth/callback` };
+    },
+    async "oauth.authorize"(ctx, params) {
+      const provider = String(params.provider ?? "");
+      if (!(ctx.flowkeyManifest?.oauth ?? []).includes(provider)) {
+        throw new Error(`oauth provider ${provider} is not declared in the manifest`);
+      }
       // Headless runs (test harness) have no real UI: fail fast instead of spawning a browser.
       if (transport && !overriddenHandlers.has("open")) {
         throw new Error("OAuth sign-in is unavailable in headless mode");
       }
-      const key = String(ctx.extensionId ?? ctx.extension?.uuid ?? "unknown");
-      const pending = oauthPendingByExtension.get(key);
-      if (pending) return pending;
-      const flow = (async () => {
-        const url = String(params.url ?? "");
-        await hostHandlers["open"](ctx, { path: url });
-        try {
-          await hostHandlers.showToast(ctx, {
-            title: "Sign in in the browser",
-            message: "After signing in, copy the page URL (Ctrl+L, Ctrl+C) to finish connecting.",
-          });
-        } catch {
-          /* background launches refuse toasts — the flow continues regardless */
-        }
-        ensureOAuthClipboardPolling();
-        return { authorizationCode: await waitForOAuthRedirect(String(params.state ?? "")) };
-      })();
-      oauthPendingByExtension.set(key, flow);
-      try {
-        return await flow;
-      } finally {
-        oauthPendingByExtension.delete(key);
+      return flowkeyVault.authorize(dataRoot, provider, {
+        clientIdOverride: params.clientId ? String(params.clientId) : undefined,
+        open: (url) => hostHandlers.open(ctx, { path: url }),
+      });
+    },
+    async "oauth.status"(ctx, params) {
+      const provider = String(params.provider ?? "");
+      if (!(ctx.flowkeyManifest?.oauth ?? []).includes(provider)) {
+        throw new Error(`oauth provider ${provider} is not declared in the manifest`);
       }
+      return flowkeyVault.statusShape(await flowkeyVault.getValidToken(dataRoot, provider));
     },
-
-    async authorizeOAuth(ctx, params) {
-      return dispatch("backend", "auth.authorizeOAuth", params);
-    },
-    async initOAuth(ctx, params) {
-      return dispatch("backend", "auth.initOAuth", params);
-    },
-    async getOAuthTokens(ctx, params) {
-      return dispatch("backend", "auth.getOAuthTokens", params);
-    },
-    async setOAuthTokens(ctx, params) {
-      return dispatch("backend", "auth.setOAuthTokens", params);
-    },
-    async removeOAuthTokens(ctx, params) {
-      return dispatch("backend", "auth.removeOAuthTokens", params);
+    async "oauth.disconnect"(ctx, params) {
+      const provider = String(params.provider ?? "");
+      if (!(ctx.flowkeyManifest?.oauth ?? []).includes(provider)) {
+        throw new Error(`oauth provider ${provider} is not declared in the manifest`);
+      }
+      flowkeyVault.vaultClear(dataRoot, provider);
+      return { ok: true };
     },
   };
 
@@ -705,6 +673,25 @@ function createBackend(options) {
         return {};
       }
     });
+  }
+
+  /** Per-extension secrets (`secrets.*` capability), stored under the data dir's oauth folder. */
+  function secretsFile(ctx) {
+    return path.join(dataRoot, "oauth", "secrets", `${ctx.extensionId ?? ctx.extension?.uuid ?? "unknown"}.json`);
+  }
+
+  function readSecrets(ctx) {
+    try {
+      return JSON.parse(fs.readFileSync(secretsFile(ctx), "utf-8"));
+    } catch {
+      return {};
+    }
+  }
+
+  function writeSecrets(ctx, secrets) {
+    fs.mkdirSync(path.dirname(secretsFile(ctx)), { recursive: true });
+    fs.writeFileSync(secretsFile(ctx), JSON.stringify(secrets, null, 2));
+    return {};
   }
 
   function writeStorage(ctx, store) {

@@ -8,8 +8,9 @@
     { "id": "open", "title": "Open", "mode": "view" },
     { "id": "tick", "title": "Tick", "mode": "background" }
   ],
-  "nativeMethods": ["storage.*", "system.selectedText"],
-  "httpHosts": [],
+  "nativeMethods": ["storage.*", "system.selectedText", "oauth.authorize", "oauth.status", "secrets.*", "image.fetch", "http.fetch"],
+  "httpHosts": ["api.spotify.com", "i.scdn.co"],
+  "oauth": ["spotify"],
   "preferences": [
     { "name": "sampleText", "type": "text", "title": "Sample text", "default": "fallback" }
   ]

@@ -52,6 +52,7 @@ const backend = createBackend({
   pipeName: config.pipeName,
   frontendRoot: config.frontendRoot,
   extensionsRoot: config.extensionsRoot,
+  dataRoot: process.env.RAYCAST_MINI_DATA_DIR ?? path.dirname(config.extensionsRoot),
 });
 
 // `connect()` owns the single pipe reader and answers host requests too, so nothing else has to
