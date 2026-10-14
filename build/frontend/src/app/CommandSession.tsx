@@ -17,6 +17,7 @@ import {
 import { onNotification, openSettings } from "../ipc";
 import { isDevExtensionsEnabled, overrideTestHooks } from "../testHooks";
 import { readFlowkeyPreferences } from "../features/extensions/preferences";
+import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
 import { RaycastIcon } from "../icons";
 import { ClipboardHistoryView } from "../features/clipboard/ClipboardHistoryView";
@@ -156,6 +157,13 @@ export function CommandSession({
     if (selectedItemId && bodyItems.some((item) => item.id === selectedItemId)) return selectedItemId;
     return bodyItems[0]?.id ?? null;
   }, [selectedItemId, bodyItems]);
+  // The Raycast command footer: command title + the highlighted row, and the row's primary action
+  // ("Search Icons – a-arrow-down | Copy Name ⏎").
+  const selectedItem = useMemo(
+    () => bodyItems.find((item) => item.id === effectiveSelectedId) ?? null,
+    [bodyItems, effectiveSelectedId],
+  );
+  const primaryAction = selectedItem?.actions?.[0] ?? body?.actions?.[0] ?? null;
 
   const groups: ActionGroup[] = useMemo(() => {
     if (entry.kind !== "extension" || !body) return [];
@@ -476,15 +484,42 @@ export function CommandSession({
       </main>
 
       <footer className="window__footer">
-        <button
-          type="button"
-          className="footer-icon-button"
-          aria-label="Settings"
-          onClick={openSettings}
-        >
-          <RaycastIcon name="cog" size={16} />
-        </button>
-        <span className="footer__spacer" />
+        {entry.kind === "extension" ? (
+          <>
+            <span className="footer-command">
+              <ExtensionIcon uuid={entry.extension.uuid} size={18} />
+              <span className="footer-command__label">
+                {entry.command.title}
+                {selectedItem?.title ? ` – ${selectedItem.title}` : ""}
+              </span>
+            </span>
+            <span className="footer__spacer" />
+            {primaryAction ? (
+              <button
+                type="button"
+                className="footer-action footer-action--kbd footer-primary"
+                onClick={() => void command.createCallback(primaryAction.id)({ itemId: primaryAction.itemId })}
+              >
+                {primaryAction.title}
+                <span className="kbd footer-primary__return" aria-hidden>
+                  ⏎
+                </span>
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="footer-icon-button"
+              aria-label="Settings"
+              onClick={openSettings}
+            >
+              <RaycastIcon name="cog" size={16} />
+            </button>
+            <span className="footer__spacer" />
+          </>
+        )}
         <button
           type="button"
           className="footer-action footer-action--kbd"

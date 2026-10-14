@@ -625,7 +625,6 @@ function GridBody({
   runAction: (action: ViewAction) => void;
 }) {
   if (items.length === 0) return null;
-  const itemSizePx = body.itemSize === "small" ? 120 : body.itemSize === "large" ? 240 : 180;
   const gridStyle = (columns: number, aspectRatio: string, inset: string): React.CSSProperties => ({
     gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
     ["--grid-aspect" as string]: aspectRatio,
@@ -640,14 +639,19 @@ function GridBody({
             const inset = section.inset ?? body.inset ?? "zero";
             return (
               <div key={section.id ?? section.title ?? sectionIndex} className="grid__section">
-                {section.title ? <div className="list__sectionHeader">{section.title}</div> : null}
+                {section.title ? (
+                  <div className="list__sectionHeader">
+                    {section.title}
+                    {section.subtitle ? <span className="grid__sectionCount">{section.subtitle}</span> : null}
+                  </div>
+                ) : null}
                 <div
                   className="grid__cells"
                   style={gridStyle(columns, aspectRatio, inset)}
                   data-item-size={body.itemSize ?? "medium"}
                 >
                   {section.items.map((item) => (
-                    <GridCell key={item.id} item={item} size={itemSizePx} selected={item.id === selectedId} select={select} runAction={runAction} />
+                    <GridCell key={item.id} item={item} selected={item.id === selectedId} select={select} runAction={runAction} />
                   ))}
                 </div>
               </div>
@@ -664,7 +668,7 @@ function GridBody({
               data-item-size={body.itemSize ?? "medium"}
             >
               {items.map((item) => (
-                <GridCell key={item.id} item={item} size={itemSizePx} selected={item.id === selectedId} select={select} runAction={runAction} />
+                <GridCell key={item.id} item={item} selected={item.id === selectedId} select={select} runAction={runAction} />
               ))}
             </div>
           )}
@@ -674,13 +678,11 @@ function GridBody({
 
 function GridCell({
   item,
-  size,
   selected,
   select,
   runAction,
 }: {
   item: ViewListItem;
-  size: number;
   selected: boolean;
   select: (id: string | null) => void;
   runAction: (action: ViewAction) => void;
@@ -698,16 +700,15 @@ function GridCell({
         if (primary) runAction(primary);
       }}
     >
-      <span className="grid__content" style={{ width: size, height: size }}>
+      {/* The tile fills the column (Raycast's compact grids — no fixed pixel box); the icon stays ~45%. */}
+      <span className="grid__content">
         {content ? (
           <img src={String((content as { value?: string })?.value ?? content)} alt="" loading="lazy" />
         ) : (
           <ItemIcon item={item} />
         )}
       </span>
-      <span className="list__title">{item.title ?? item.id}</span>
-      {item.subtitle ? <span className="list__subtitle">{item.subtitle}</span> : null}
-      
+      <span className="grid__label">{item.title ?? item.id}</span>
     </button>
   );
 }

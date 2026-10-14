@@ -164,56 +164,13 @@ export function SearchCommand({ query, filterValue, native, signal, preferences 
 
   if (authState === 'unauthorized') {
     return (
-      <List filter={SEARCH_FILTERS}>
-        <List.EmptyView
-          title="Connect Spotify"
-          description={
-            authMessage ||
-            (configuredClientId
-              ? 'Authorize FlowKey to search and control your Spotify.'
-              : 'Paste your Spotify client id in FlowKey Settings (Spotify section) first, then connect.')
-          }
-        />
-        <List.Item
-          id="connect-spotify"
-          title="Connect Spotify"
-          icon={{ lucide: 'plug', color: '#1DB954' }}
-          actions={
-            <ActionPanel>
-              <Action
-                title="Connect Spotify"
-                onAction={async () => {
-                  if (!configuredClientId) {
-                    setNotice(
-                      'Add your Spotify client id in FlowKey Settings, then connect again.',
-                    );
-                    return;
-                  }
-                  setNotice('Waiting for Spotify authorization…');
-                  try {
-                    const result = await client.authorize(signal, configuredClientId);
-                    if (result.ok) {
-                      setNotice('');
-                      setAuthState('authorized');
-                    } else {
-                      setNotice('Authorization did not complete.');
-                    }
-                  } catch (caught) {
-                    if (isAborted(caught)) return;
-                    if (caught instanceof SpotifyApiError && caught.code === 'notConfigured') {
-                      setNotice(
-                        'Add your Spotify client id in FlowKey Settings, then connect again.',
-                      );
-                    } else {
-                      setNotice(describeError(caught));
-                    }
-                  }
-                }}
-              />
-            </ActionPanel>
-          }
-        />
-      </List>
+      <ConnectView
+        native={native}
+        signal={signal}
+        configuredClientId={configuredClientId}
+        authMessage={authMessage}
+        setAuthState={setAuthState}
+      />
     );
   }
 
@@ -851,4 +808,108 @@ function describeAuthError(error: unknown): string {
     return 'Spotify client id is not configured on this machine. See the FlowKey README.';
   }
   return '';
+}
+
+/**
+ * The sign-in screen. The #1 failure mode is a redirect URI that does not match the one
+ * registered in the Spotify dashboard (Spotify compares the string exactly), so the exact
+ * callback URL is shown on the page with a copy action, and Connect explains all three steps.
+ */
+function ConnectView({
+  native,
+  signal,
+  configuredClientId,
+  authMessage,
+  setAuthState,
+}: {
+  native: CommandProps['native'];
+  signal: AbortSignal;
+  configuredClientId: string | null;
+  authMessage: string;
+  setAuthState: (state: 'checking' | 'unauthorized' | 'authorized') => void;
+}): ReactNode {
+  const client = useMemo(() => new SpotifyClient(native.call), [native]);
+  const [redirectUri, setRedirectUri] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await native.call<{ redirectUri: string }>('oauth.redirectUri', { provider: 'spotify' });
+        if (!cancelled) setRedirectUri(result.redirectUri);
+      } catch {
+        if (!cancelled) setRedirectUri(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [native]);
+
+  const description =
+    notice ||
+    authMessage ||
+    (configuredClientId
+      ? '1. Register the Redirect URI below in your Spotify app (dashboard → Edit).  2. Connect. Spotify compares the URI exactly.'
+      : 'Paste your client id in FlowKey Settings → Spotify (Save), register the Redirect URI below in your Spotify app, then Connect.');
+
+  return (
+    <List filter={SEARCH_FILTERS}>
+      <List.EmptyView title="Connect Spotify" description={description} />
+      <List.Item
+        id="redirect-uri"
+        title="Redirect URI to register"
+        subtitle={redirectUri ?? 'loading…'}
+        icon={{ lucide: 'link', color: '#1DB954' }}
+        actions={
+          <ActionPanel>
+            <Action
+              title="Copy Redirect URI"
+              onAction={async () => {
+                if (!redirectUri) return;
+                await copyToClipboard(client, redirectUri);
+                setNotice('Redirect URI copied — paste it into your Spotify app settings.');
+              }}
+            />
+          </ActionPanel>
+        }
+      />
+      <List.Item
+        id="connect-spotify"
+        title="Connect Spotify"
+        icon={{ lucide: 'plug', color: '#1DB954' }}
+        actions={
+          <ActionPanel>
+            <Action
+              title="Connect Spotify"
+              onAction={async () => {
+                if (!configuredClientId) {
+                  setNotice('Add your Spotify client id in FlowKey Settings → Spotify (Save), then connect again.');
+                  return;
+                }
+                setNotice('Waiting for Spotify authorization…');
+                try {
+                  const result = await client.authorize(signal, configuredClientId);
+                  if (result.ok) {
+                    setNotice('');
+                    setAuthState('authorized');
+                  } else {
+                    setNotice('Authorization did not complete.');
+                  }
+                } catch (caught) {
+                  if (isAborted(caught)) return;
+                  if (caught instanceof SpotifyApiError && caught.code === 'notConfigured') {
+                    setNotice('Add your Spotify client id in FlowKey Settings → Spotify (Save), then connect again.');
+                  } else {
+                    setNotice(describeError(caught));
+                  }
+                }
+              }}
+            />
+          </ActionPanel>
+        }
+      />
+    </List>
+  );
 }

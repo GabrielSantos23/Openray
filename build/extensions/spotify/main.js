@@ -421,6 +421,7 @@ var manifest_default = {
     "http.fetch",
     "clipboard.write",
     "oauth.authorize",
+    "oauth.redirectUri",
     "oauth.status",
     "oauth.disconnect",
     "secrets.get",
@@ -449,7 +450,7 @@ var manifest_default = {
       name: "clientId",
       type: "password",
       title: "Spotify client id",
-      description: "Paste the client id of your own Spotify app (developer.spotify.com/dashboard). Register http://127.0.0.1/callback as its redirect URI.",
+      description: "Paste the client id of your own Spotify app (developer.spotify.com/dashboard). Register the exact redirect URI shown by the Connect Spotify command as the app redirect URI.",
       required: false
     }
   ]
@@ -1451,56 +1452,16 @@ function SearchCommand({ query, filterValue, native, signal, preferences }) {
     return /* @__PURE__ */ jsx(List, { filter: SEARCH_FILTERS, children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Checking Spotify connection\u2026" }, "checking") });
   }
   if (authState === "unauthorized") {
-    return /* @__PURE__ */ jsxs(List, { filter: SEARCH_FILTERS, children: [
-      /* @__PURE__ */ jsx(
-        List.EmptyView,
-        {
-          title: "Connect Spotify",
-          description: authMessage || (configuredClientId ? "Authorize FlowKey to search and control your Spotify." : "Paste your Spotify client id in FlowKey Settings (Spotify section) first, then connect.")
-        }
-      ),
-      /* @__PURE__ */ jsx(
-        List.Item,
-        {
-          id: "connect-spotify",
-          title: "Connect Spotify",
-          icon: { lucide: "plug", color: "#1DB954" },
-          actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
-            Action,
-            {
-              title: "Connect Spotify",
-              onAction: async () => {
-                if (!configuredClientId) {
-                  setNotice(
-                    "Add your Spotify client id in FlowKey Settings, then connect again."
-                  );
-                  return;
-                }
-                setNotice("Waiting for Spotify authorization\u2026");
-                try {
-                  const result = await client.authorize(signal, configuredClientId);
-                  if (result.ok) {
-                    setNotice("");
-                    setAuthState("authorized");
-                  } else {
-                    setNotice("Authorization did not complete.");
-                  }
-                } catch (caught) {
-                  if (isAborted(caught)) return;
-                  if (caught instanceof SpotifyApiError && caught.code === "notConfigured") {
-                    setNotice(
-                      "Add your Spotify client id in FlowKey Settings, then connect again."
-                    );
-                  } else {
-                    setNotice(describeError(caught));
-                  }
-                }
-              }
-            }
-          ) })
-        }
-      )
-    ] });
+    return /* @__PURE__ */ jsx(
+      ConnectView,
+      {
+        native,
+        signal,
+        configuredClientId,
+        authMessage,
+        setAuthState
+      }
+    );
   }
   if (query.trim().length === 0) {
     const recents = recentSearches();
@@ -2042,6 +2003,92 @@ function describeAuthError(error) {
     return "Spotify client id is not configured on this machine. See the FlowKey README.";
   }
   return "";
+}
+function ConnectView({
+  native,
+  signal,
+  configuredClientId,
+  authMessage,
+  setAuthState
+}) {
+  const client = useMemo(() => new SpotifyClient(native.call), [native]);
+  const [redirectUri, setRedirectUri] = useState(null);
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await native.call("oauth.redirectUri", { provider: "spotify" });
+        if (!cancelled) setRedirectUri(result.redirectUri);
+      } catch {
+        if (!cancelled) setRedirectUri(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [native]);
+  const description = notice || authMessage || (configuredClientId ? "1. Register the Redirect URI below in your Spotify app (dashboard \u2192 Edit).  2. Connect. Spotify compares the URI exactly." : "Paste your client id in FlowKey Settings \u2192 Spotify (Save), register the Redirect URI below in your Spotify app, then Connect.");
+  return /* @__PURE__ */ jsxs(List, { filter: SEARCH_FILTERS, children: [
+    /* @__PURE__ */ jsx(List.EmptyView, { title: "Connect Spotify", description }),
+    /* @__PURE__ */ jsx(
+      List.Item,
+      {
+        id: "redirect-uri",
+        title: "Redirect URI to register",
+        subtitle: redirectUri ?? "loading\u2026",
+        icon: { lucide: "link", color: "#1DB954" },
+        actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
+          Action,
+          {
+            title: "Copy Redirect URI",
+            onAction: async () => {
+              if (!redirectUri) return;
+              await copyToClipboard(client, redirectUri);
+              setNotice("Redirect URI copied \u2014 paste it into your Spotify app settings.");
+            }
+          }
+        ) })
+      }
+    ),
+    /* @__PURE__ */ jsx(
+      List.Item,
+      {
+        id: "connect-spotify",
+        title: "Connect Spotify",
+        icon: { lucide: "plug", color: "#1DB954" },
+        actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
+          Action,
+          {
+            title: "Connect Spotify",
+            onAction: async () => {
+              if (!configuredClientId) {
+                setNotice("Add your Spotify client id in FlowKey Settings \u2192 Spotify (Save), then connect again.");
+                return;
+              }
+              setNotice("Waiting for Spotify authorization\u2026");
+              try {
+                const result = await client.authorize(signal, configuredClientId);
+                if (result.ok) {
+                  setNotice("");
+                  setAuthState("authorized");
+                } else {
+                  setNotice("Authorization did not complete.");
+                }
+              } catch (caught) {
+                if (isAborted(caught)) return;
+                if (caught instanceof SpotifyApiError && caught.code === "notConfigured") {
+                  setNotice("Add your Spotify client id in FlowKey Settings \u2192 Spotify (Save), then connect again.");
+                } else {
+                  setNotice(describeError(caught));
+                }
+              }
+            }
+          }
+        ) })
+      }
+    )
+  ] });
 }
 
 // src/library.tsx

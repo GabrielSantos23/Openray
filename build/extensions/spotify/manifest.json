@@ -331,6 +331,7 @@
     "http.fetch",
     "clipboard.write",
     "oauth.authorize",
+    "oauth.redirectUri",
     "oauth.status",
     "oauth.disconnect",
     "secrets.get",
@@ -359,7 +360,7 @@
       "name": "clientId",
       "type": "password",
       "title": "Spotify client id",
-      "description": "Paste the client id of your own Spotify app (developer.spotify.com/dashboard). Register http://127.0.0.1/callback as its redirect URI.",
+      "description": "Paste the client id of your own Spotify app (developer.spotify.com/dashboard). Register the exact redirect URI shown by the Connect Spotify command as the app redirect URI.",
       "required": false
     }
   ]

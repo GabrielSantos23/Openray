@@ -20,6 +20,7 @@ const PROVIDERS = {
     tokenUrl: "https://accounts.spotify.com/api/token",
     scopes: "user-read-playback-state user-modify-playback-state user-read-currently-playing",
     envVar: "FLOWKEY_SPOTIFY_CLIENT_ID",
+    redirectEnvVar: "FLOWKEY_SPOTIFY_REDIRECT_URI",
     configFile: "spotify-auth.json",
   },
 };
@@ -30,25 +31,41 @@ function oauthDir(dataRoot) {
 
 /**
  * BYO client id: env var wins, then `<dataRoot>/oauth/<provider>-auth.json`
- * (`{"clientId":"...","redirectPort":0}`). Mirrors FlowKey's SpotifyAuthConfig.
+ * (`{"clientId":"...","redirectPort":0,"redirectUri":"http://127.0.0.1:42749/oauth/callback"}`).
+ * `redirectUri` overrides the whole loopback callback URL (port + path) so it can match whatever
+ * the provider dashboard has registered — Spotify compares the string exactly. Mirrors FlowKey's
+ * SpotifyAuthConfig.
  */
 function loadProviderConfig(dataRoot, provider) {
   const spec = PROVIDERS[provider];
   if (!spec) throw new Error(`unknown oauth provider ${provider}`);
   let fromFile = null;
   let redirectPort = DEFAULT_REDIRECT_PORT;
+  let redirectUri = null;
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(oauthDir(dataRoot), spec.configFile), "utf-8"));
     if (typeof raw.clientId === "string" && raw.clientId.trim() !== "") fromFile = raw.clientId.trim();
     if (Number.isInteger(raw.redirectPort) && raw.redirectPort > 0 && raw.redirectPort <= 65535) {
       redirectPort = raw.redirectPort;
     }
+    if (typeof raw.redirectUri === "string" && /^https?:\/\/127\.0\.0\.1(:\d+)?\//.test(raw.redirectUri.trim())) {
+      redirectUri = raw.redirectUri.trim().replace(/\/+$/, "");
+    }
   } catch {
     /* no config file */
   }
   const fromEnv = process.env[spec.envVar];
   const clientId = fromEnv && fromEnv.trim() !== "" ? fromEnv.trim() : fromFile;
-  return { clientId, redirectPort };
+  const redirectFromEnv = process.env[spec.redirectEnvVar ?? ""];
+  if (!redirectUri && redirectFromEnv && /^https?:\/\/127\.0\.0\.1(:\d+)?\//.test(redirectFromEnv.trim())) {
+    redirectUri = redirectFromEnv.trim().replace(/\/+$/, "");
+  }
+  return { clientId, redirectPort, redirectUri };
+}
+
+/** The exact callback URL every step must agree on (the dashboard registration included). */
+function redirectUriOf(config) {
+  return config.redirectUri ?? `http://127.0.0.1:${config.redirectPort}/oauth/callback`;
 }
 
 function vaultPath(dataRoot, provider) {
@@ -80,25 +97,28 @@ function base64url(buffer) {
   return buffer.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function buildAuthorizeUrl(spec, { clientId, redirectPort, verifier, state }) {
+function buildAuthorizeUrl(spec, { clientId, redirectUri, verifier, state }) {
   const challenge = base64url(crypto.createHash("sha256").update(verifier).digest());
   const url = new URL(spec.authorizeUrl);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("scope", spec.scopes);
-  url.searchParams.set("redirect_uri", `http://127.0.0.1:${redirectPort}/oauth/callback`);
+  url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("code_challenge", challenge);
   return url.toString();
 }
 
-/** One loopback wait: a server on the fixed port that resolves on the first matching callback. */
-function startLoopbackWait(redirectPort, state, { timeoutMs = 300_000 } = {}) {
+/** One loopback wait: a server on the callback's port that resolves on the first matching hit. */
+function startLoopbackWait(redirectUri, state, { timeoutMs = 300_000 } = {}) {
+  const callback = new URL(redirectUri);
+  const port = Number(callback.port) || 80;
+  const pathname = callback.pathname;
   return new Promise((resolve, reject) => {
     const server = http.createServer((request, response) => {
-      const url = new URL(request.url ?? "/", `http://127.0.0.1:${redirectPort}`);
-      if (url.pathname !== "/oauth/callback") {
+      const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
+      if (url.pathname !== pathname) {
         response.writeHead(404).end();
         return;
       }
@@ -127,7 +147,7 @@ function startLoopbackWait(redirectPort, state, { timeoutMs = 300_000 } = {}) {
     });
     server.on("error", (error) => {
       clearTimeout(timer);
-      reject(new Error(`oauth loopback server failed on port ${redirectPort}: ${error.message}`));
+      reject(new Error(`oauth loopback server failed on port ${port}: ${error.message}`));
     });
     const timer = setTimeout(() => {
       server.close();
@@ -135,11 +155,11 @@ function startLoopbackWait(redirectPort, state, { timeoutMs = 300_000 } = {}) {
       reject(new Error(`oauth sign-in timed out after ${timeoutMs}ms`));
     }, timeoutMs);
     timer.unref?.();
-    server.listen(redirectPort, "127.0.0.1");
+    server.listen(port, "127.0.0.1");
   });
 }
 
-async function exchangeCode(spec, { clientId, redirectPort, code, verifier, fetchImpl }) {
+async function exchangeCode(spec, { clientId, redirectUri, code, verifier, fetchImpl }) {
   const doFetch = fetchImpl ?? fetch;
   const response = await doFetch(spec.tokenUrl, {
     method: "POST",
@@ -147,7 +167,7 @@ async function exchangeCode(spec, { clientId, redirectPort, code, verifier, fetc
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: `http://127.0.0.1:${redirectPort}/oauth/callback`,
+      redirect_uri: redirectUri,
       client_id: clientId,
       code_verifier: verifier,
     }).toString(),
@@ -192,19 +212,21 @@ async function authorize(dataRoot, provider, { clientIdOverride, open, fetchImpl
   if (!clientId) {
     throw new Error(
       `${provider} client id is not configured. Set the ${spec.envVar} environment variable or create ` +
-        `${path.join(oauthDir(dataRoot), spec.configFile)} with {"clientId":"..."} — see README 'Bring your own ${provider} app'.`,
+        `${path.join(oauthDir(dataRoot), spec.configFile)} with {"clientId":"..."}. Register ` +
+        `${redirectUriOf(config)} as the app's redirect URI in the ${provider} dashboard — it must match exactly.`,
     );
   }
+  const redirectUri = redirectUriOf(config);
   const verifier = base64url(crypto.randomBytes(48));
   const state = base64url(crypto.randomBytes(24));
-  const loopback = startLoopbackWait(config.redirectPort, state, { timeoutMs });
-  const url = buildAuthorizeUrl(spec, { clientId, redirectPort: config.redirectPort, verifier, state });
+  const loopback = startLoopbackWait(redirectUri, state, { timeoutMs });
+  const url = buildAuthorizeUrl(spec, { clientId, redirectUri, verifier, state });
   await open(url);
   const callback = await loopback;
   if (callback.error) throw new Error(callback.error);
   const tokens = await exchangeCode(spec, {
     clientId,
-    redirectPort: config.redirectPort,
+    redirectUri,
     code: callback.code,
     verifier,
     fetchImpl,
@@ -260,6 +282,7 @@ module.exports = {
   exchangeCode,
   getValidToken,
   loadProviderConfig,
+  redirectUriOf,
   startLoopbackWait,
   statusShape,
   vaultClear,

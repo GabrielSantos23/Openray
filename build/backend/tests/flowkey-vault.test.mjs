@@ -28,7 +28,7 @@ const vendorRequire = createRequire(path.join(FLOWKEY, "vendor", "package.json")
 const UUID = "contract-probe-uuid";
 let pipeSeq = 0;
 
-test("loadProviderConfig: env wins over the auth json; redirectPort clamps to the file value", () => {
+test("loadProviderConfig: env wins over the auth json; redirectPort clamps; redirectUri overrides the callback", () => {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), "vault-config-"));
   try {
     const oauthDir = path.join(dataRoot, "oauth");
@@ -38,12 +38,27 @@ test("loadProviderConfig: env wins over the auth json; redirectPort clamps to th
       JSON.stringify({ clientId: "file-id", redirectPort: 51515 }),
     );
     const fromFile = vault.loadProviderConfig(dataRoot, "spotify");
-    assert.deepEqual(fromFile, { clientId: "file-id", redirectPort: 51515 });
+    assert.deepEqual(fromFile, { clientId: "file-id", redirectPort: 51515, redirectUri: null });
+    assert.equal(vault.redirectUriOf(fromFile), "http://127.0.0.1:51515/oauth/callback");
+
+    fs.writeFileSync(
+      path.join(oauthDir, "spotify-auth.json"),
+      JSON.stringify({ clientId: "file-id", redirectUri: "http://127.0.0.1:51515/callback" }),
+    );
+    const overridden = vault.loadProviderConfig(dataRoot, "spotify");
+    assert.equal(overridden.redirectUri, "http://127.0.0.1:51515/callback", "a loopback redirectUri override is honored");
+    assert.equal(vault.redirectUriOf(overridden), "http://127.0.0.1:51515/callback");
+    // Non-loopback overrides are refused (Spotify requires https except 127.0.0.1 loopback).
+    fs.writeFileSync(
+      path.join(oauthDir, "spotify-auth.json"),
+      JSON.stringify({ clientId: "file-id", redirectUri: "https://evil.example/callback" }),
+    );
+    assert.equal(vault.loadProviderConfig(dataRoot, "spotify").redirectUri, null);
 
     process.env.FLOWKEY_SPOTIFY_CLIENT_ID = "env-id";
     try {
       const fromEnv = vault.loadProviderConfig(dataRoot, "spotify");
-      assert.deepEqual(fromEnv, { clientId: "env-id", redirectPort: 51515 });
+      assert.deepEqual(fromEnv, { clientId: "env-id", redirectPort: vault.DEFAULT_REDIRECT_PORT, redirectUri: null });
     } finally {
       delete process.env.FLOWKEY_SPOTIFY_CLIENT_ID;
     }
@@ -74,7 +89,7 @@ test("buildAuthorizeUrl: PKCE S256 challenge matches the verifier, loopback redi
   const url = new URL(
     vault.buildAuthorizeUrl(spec, {
       clientId: "byo-id",
-      redirectPort: 42749,
+      redirectUri: "http://127.0.0.1:42749/oauth/callback",
       verifier: "test-verifier",
       state: "test-state",
     }),
@@ -105,16 +120,26 @@ test("loopback callback: state match resolves the code, mismatch is rejected, pr
 
   // Resolve path.
   {
-    const wait = vault.startLoopbackWait(42801, "state-1", { timeoutMs: 5000 });
+    const wait = vault.startLoopbackWait("http://127.0.0.1:42801/oauth/callback", "state-1", { timeoutMs: 5000 });
     await new Promise((resolve) => setTimeout(resolve, 150));
     const response = await call(42801, "/oauth/callback?code=abc&state=state-1");
     assert.equal(response.status, 200);
     const payload = await wait;
     assert.deepEqual(payload, { code: "abc" });
   }
+  // A custom path override is honored end to end.
+  {
+    const wait = vault.startLoopbackWait("http://127.0.0.1:42804/my/callback", "state-4", { timeoutMs: 5000 });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const wrong = await call(42804, "/oauth/callback?code=abc&state=state-4");
+    assert.equal(wrong.status, 404, "the default path is not accepted under an override");
+    const right = await call(42804, "/my/callback?code=xyz&state=state-4");
+    assert.equal(right.status, 200);
+    assert.deepEqual(await wait, { code: "xyz" });
+  }
   // Mismatched state -> HTTP 400, the wait stays pending.
   {
-    const wait = vault.startLoopbackWait(42802, "state-2", { timeoutMs: 5000 });
+    const wait = vault.startLoopbackWait("http://127.0.0.1:42802/oauth/callback", "state-2", { timeoutMs: 5000 });
     await new Promise((resolve) => setTimeout(resolve, 150));
     const response = await call(42802, "/oauth/callback?code=abc&state=WRONG");
     assert.equal(response.status, 400);
@@ -124,7 +149,7 @@ test("loopback callback: state match resolves the code, mismatch is rejected, pr
   }
   // Provider error -> resolved payload carries the error text.
   {
-    const wait = vault.startLoopbackWait(42803, "state-3", { timeoutMs: 5000 });
+    const wait = vault.startLoopbackWait("http://127.0.0.1:42803/oauth/callback", "state-3", { timeoutMs: 5000 });
     await new Promise((resolve) => setTimeout(resolve, 150));
     await call(42803, "/oauth/callback?error=access_denied&error_description=user+said+no&state=state-3");
     const payload = await wait;

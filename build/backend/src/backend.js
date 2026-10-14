@@ -554,6 +554,15 @@ function createBackend(options) {
           delete secrets[String(call.key)];
           return writeSecrets(ctx, secrets);
         }
+        case "oauth.redirectUri": {
+          // The exact loopback callback URL the user must register in the provider dashboard —
+          // Spotify compares the redirect_uri string exactly ("Not matching configuration").
+          const provider = String(call.provider ?? "spotify");
+          if (!(ctx.flowkeyManifest?.oauth ?? []).includes(provider)) {
+            throw new Error(`oauth provider ${provider} is not declared in the manifest`);
+          }
+          return { redirectUri: flowkeyVault.redirectUriOf(flowkeyVault.loadProviderConfig(dataRoot, provider)) };
+        }
         case "oauth.authorize":
         case "oauth.status":
         case "oauth.disconnect":
