@@ -9,8 +9,13 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-/** A Store-installed extension dir: package.json carrying the historical Store $schema marker. */
+/**
+ * A Store-installed extension dir: package.json carrying the historical Store $schema marker,
+ * and no FlowKey manifest.json — a dir with a manifest.json is a FlowKey extension the runtime
+ * loads, and is never swept even if its package.json still mentions the old schema.
+ */
 function isStoreInstalledExtension(dir) {
+  if (fs.existsSync(path.join(dir, "manifest.json"))) return false;
   try {
     const manifest = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8"));
     return typeof manifest.$schema === "string" && manifest.$schema.includes("raycast");

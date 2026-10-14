@@ -100,10 +100,17 @@ test("isStoreInstalledExtension: only the Store $schema marker qualifies; manife
     const junk = path.join(root, "junk");
     fs.mkdirSync(junk);
     fs.writeFileSync(path.join(junk, "package.json"), "{not json");
+    // A deployed FlowKey extension that still ships a legacy Store $schema package.json must
+    // never be swept: the manifest.json makes it a FlowKey extension the runtime loads.
+    const flowkey = path.join(root, "flowkey-one");
+    fs.mkdirSync(flowkey);
+    fs.writeFileSync(path.join(flowkey, "package.json"), JSON.stringify({ $schema: "https://raycast.example/schema/raycast-extension.json" }));
+    fs.writeFileSync(path.join(flowkey, "manifest.json"), JSON.stringify({ id: "flowkey-one", commands: [] }));
 
     assert.equal(isStoreInstalledExtension(storeOne), true);
     assert.equal(isStoreInstalledExtension(devOne), false);
     assert.equal(isStoreInstalledExtension(junk), false);
+    assert.equal(isStoreInstalledExtension(flowkey), false, "manifest.json wins over a legacy $schema");
   } finally {
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
