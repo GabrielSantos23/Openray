@@ -966,11 +966,12 @@ export class PKCEClient {
     const state = base64url(randomBytes(16));
     const codeVerifier = base64url(randomBytes(48));
     const codeChallenge = base64url(createHash("sha256").update(codeVerifier).digest());
-    const redirect = await request<{ origin: string }>("oauth.redirectOrigin", {});
+    const redirect = await request<{ redirectURI: string }>("oauth.redirectOrigin", {});
+    const redirectURI = redirect.redirectURI;
     const params = new URLSearchParams({
       response_type: "code",
       client_id: options.clientId,
-      redirect_uri: redirect.origin,
+      redirect_uri: redirectURI,
       state,
       code_challenge: codeChallenge,
       code_challenge_method: "S256",
@@ -983,7 +984,7 @@ export class PKCEClient {
       codeChallenge,
       codeVerifier,
       state,
-      redirectURI: redirect.origin,
+      redirectURI,
       toURL: () => url.toString(),
     };
   }

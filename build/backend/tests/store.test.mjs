@@ -234,6 +234,11 @@ test("OAuth: a command completes a full PKCE round trip in a real worker", async
     const url = new URL(authUrl);
     assert.equal(url.searchParams.get("client_id"), "client-123");
     assert.equal(url.searchParams.get("code_challenge_method"), "S256");
+    assert.equal(
+      url.searchParams.get("redirect_uri"),
+      "https://raycast.com/redirect?packageName=Extension",
+      "the redirect uses the URI the providers have registered",
+    );
     assert.ok(url.searchParams.get("code_challenge"));
 
     // Wait until the command is parked inside authorize, then play the provider redirect.
@@ -272,33 +277,12 @@ test("OAuth: a command completes a full PKCE round trip in a real worker", async
       assert.equal(earlyResult.ok, true, `probe finished early with error: ${earlyResult.error}`);
     }
 
-    const redirect = new URL(url.searchParams.get("redirect_uri"));
-    // The worker binds the loopback right before parking in authorize; the first connect can
-    // race the listener's accept readiness on Windows, so retry briefly. `node:http` instead of
-    // `fetch`: undici's connect path has refused loopback connects inside the test runner while
-    // the same port answers from any other process.
-    const redirectResponse = await new Promise((resolve, reject) => {
-      const http = require("node:http");
-      const attempt = (left) => {
-        const request = http.get(`${redirect.origin}/?code=test-code-1&state=${encodeURIComponent(url.searchParams.get("state"))}`, (response) => {
-          response.resume();
-          resolve(response);
-        });
-        request.on("error", (error) => {
-          if (left <= 0) {
-            try {
-              const netstat = require("node:child_process").execSync(`netstat -ano | findstr :${redirect.port}`, { encoding: "utf-8" });
-              console.error(`[oauth-diag] pid=${process.pid} netstat:\n${netstat}`);
-            } catch (diagError) {
-              console.error(`[oauth-diag] pid=${process.pid} netstat found nothing for :${redirect.port}`);
-            }
-            reject(new Error(`loopback redirect failed: ${error.message}`));
-          } else setTimeout(() => attempt(left - 1), 250);
-        });
-      };
-      attempt(10);
-    });
-    assert.ok(redirectResponse, "the loopback redirect server accepted the provider callback");
+    // The user's part of the handshake: the clipboard "holds" the provider's redirect URL (the
+    // raycast.com/redirect page the browser landed on). The backend's clipboard watcher matches
+    // its state against the pending flow and completes it.
+    let clipboardOverride = null;
+    backend.overrideHostHandler("getClipboard", async () => ({ value: clipboardOverride }));
+    clipboardOverride = `https://www.raycast.com/redirect?packageName=Extension&code=test-code-1&state=${encodeURIComponent(url.searchParams.get("state"))}`;
 
     // The command finishes and records its outcome in its LocalStorage (.storage.json).
     let result = null;

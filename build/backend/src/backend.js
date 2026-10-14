@@ -13,7 +13,6 @@
 
 const fs = require("node:fs");
 const net = require("node:net");
-const http = require("node:http");
 const path = require("node:path");
 const readline = require("node:readline");
 const { exec } = require("node:child_process");
@@ -304,54 +303,59 @@ function createBackend(options) {
   // ---------------------------------------------------------------------------------------------
 
   const OAUTH_REDIRECT_TIMEOUT_MS = 300_000;
-  let oauthLoopback = null;
   // One pending sign-in per extension: views refetch and would otherwise open a browser tab on
   // every attempt. Concurrent authorizes join the pending flow until it resolves or times out.
   const oauthPendingByExtension = new Map();
+  // Pending authorization responses keyed by the PKCE state.
+  const oauthWaiters = new Map();
+  let oauthClipboardTimer = null;
 
-  function startOAuthLoopback() {
-    if (oauthLoopback) return Promise.resolve(`http://127.0.0.1:${oauthLoopback.port}`);
-    return new Promise((resolve, reject) => {
-      const server = http.createServer((req, res) => {
-        const url = new URL(req.url ?? "/", "http://127.0.0.1");
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state");
-        const waiter = state ? oauthLoopback.waiters.get(state) : undefined;
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(
-          `<html><body style="background:#1a1a1e;color:#fff;font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0"><p>${
-            waiter && code ? "Signed in. You can close this window." : "Missing authorization code — try again from Raycast Mini."
-          }</p></body></html>`,
-        );
-        if (waiter && code) {
-          oauthLoopback.waiters.delete(state);
-          clearTimeout(waiter.timer);
-          waiter.resolve(code);
+  /**
+   * While a sign-in is pending, watch the clipboard for the provider's redirect URL. The redirect
+   * goes to `raycast.com/redirect` (the URI every extension's provider has registered), whose page
+   * hands the response to the real app through the `raycast://` protocol — the clone completes the
+   * same handshake when the user copies that page's URL (Ctrl+L, Ctrl+C). Matching is keyed on the
+   * pending state, so unrelated clipboard content can never complete a flow.
+   */
+  function ensureOAuthClipboardPolling() {
+    if (oauthClipboardTimer) return;
+    oauthClipboardTimer = setInterval(async () => {
+      if (oauthWaiters.size === 0) return;
+      let text;
+      try {
+        // Through the handler table so tests can stub the clipboard like any native route.
+        const result = await hostHandlers.getClipboard({}, {});
+        text = typeof result === "string" ? result : (result?.value ?? "");
+      } catch {
+        return; // clipboard unavailable this tick
+      }
+      if (typeof text !== "string" || !text.includes("state=")) return;
+      for (const match of text.matchAll(/https?:\/\/[^\s"'<>]+/g)) {
+        let url;
+        try {
+          url = new URL(match[0]);
+        } catch {
+          continue;
         }
-      });
-      server.once("error", reject);
-      server.listen(0, "127.0.0.1", () => {
-        // The backend process is long-lived regardless; unref so the server alone never pins a
-        // short-lived host (or test runner) process open.
-        server.unref();
-        const port = server.address().port;
-        oauthLoopback = { server, port, waiters: new Map() };
-        resolve(`http://127.0.0.1:${port}`);
-      });
-    });
+        const state = url.searchParams.get("state");
+        const code = url.searchParams.get("code");
+        if (!state || !code || !oauthWaiters.has(state)) continue;
+        const waiter = oauthWaiters.get(state);
+        oauthWaiters.delete(state);
+        clearTimeout(waiter.timer);
+        waiter.resolve(code);
+      }
+    }, 1500);
+    oauthClipboardTimer.unref();
   }
 
   function waitForOAuthRedirect(state) {
     return new Promise((resolve, reject) => {
-      if (!oauthLoopback) {
-        reject(new Error("oauth.authorize: no loopback server (call oauth.redirectOrigin first)"));
-        return;
-      }
       const timer = setTimeout(() => {
-        oauthLoopback.waiters.delete(state);
+        oauthWaiters.delete(state);
         reject(new Error(`OAuth authorization timed out after ${OAUTH_REDIRECT_TIMEOUT_MS / 1000}s`));
       }, OAUTH_REDIRECT_TIMEOUT_MS);
-      oauthLoopback.waiters.set(state, { resolve, reject, timer });
+      oauthWaiters.set(state, { resolve, reject, timer });
     });
   }
 
@@ -494,12 +498,12 @@ function createBackend(options) {
     },
 
     // --- OAuth PKCE redirect service --------------------------------------------------------
-    // The loopback server lives here, in the long-lived backend process, not inside the worker
-    // whose lifetime follows the command session. `OAuth.PKCEClient` in the worker asks for the
-    // redirect origin, then parks on `oauth.authorize` while the backend opens the browser and
-    // waits for the provider's redirect (the worker RPC has no timeout, so parking is safe).
+    // The redirect goes to `raycast.com/redirect` (registered by every extension's provider —
+    // a loopback URI is rejected with "Not matching configuration"). While the sign-in page is
+    // open, the backend watches the clipboard for the copied redirect URL and completes the
+    // handshake when its `state` matches (see ensureOAuthClipboardPolling).
     async "oauth.redirectOrigin"() {
-      return { origin: await startOAuthLoopback() };
+      return { redirectURI: "https://raycast.com/redirect?packageName=Extension" };
     },
     async "oauth.authorize"(ctx, params) {
       // Headless runs (test harness) have no real UI: fail fast instead of spawning a browser.
@@ -512,6 +516,15 @@ function createBackend(options) {
       const flow = (async () => {
         const url = String(params.url ?? "");
         await hostHandlers["open"](ctx, { path: url });
+        try {
+          await hostHandlers.showToast(ctx, {
+            title: "Sign in in the browser",
+            message: "After signing in, copy the page URL (Ctrl+L, Ctrl+C) to finish connecting.",
+          });
+        } catch {
+          /* background launches refuse toasts — the flow continues regardless */
+        }
+        ensureOAuthClipboardPolling();
         return { authorizationCode: await waitForOAuthRedirect(String(params.state ?? "")) };
       })();
       oauthPendingByExtension.set(key, flow);
