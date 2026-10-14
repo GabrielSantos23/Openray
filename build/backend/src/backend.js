@@ -51,7 +51,7 @@ function createBackend(options) {
   const P = paths(options);
   const sessions = new Map(); // workerId -> { worker, context }
   const activeSessions = new Map(); // sessionId -> workerId
-  const pool = { dev: [], prod: [] };
+  const pool = { "ray-dev": [], "ray-prod": [], "fk-dev": [], "fk-prod": [] };
   const pushSubscribers = new Set();
   // `clipboard.<method>` + `clipboardHistory.<method>`; installed by `index.js`.
   let clipboardHandlers = {};
@@ -93,6 +93,34 @@ function createBackend(options) {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       try {
+        // FlowKey extensions declare manifest.json (commands keyed by `id`); @raycast ones
+        // package.json. Both land in the same summary shape the renderer consumes.
+        const flowkeyManifestPath = path.join(options.extensionsRoot, entry.name, "manifest.json");
+        if (fs.existsSync(flowkeyManifestPath)) {
+          const fk = JSON.parse(fs.readFileSync(flowkeyManifestPath, "utf-8"));
+          out.push({
+            uuid: entry.name,
+            id: fk.id ?? entry.name,
+            name: fk.name,
+            title: fk.name,
+            description: fk.description ?? "",
+            author: "flowkey",
+            icon: null,
+            badge: null,
+            commands: (fk.commands ?? []).map((command) => ({
+              name: command.id,
+              title: command.title,
+              description: command.subtitle,
+              mode: command.mode === "background" ? "no-view" : "view",
+              disabledReason: null,
+            })),
+            tools: [],
+            path: P.extensionDir(entry.name),
+            assetsPath: P.assetsPath(entry.name),
+            isFlowkey: true,
+          });
+          continue;
+        }
         const manifest = JSON.parse(
           fs.readFileSync(path.join(options.extensionsRoot, entry.name, "package.json"), "utf-8"),
         );
@@ -136,37 +164,46 @@ function createBackend(options) {
   // Worker lifecycle (the `t2` class in Raycast).
   // ---------------------------------------------------------------------------------------------
 
-  function createWorker({ isDevelopment = false, appearance = "dark" } = {}) {
+  const FLOWKEY_WORKER_ENTRY = path.resolve(options.apiRoot, "..", "flowkey", "worker", "dist", "flowkey-worker.js");
+
+  function createWorker({ isDevelopment = false, appearance = "dark", flowkey = false } = {}) {
     const workerId = `w_${Math.random().toString(36).slice(2, 10)}`;
     const callbacks = new Map();
     let context = null;
     let terminated = false;
     let nextId = 1;
+    const kind = flowkey ? "fk" : "ray";
 
-    const worker = new Worker(WORKER_ENTRY, {
-      workerData: {
-        apiRoot: options.apiRoot,
-        extensionsRoot: options.extensionsRoot,
-        isDevelopment,
-        // The clone has no AI, browser extension, or window-management integration — the same
-        // flag values the real app produces without a pro subscription (docs/store-spec.md §5).
-        canAccessAI: false,
-        canAccessBetterAIModels: false,
-        isBrowserExtensionInstalled: false,
-        canAccessWindowManagement: false,
-        appearance,
-        textSize: "medium",
-      },
-      env: {
-        ...process.env,
-        NODE_ENV: isDevelopment ? "development" : "production",
-        // THE hook that makes `require("@raycast/api")` resolve inside the extension bundle.
-        NODE_PATH: path.join(options.apiRoot, "node_modules"),
-        RAYCAST_VERSION: "2.4.0.0",
-        RAYCAST_SCHEME: "raycast",
-      },
-      resourceLimits: { maxOldGenerationSizeMb: 100 },
-    });
+    const worker = flowkey
+      ? new Worker(FLOWKEY_WORKER_ENTRY, {
+          workerData: { extensionsRoot: options.extensionsRoot, isDevelopment },
+          env: { ...process.env, NODE_ENV: isDevelopment ? "development" : "production" },
+          resourceLimits: { maxOldGenerationSizeMb: 100 },
+        })
+      : new Worker(WORKER_ENTRY, {
+          workerData: {
+            apiRoot: options.apiRoot,
+            extensionsRoot: options.extensionsRoot,
+            isDevelopment,
+            // The clone has no AI, browser extension, or window-management integration — the same
+            // flag values the real app produces without a pro subscription (docs/store-spec.md §5).
+            canAccessAI: false,
+            canAccessBetterAIModels: false,
+            isBrowserExtensionInstalled: false,
+            canAccessWindowManagement: false,
+            appearance,
+            textSize: "medium",
+          },
+          env: {
+            ...process.env,
+            NODE_ENV: isDevelopment ? "development" : "production",
+            // THE hook that makes `require("@raycast/api")` resolve inside the extension bundle.
+            NODE_PATH: path.join(options.apiRoot, "node_modules"),
+            RAYCAST_VERSION: "2.4.0.0",
+            RAYCAST_SCHEME: "raycast",
+          },
+          resourceLimits: { maxOldGenerationSizeMb: 100 },
+        });
 
     function sendRequest(method, params) {
       if (terminated) return Promise.reject(new Error("worker terminated"));
@@ -181,6 +218,7 @@ function createBackend(options) {
       id: workerId,
       worker,
       isDevelopment,
+      kind,
       appearance,
       get context() {
         return context;
@@ -284,9 +322,9 @@ function createBackend(options) {
     return record;
   }
 
-  function takeFromPool(isDevelopment) {
-    const bucket = isDevelopment ? pool.dev : pool.prod;
-    const worker = bucket.pop();
+  function takeFromPool(isDevelopment, kind = "ray") {
+    const bucket = pool[`${kind}-${isDevelopment ? "dev" : "prod"}`];
+    const worker = bucket?.pop();
     if (!worker) return null;
     sessions.delete(worker.id);
     return worker;
@@ -294,8 +332,8 @@ function createBackend(options) {
 
   function releaseToPool(worker) {
     sessions.delete(worker.id);
-    const bucket = worker.isDevelopment ? pool.dev : pool.prod;
-    bucket.push(worker);
+    const bucket = pool[`${worker.kind ?? "ray"}-${worker.isDevelopment ? "dev" : "prod"}`];
+    bucket?.push(worker);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -309,6 +347,21 @@ function createBackend(options) {
   // Pending authorization responses keyed by the PKCE state.
   const oauthWaiters = new Map();
   let oauthClipboardTimer = null;
+
+  // FlowKey per-extension transient caches (`cache.*` capability) and pending alert.confirm
+  // promises whose resolution rides the normal nativeCallback path.
+  const flowkeyCaches = new Map();
+  function getFlowkeyCache(ctx) {
+    const key = ctx.extensionId ?? ctx.extension?.uuid ?? "unknown";
+    let cache = flowkeyCaches.get(key);
+    if (!cache) {
+      cache = new Map();
+      flowkeyCaches.set(key, cache);
+    }
+    return cache;
+  }
+  const pendingFlowkeyAlerts = new Map();
+  let flowkeyAlertSeq = 0;
 
   /**
    * While a sign-in is pending, watch the clipboard for the provider's redirect URL. The redirect
@@ -497,6 +550,121 @@ function createBackend(options) {
       return storage(ctx).then((store) => ({ value: store }));
     },
 
+    // --- FlowKey capability calls (nativeCall) ----------------------------------------------
+    // `native.call('http.fetch', …)` from a FlowKey extension lands here. The manifest consent
+    // gate (`nativeMethods` / `httpHosts`) runs before any route dispatch; routes the clone does
+    // not implement yet fail with a typed error, never a silent no-op.
+    async nativeCall(ctx, params) {
+      // The worker sends `{ method, params }`; every route reads the inner call params.
+      const method = String(params?.method ?? "");
+      const call = params?.params ?? {};
+      const manifestNative = ctx.flowkeyManifest?.nativeMethods ?? [];
+      const allowed = manifestNative.some((declared) =>
+        declared.endsWith(".*") ? method.startsWith(declared.slice(0, -1)) : declared === method,
+      );
+      if (!allowed) throw new Error(`native method ${method} is not declared in the manifest`);
+
+      const flowkeyCache = getFlowkeyCache(ctx);
+      const storageKey = ctx.extensionId ?? ctx.extension?.uuid ?? "unknown";
+      switch (method) {
+        case "http.fetch": {
+          const url = String(call.url ?? "");
+          let host;
+          try { host = new URL(url).host; } catch { throw new Error(`http.fetch: invalid url ${url}`); }
+          const hosts = ctx.flowkeyManifest?.httpHosts ?? [];
+          const allowedHost = hosts.some((declared) =>
+            declared.startsWith(".") ? host.endsWith(declared.slice(1)) || host === declared.slice(1) : host === declared,
+          );
+          if (!allowedHost) throw new Error(`http.fetch: ${host} is not in the manifest httpHosts`);
+          const response = await fetch(url, {
+            method: call.method ?? "GET",
+            headers: call.headers ?? {},
+            body: call.body,
+            signal: AbortSignal.timeout(30_000),
+          });
+          const bodyText = await response.text();
+          return { status: response.status, headers: Object.fromEntries(response.headers.entries()), bodyText };
+        }
+        case "clipboard.read":
+          return getClipboard(ctx).then((value) => ({ text: value?.value ?? null }));
+        case "clipboard.write":
+          return setClipboard(ctx, { text: String(call.text ?? "") });
+        case "storage.get": {
+          const store = await storage(ctx);
+          const raw = store[`flowkey:${call.key}`];
+          return { value: raw === undefined ? null : JSON.parse(raw) };
+        }
+        case "storage.set":
+          return storage(ctx).then((store) => writeStorage(ctx, { ...store, [`flowkey:${call.key}`]: JSON.stringify(call.value ?? null) }));
+        case "storage.delete":
+          return storage(ctx).then((store) => {
+            delete store[`flowkey:${call.key}`];
+            return writeStorage(ctx, store);
+          });
+        case "storage.keys": {
+          const store = await storage(ctx);
+          return { keys: Object.keys(store).filter((key) => key.startsWith("flowkey:")).map((key) => key.slice("flowkey:".length)) };
+        }
+        case "storage.allItems": {
+          const store = await storage(ctx);
+          const items = {};
+          for (const [key, raw] of Object.entries(store)) {
+            if (key.startsWith("flowkey:")) items[key.slice("flowkey:".length)] = JSON.parse(raw);
+          }
+          return { items };
+        }
+        case "cache.get":
+          return { value: flowkeyCache.get(String(call.key)) ?? null };
+        case "cache.set":
+          flowkeyCache.set(String(call.key), call.value ?? null);
+          return {};
+        case "cache.delete":
+          flowkeyCache.delete(String(call.key));
+          return {};
+        case "cache.clear":
+          flowkeyCache.clear();
+          return {};
+        case "shell.openUrl":
+        case "shell.openPath":
+          return open(ctx, { path: String(call.url ?? call.path ?? "") });
+        case "shell.revealPath":
+          return dispatch("backend", "shell.revealFile", { path: String(call.path ?? "") });
+        case "apps.list": {
+          const payload = await dispatch("backend", "applications.getAll", {});
+          const apps = payload?.value ?? [];
+          return { apps: apps.map((app) => ({ id: app.id ?? app.path, name: app.name })) };
+        }
+        case "hud.show":
+          return showHUD(ctx, { title: String(call.title ?? "") });
+        case "toast.show":
+          return showToast(ctx, { title: String(call.title ?? ""), message: call.message, style: call.style === "failure" ? "failure" : "success" });
+        case "alert.confirm":
+          return new Promise((resolve) => {
+            const alertId = `fkalert${flowkeyAlertSeq++}`;
+            const okId = `${alertId}-ok`;
+            const cancelId = `${alertId}-cancel`;
+            pendingFlowkeyAlerts.set(okId, () => resolve(true));
+            pendingFlowkeyAlerts.set(cancelId, () => resolve(false));
+            const timeout = setTimeout(() => {
+              if (pendingFlowkeyAlerts.has(okId)) {
+                pendingFlowkeyAlerts.delete(okId);
+                pendingFlowkeyAlerts.delete(cancelId);
+                resolve(false);
+              }
+            }, 120_000);
+            timeout.unref?.();
+            return showAlert(ctx, {
+              title: String(call.title ?? ""),
+              message: call.message,
+              primaryAction: { title: call.confirmTitle ?? "Confirm", onAction: okId },
+              dismissAction: { title: call.cancelTitle ?? "Cancel", onAction: cancelId },
+            });
+          });
+        default:
+          throw new Error(`FlowKey native method ${method} is not implemented yet`);
+      }
+    },
+
     // --- OAuth PKCE redirect service --------------------------------------------------------
     // The redirect goes to `raycast.com/redirect` (registered by every extension's provider —
     // a loopback URI is rejected with "Not matching configuration"). While the sign-in page is
@@ -504,8 +672,7 @@ function createBackend(options) {
     // handshake when its `state` matches (see ensureOAuthClipboardPolling).
     async "oauth.redirectOrigin"() {
       return { redirectURI: "https://raycast.com/redirect?packageName=Extension" };
-    },
-    async "oauth.authorize"(ctx, params) {
+    },    async "oauth.authorize"(ctx, params) {
       // Headless runs (test harness) have no real UI: fail fast instead of spawning a browser.
       if (transport && !overriddenHandlers.has("open")) {
         throw new Error("OAuth sign-in is unavailable in headless mode");
@@ -621,8 +788,16 @@ function createBackend(options) {
       // The store's classification gate: disabled commands never reach a worker.
       if (launchGate) await launchGate(extension, command);
 
+      // FlowKey extensions declare themselves with a root manifest.json (@raycast ones with a
+      // package.json) and run in the FlowKey worker against the @flowkey-mini library.
+      const flowkeyManifestPath = path.join(P.extensionDir(extension.uuid), "manifest.json");
+      const isFlowkey = fs.existsSync(flowkeyManifestPath);
+      const flowkeyManifest = isFlowkey
+        ? JSON.parse(fs.readFileSync(flowkeyManifestPath, "utf-8"))
+        : null;
+
       const isDevelopment = Boolean(debug);
-      const worker = takeFromPool(isDevelopment) ?? createWorker({ isDevelopment });
+      const worker = takeFromPool(isDevelopment, isFlowkey ? "fk" : "ray") ?? createWorker({ isDevelopment, flowkey: isFlowkey });
       const sessionId = worker.id;
       activeSessions.set(sessionId, worker.id);
       sessions.set(worker.id, worker);
@@ -648,6 +823,9 @@ function createBackend(options) {
         assetsPath: extension.assetsPath ?? P.assetsPath(extension),
         supportPath: P.extensionDir(extension.uuid),
         commandPath: P.commandEntry(extension, command),
+        flowkeyManifest,
+        query: props?.query ?? "",
+        filterValue: props?.filterValue ?? null,
       };
 
       worker.onNotify(async (method, notificationParams) => {
@@ -656,7 +834,17 @@ function createBackend(options) {
       });
 
       try {
-        await worker.initialize(context);
+        if (isFlowkey) {
+          await worker.initialize({
+            ...context,
+            flowkey: {
+              bundlePath: path.join(P.extensionDir(extension.uuid), flowkeyManifest.entry ?? "main.js"),
+              manifest: flowkeyManifest,
+            },
+          });
+        } else {
+          await worker.initialize(context);
+        }
       } catch (error) {
         await worker.unload();
         sessions.delete(worker.id);
@@ -664,8 +852,9 @@ function createBackend(options) {
         throw error;
       }
 
-      if (context.entryPointMode === "no-view") {
-        // `if (mode === "no-view" && !deferNoViewUnload) unload()` in Raycast.
+      if (context.entryPointMode === "no-view" && !isFlowkey) {
+        // `if (mode === "no-view" && !deferNoViewUnload) unload()` in Raycast. FlowKey background
+        // commands park until their work finishes — the worker decides when it is done.
         setImmediate(() => {
           if (sessions.has(worker.id)) {
             sessions.delete(worker.id);
@@ -689,6 +878,13 @@ function createBackend(options) {
     },
 
     async callNodeCallback(params) {
+      // FlowKey alert.confirm buttons resolve backend-side, not in the extension's registry.
+      const pendingAlert = pendingFlowkeyAlerts.get(params.callbackId);
+      if (pendingAlert) {
+        pendingFlowkeyAlerts.delete(params.callbackId);
+        pendingAlert();
+        return undefined;
+      }
       const workerId = activeSessions.get(params.sessionId);
       if (!workerId) throw new Error(`no worker for session ${params.sessionId}`);
       const worker = sessions.get(workerId);

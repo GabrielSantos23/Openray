@@ -1,0 +1,16 @@
+{
+  "id": "contract-probe",
+  "name": "contract-probe",
+  "version": "1.0.0",
+  "description": "FlowKey backend contract probe",
+  "entry": "main.js",
+  "commands": [
+    { "id": "open", "title": "Open", "mode": "view" },
+    { "id": "tick", "title": "Tick", "mode": "background" }
+  ],
+  "nativeMethods": ["storage.*", "system.selectedText"],
+  "httpHosts": [],
+  "preferences": [
+    { "name": "sampleText", "type": "text", "title": "Sample text", "default": "fallback" }
+  ]
+}

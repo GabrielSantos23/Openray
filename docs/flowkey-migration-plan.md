@@ -185,6 +185,27 @@ Baseline test counts (recorded before M1, all green):
   filter dropdown, pagination. Report (in the commit message + final report) anything our renderer
   cannot express yet instead of dropping it.
 
+**M1 result (2026-10-14).** All suites green: backend 201 pass / 0 fail across 18 suites
+(16 pre-existing + `flowkey-adapter` 8 + `flowkey-contract` 5); render-model 4/4; harness 1/1
+with two root-caused, documented exceptions (below). Fixes found by the tests: worker
+`react` shorthand + `workerData`-vs-initialize-params + esbuild CJS interop; backend pool
+kind-keys and the `nativeCall` inner-params unwrap; the port uses the real JSX API
+(`Detail.Metadata` / `Form.*` children, `onSubmit`) with pages as elements (per-page hook counts).
+The FlowKey JSX surface is stricter than its tree types: pane metadata is label/value only,
+`List.Section` has no `subtitle` prop, tags fields need `kind: "tags"`, `Action` requires
+`onAction`.
+**Adapter gaps reported (not dropped)** — `iconSvg` → data URI maps across but the frontend
+`Icon` does not `<img>` data URIs yet; `iconColor` has no ray item-icon field; emoji icons,
+`DetailTree.imageUri` / `UiPane.previewImageUri` have no counterpart; `DetailTree.mediaKeys` /
+`subtitle` dropped (media lands in M5b); action `primary` is carried as an extra field while the
+ray renderer treats `actions[0]` as primary positionally. Item icons otherwise map (lucide
+`iconName` → `icon://Name.png`, `iconUri` passthrough, grid `filter` → `searchBarAccessory`).
+**Harness exceptions** (the catalog pins live upstream `main`, so upstream drift reclassified two
+commands into compatible; both verified pre-existing on `archive/store-final`): `spotify-player/search`
+crashes with React 19's `use` in the React 18 shim worker (`react19-use`, the exact bug M5c
+fixes) and `chatgpt/ask-selected-image` needs the user's `OPENAI_API_KEY` (`env-required`, same
+family as auth-required).
+
 ### M2 — Store removed
 
 - Delete: `store.js`, `store-bundler.js`, `classifier.js`, store routes in `backend.js`/`index.js`,

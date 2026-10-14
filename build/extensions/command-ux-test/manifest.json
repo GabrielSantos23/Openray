@@ -1,0 +1,36 @@
+{
+  "id": "command-ux-test",
+  "name": "Command UX Test",
+  "version": "1.0.0",
+  "description": "Internal test extension for the FlowKey library: list, detail, grid, form, actions, capabilities. Hidden unless the dev-extensions flag is on.",
+  "icon": "🧪",
+  "commands": [
+    {
+      "id": "open",
+      "title": "Command UX Test",
+      "keywords": ["command", "ux", "test", "flowkey"],
+      "mode": "view",
+      "icon": "flask",
+      "iconColor": "#3B82F6"
+    }
+  ],
+  "nativeMethods": [
+    "http.fetch",
+    "clipboard.write",
+    "storage.*",
+    "shell.openUrl",
+    "hud.show",
+    "toast.show",
+    "alert.confirm"
+  ],
+  "httpHosts": ["api.github.com"],
+  "preferences": [
+    {
+      "name": "sampleText",
+      "type": "text",
+      "title": "Sample text",
+      "description": "Shown on the list page to prove preferences reach the extension",
+      "default": "from settings"
+    }
+  ]
+}

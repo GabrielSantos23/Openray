@@ -1,0 +1,23 @@
+{
+  "name": "__EXTENSION_ID__",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "flowkey build",
+    "dev": "flowkey dev",
+    "package": "flowkey package",
+    "validate": "flowkey validate",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flowkey-mini/cli": "^0.1.0",
+    "@flowkey-mini/native-sdk": "^0.1.0",
+    "@flowkey-mini/react-ui": "^0.1.0",
+    "react": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^5.6.0"
+  }
+}

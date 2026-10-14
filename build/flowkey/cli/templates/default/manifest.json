@@ -1,0 +1,19 @@
+{
+  "id": "__EXTENSION_ID__",
+  "name": "__EXTENSION_NAME__",
+  "version": "0.1.0",
+  "description": "__EXTENSION_DESCRIPTION__",
+  "icon": "🧩",
+  "commands": [
+    {
+      "id": "open",
+      "title": "__EXTENSION_NAME__",
+      "keywords": ["__EXTENSION_ID__"],
+      "mode": "view",
+      "icon": "puzzle",
+      "iconColor": "#3B82F6"
+    }
+  ],
+  "nativeMethods": ["http.fetch", "clipboard.write", "storage.*", "shell.openUrl", "hud.show"],
+  "httpHosts": ["api.github.com"]
+}

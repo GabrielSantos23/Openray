@@ -1,0 +1,13 @@
+{
+  "name": "flowkey-vendor",
+  "private": true,
+  "description": "Runtime deps for the @flowkey-mini worker (React 19 + reconciler 0.33)",
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-reconciler": "0.33.0",
+    "scheduler": "^0.27.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

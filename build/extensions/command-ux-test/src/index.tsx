@@ -1,549 +1,263 @@
-// Internal test extension for the command-UX work (docs/command-ux-spec.md). Hidden from the root
-// search unless `localStorage["raycast-mini:dev-extensions"] === "1"`.
+// Internal test extension for the FlowKey library. Hidden from the root search unless the
+// dev-extensions flag is on; never part of a shipped build.
 //
-// Exercises every item from the task:
-//   1. navigation stack  — list -> detail -> form pushes, pop / popToRoot, onPop
-//   2. forms             — every field kind, validation errors, submit-form with values
-//   3. alerts            — confirmAlert (default, destructive, text field) with results shown on a page
-//   4. toasts            — styles (already implemented; smoke check only)
-//   5. detail            — markdown (headings, code, table, image) + metadata (label/link/tags/separator)
-//   6. grid              — sections with per-section columns/aspect/fit/inset, empty view with actions
-//   7. list              — accessories, sections, empty view with actions, dropdown, detail pane, pagination
+// Exercises the FlowKey surface end to end through `defineReactExtension`:
+//   list (sections, accessories, keywords, empty view, filter dropdown, item detail pane)
+//   detail (markdown + metadata fields)   grid (sections + columns)
+//   form (textfield/password/textarea/checkbox/dropdown/datepicker/separator, onSubmit)
+//   actions (clipboard, storage round trip, toast, hud, alert.confirm, shell.openUrl, http.fetch)
 
-import { Action, ActionPanel, Alert, closeMainWindow, confirmAlert, Detail, Form, Grid, Icon, List, showToast, Toast, useNavigation } from "@raycast/api";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  Action,
+  ActionPanel,
+  Detail,
+  Form,
+  Grid,
+  List,
+  defineReactExtension,
+  type CommandProps,
+} from "@flowkey-mini/react-ui";
+import manifest from "../manifest.json";
+
+type Page =
+  | { name: "list" }
+  | { name: "detail" }
+  | { name: "grid" }
+  | { name: "form" }
+  | { name: "form-done"; values: Record<string, unknown> };
 
 const DETAIL_MARKDOWN = [
   "# Detail Rendering",
   "",
   "This page exercises **markdown** with *inline formatting*, `inline code` and a [link](https://example.com).",
   "",
-  "## Code block",
+  "## Metadata fields",
   "",
-  "```ts",
-  "export function greet(name: string): string {",
-  "  return `Hello, ${name}!`;",
-  "}",
-  "```",
-  "",
-  "## Table",
-  "",
-  "| Kind | Style | Shown as |",
-  "| --- | --- | --- |",
-  "| Label | secondary | key/value row |",
-  "| TagList | colored pill | tag row |",
-  "| Link | arrow | external |",
-  "",
-  "> A block quote with secondary text.",
-  "",
-  "- unordered item one",
-  "- unordered item two",
-  "1. ordered item one",
-  "2. ordered item two",
-  "",
-  "![Inline image](data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22160%22%20height%3D%2260%22%3E%3Crect%20width%3D%22160%22%20height%3D%2260%22%20rx%3D%228%22%20fill%3D%22%231e1e2e%22%2F%3E%3Ctext%20x%3D%2280%22%20y%3D%2236%22%20fill%3D%22%2359d499%22%20font-family%3D%22monospace%22%20font-size%3D%2214%22%20text-anchor%3D%22middle%22%3Eimage%20ok%3C%2Ftext%3E%3C%2Fsvg%3E)",
-  "",
-  "---",
-  "",
-  "Paragraph after the rule.",
+  "Rendered from the `Detail.Metadata.Field` children below: a label, a link, tags and a separator.",
 ].join("\n");
 
-const FORM_FIELDS_MARKDOWN = (values: Record<string, unknown>) => {
-  const rows = Object.entries(values)
-    .map(([key, value]) => `| ${key} | \`${JSON.stringify(value)}\` |`)
-    .join("\n");
-  return ["# Submitted values", "", "| Field | Value |", "| --- | --- |", rows].join("\n");
-};
+function ListPage({ props, go }: { props: CommandProps; go: (page: Page) => void }) {
+  const [storageEcho, setStorageEcho] = useState<string>("(not read yet)");
+  const [stars, setStars] = useState<string>("…");
 
-// ---------------------------------------------------------------- Navigation flow page 1
+  useEffect(() => {
+    let cancelled = false;
+    props.capabilities.storage
+      .set("probe", "round-trip")
+      .then(() => props.capabilities.storage.get<string>("probe"))
+      .then((value) => {
+        if (!cancelled) setStorageEcho(value ?? "(null)");
+      })
+      .catch(() => {
+        if (!cancelled) setStorageEcho("(storage failed)");
+      });
+    props.capabilities.http
+      .fetchJson<{ stargazers_count: number }>("https://api.github.com/repos/facebook/react")
+      .then((data) => {
+        if (!cancelled) setStars(`react stars: ${data.stargazers_count}`);
+      })
+      .catch(() => {
+        if (!cancelled) setStars("http failed");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.capabilities]);
 
-function FlowDetailPage() {
-  const navigation = useNavigation();
   return (
-    <Detail
-      navigationTitle="Flow Detail"
-      markdown={DETAIL_MARKDOWN}
-      actions={
-        <ActionPanel>
-          <Action.Push
-            title="Open Form"
-            icon={Icon.Plus}
-            shortcut={{ modifiers: ["ctrl"], key: "enter" }}
-            target={<FlowFormPage />}
-          />
-          <Action title="Pop This Page" onAction={() => navigation.pop()} />
-          <Action title="Pop To Root" onAction={() => navigation.pop()} />
-        </ActionPanel>
-      }
-      metadata={
-        <Detail.Metadata>
-          <Detail.Metadata.Label title="Status" text="Flowing" />
-          <Detail.Metadata.Link title="Spec" text="command-ux-spec.md" target="https://example.com/spec" />
-          <Detail.Metadata.TagList title="Tags">
-            <Detail.Metadata.TagList.Item text="alpha" color="#59d499" />
-            <Detail.Metadata.TagList.Item text="beta" color="#ff6363" />
-          </Detail.Metadata.TagList>
-          <Detail.Metadata.Separator />
-          <Detail.Metadata.Label title="Countdown" text={Date.now() % 1000 === 0 ? "now" : "later"} />
-        </Detail.Metadata>
-      }
-    />
-  );
-}
-
-// ---------------------------------------------------------------- Navigation flow page 2: form
-
-function FlowFormPage() {
-  const navigation = useNavigation();
-  const [name, setName] = useState("");
-  const [nickname, setNickname] = useState("");
-  const nameError = name.trim() === "" ? "Required" : name.length > 20 ? "Too long (max 20)" : undefined;
-  return (
-    <Form
-      navigationTitle="Flow Form"
-      enableDrafts
-      actions={
-        <ActionPanel>
-          <Action.SubmitForm
-            title="Submit"
-            icon={Icon.Checkmark}
-            onSubmit={(values) => {
-              navigation.push(<SubmittedPage values={values} />);
-            }}
-          />
-          <Action
-            title="Pop Back"
-            shortcut={{ modifiers: ["ctrl"], key: "[" }}
-            onAction={() => navigation.pop()}
-          />
-        </ActionPanel>
-      }
+    <List
+      searchBarPlaceholder="Filter the test list…"
+      filter={[{ label: "All", value: "all" }, { label: "Pages", value: "pages" }]}
     >
-      <Form.Description text="Every field kind, with extension-side validation (the error prop)." />
-      <Form.TextField id="name" title="Name" placeholder="Required, max 20 chars" value={name} onChange={setName} error={nameError} />
-      <Form.PasswordField id="secret" title="Password" placeholder="hunter2" defaultValue="s3cret" />
-      <Form.TextArea id="notes" title="Notes" placeholder="Multiline text" defaultValue={"line one\nline two"} />
-      <Form.Checkbox id="agree" label="I agree to the (imaginary) terms" defaultValue={false} />
-      <Form.Dropdown id="tier" title="Tier" defaultValue="pro">
-        <Form.Dropdown.Item value="free" title="Free" />
-        <Form.Dropdown.Item value="pro" title="Pro" />
-        <Form.Dropdown.Section title="Enterprise">
-          <Form.Dropdown.Item value="team" title="Team" />
-          <Form.Dropdown.Item value="enterprise" title="Enterprise" />
-        </Form.Dropdown.Section>
-      </Form.Dropdown>
-      <Form.TagPicker id="tags" title="Tags" defaultValue={["rust"]}>
-        <Form.TagPicker.Item title="Rust" value="rust" icon={Icon.Bolt} />
-        <Form.TagPicker.Item title="TypeScript" value="typescript" icon={Icon.Code} />
-        <Form.TagPicker.Item title="Swift" value="swift" icon={Icon.Star} />
-      </Form.TagPicker>
-      <Form.DatePicker id="when" title="When" type="datetime" defaultValue={new Date("2026-10-10T12:00:00")} />
-      <Form.Separator />
-      <Form.TextField id="nickname" title="Nickname" value={nickname} onChange={setNickname} info="Optional field with an info hint" />
-    </Form>
-  );
-}
-
-function SubmittedPage({ values }: { values: Record<string, unknown> }) {
-  const navigation = useNavigation();
-  return (
-    <Detail
-      navigationTitle="Submitted"
-      markdown={FORM_FIELDS_MARKDOWN(values)}
-      actions={
-        <ActionPanel>
-          <Action title="Pop To Root" onAction={() => navigation.pop()} />
-        </ActionPanel>
-      }
-    />
-  );
-}
-
-// ---------------------------------------------------------------- Alerts
-
-async function runSimpleAlert(pushResult: (result: string) => void) {
-  const confirmed = await confirmAlert({
-    title: "Continue the flow?",
-    message: "The primary action resolves confirmAlert to true.",
-  });
-  pushResult(`simple alert -> ${confirmed ? "confirmed (true)" : "dismissed (false)"}`);
-}
-
-async function runDestructiveAlert(pushResult: (result: string) => void) {
-  const confirmed = await confirmAlert({
-    title: "Delete everything?",
-    message: "Destructive style renders the primary button red.",
-    primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
-    dismissAction: { title: "Keep", style: Alert.ActionStyle.Cancel },
-  });
-  pushResult(`destructive alert -> ${confirmed ? "deleted (true)" : "kept (false)"}`);
-}
-
-async function runTextFieldAlert(pushResult: (result: string) => void) {
-  let typed = "";
-  const confirmed = await confirmAlert({
-    title: "Type the repo name",
-    message: "The primary button stays disabled until the validator passes.",
-    primaryAction: {
-      title: "Confirm",
-      onAction: () => undefined,
-    },
-  });
-  void typed;
-  pushResult(`text alert -> ${confirmed ? "confirmed" : "dismissed"}`);
-}
-
-function AlertsPage() {
-  const navigation = useNavigation();
-  const [log, setLog] = useState<string[]>([]);
-  const pushResult = (result: string) => setLog((previous) => [...previous, result]);
-  return (
-    <Detail
-      navigationTitle="Alerts"
-      markdown={["# Alerts", "", log.length ? log.map((entry) => `- ${entry}`).join("\n") : "_Run an alert from the actions._"].join("\n")}
-      actions={
-        <ActionPanel>
-          <Action title="Simple Alert" onAction={() => void runSimpleAlert(pushResult)} />
-          <Action
-            title="Destructive Alert"
-            style={Action.Style.Destructive}
-            onAction={() => void runDestructiveAlert(pushResult)}
-          />
-          <Action title="Alert With Text Field" onAction={() => void runTextFieldAlert(pushResult)} />
-          <Action title="Pop Back" onAction={() => navigation.pop()} />
-        </ActionPanel>
-      }
-    />
-  );
-}
-
-// ---------------------------------------------------------------- Toasts (smoke check)
-
-function ToastsPage() {
-  const navigation = useNavigation();
-  return (
-    <List navigationTitle="Toasts" searchBarPlaceholder="Filter…">
-      <List.Item
-        id="success"
-        title="Success toast"
-        actions={
-          <ActionPanel>
-            <Action title="Show" onAction={() => void showToast({ title: "Saved", message: "style SUCCESS" })} />
-          </ActionPanel>
-        }
-      />
-      <List.Item
-        id="failure"
-        title="Failure toast"
-        actions={
-          <ActionPanel>
-            <Action
-              title="Show"
-              onAction={() =>
-                void showToast({ style: Toast.Style.Failure, title: "Failed", message: "style FAILURE" })
-              }
-            />
-          </ActionPanel>
-        }
-      />
-      <List.Item
-        id="animated"
-        title="Animated toast"
-        subtitle="stays until hidden"
-        actions={
-          <ActionPanel>
-            <Action
-              title="Show"
-              onAction={async () => {
-                const toast = await showToast({ style: Toast.Style.Animated, title: "Working…" });
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-                toast.style = Toast.Style.Success;
-                toast.title = "Done";
-                await new Promise((resolve) => setTimeout(resolve, 1200));
-                await toast.hide();
-              }}
-            />
-          </ActionPanel>
-        }
-      />
-      <List.Item
-        id="actions"
-        title="Toast with actions"
-        actions={
-          <ActionPanel>
-            <Action
-              title="Show"
-              onAction={() =>
-                void showToast({
-                  title: "Deleted",
-                  message: "primary/secondary actions",
-                  primaryAction: { title: "Undo", shortcut: { modifiers: ["ctrl"], key: "enter" }, onAction: () => showToast({ title: "Undone" }) },
-                  secondaryAction: { title: "Report", onAction: () => showToast({ title: "Reported" }) },
-                })
-              }
-            />
-          </ActionPanel>
-        }
-      />
-      <List.Item
-        id="hidden-hud"
-        title="HUD toast (closes window)"
-        subtitle="toast fired while the launcher is hidden"
-        actions={
-          <ActionPanel>
-            <Action
-              title="Close and toast"
-              onAction={async () => {
-                await closeMainWindow();
-                await new Promise((resolve) => setTimeout(resolve, 250));
-                await showToast({ title: "Saved in background", message: "HUD while hidden" });
-              }}
-            />
-          </ActionPanel>
-        }
-      />
-      <List.Item
-        id="back"
-        title="Pop Back"
-        actions={<Action title="Pop" onAction={() => navigation.pop()} />}
-      />
+      <List.Section title="Pages (component state, not a navigation stack)">
+        <List.Item
+          id="page-detail"
+          title="Detail page"
+          subtitle="markdown + metadata fields"
+          actions={
+            <ActionPanel>
+              <Action title="Open detail" onAction={() => go({ name: "detail" })} />
+            </ActionPanel>
+          }
+        />
+        <List.Item
+          id="page-grid"
+          title="Grid page"
+          subtitle="sections and columns"
+          actions={
+            <ActionPanel>
+              <Action title="Open grid" onAction={() => go({ name: "grid" })} />
+            </ActionPanel>
+          }
+        />
+        <List.Item
+          id="page-form"
+          title="Form page"
+          subtitle="every field kind + submit values"
+          actions={
+            <ActionPanel>
+              <Action title="Open form" onAction={() => go({ name: "form" })} />
+            </ActionPanel>
+          }
+        />
+      </List.Section>
+      <List.Section title="Capabilities">
+        <List.Item
+          id="cap-clipboard"
+          title="Write clipboard"
+          subtitle={`preference: ${String(props.preferences.sampleText ?? "(unset)")}`}
+          accessories={[{ text: storageEcho, color: "success" }]}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Copy sample"
+                onAction={() => void props.capabilities.clipboard.write(`flowkey sample ${Date.now()}`)}
+              />
+              <Action title="Show toast" onAction={() => void props.capabilities.toast.show({ title: "FlowKey toast", style: "success" })} />
+              <Action title="Show HUD" onAction={() => void props.native.showHud({ title: "FlowKey HUD" })} />
+              <Action
+                title="Ask confirm"
+                onAction={async () => {
+                  const ok = await props.capabilities.alert.confirm({ title: "FlowKey confirm", message: "alert.confirm resolves backend-side" });
+                  await props.capabilities.toast.show({ title: ok ? "Confirmed" : "Dismissed", style: ok ? "success" : "failure" });
+                }}
+              />
+              <Action title="Open example.com" onAction={() => void props.capabilities.shell.openUrl("https://example.com")} />
+            </ActionPanel>
+          }
+        />
+        <List.Item
+          id="cap-http"
+          title="http.fetch (allowlisted host)"
+          subtitle={stars}
+          keywords={["http", "github", "fetch"]}
+          accessories={[{ text: "api.github.com", color: "secondary" }]}
+          actions={
+            <ActionPanel>
+              <Action title="Re-fetch" onAction={() => setStars("…")} />
+            </ActionPanel>
+          }
+        />
+      </List.Section>
+      <List.EmptyView title="Nothing matched" description="The shell filters items by title and keywords" />
     </List>
   );
 }
 
-// ---------------------------------------------------------------- Grid
-
-const GRID_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#ec4899", "#6b7280"];
-
-function GridPage() {
-  const navigation = useNavigation();
+function DetailPage({ go }: { props: CommandProps; go: (page: Page) => void }) {
   return (
-    <Grid
-      navigationTitle="Grid"
-      searchBarPlaceholder="Filter tiles…"
-      inset={Grid.Inset.Small}
-      aspectRatio="1"
-      fit={Grid.Fit.Contain}
+    <Detail
+      title="Detail Rendering"
+      markdown={DETAIL_MARKDOWN}
       actions={
         <ActionPanel>
-          <Action title="Pop Back" onAction={() => navigation.pop()} />
+          <Action title="Back to list" onAction={() => go({ name: "list" })} />
         </ActionPanel>
       }
     >
-      <Grid.Section title="Colors" columns={4} aspectRatio="1" inset={Grid.Inset.Small}>
-        {GRID_COLORS.map((color, index) => (
+      <Detail.Metadata>
+        <Detail.Metadata.Field label="Kind" value="Label" />
+        <Detail.Metadata.Field
+          label="FlowKey repo"
+          value="github.com/GabrielSantos23/flowkey-launcher"
+          href="https://github.com/GabrielSantos23/flowkey-launcher"
+        />
+        <Detail.Metadata.Field label="Kinds" kind="tags" tags={["text", "link", "tags", "separator"]} />
+        <Detail.Metadata.Field label="" kind="separator" />
+        <Detail.Metadata.Field label="After separator" value="ok" />
+      </Detail.Metadata>
+    </Detail>
+  );
+}
+
+function GridPage({ go }: { props: CommandProps; go: (page: Page) => void }) {
+  return (
+    <Grid columns={4} title="Grid Rendering">
+      <Grid.Section title="First section">
+        {["alpha", "beta", "gamma"].map((name) => (
           <Grid.Item
-            key={color}
-            id={`color-${color}`}
-            title={color}
-            subtitle={`tile ${index + 1}`}
-            keywords={[`color`, `tile`]}
+            key={name}
+            id={name}
+            title={name}
+            subtitle="grid item"
             actions={
               <ActionPanel>
-                <Action.CopyToClipboard title="Copy Color" content={color} />
+                <Action title="Back to list" onAction={() => go({ name: "list" })} />
               </ActionPanel>
             }
           />
         ))}
       </Grid.Section>
-      <Grid.Section title="Wide tiles" columns={2} aspectRatio="16/9" inset={Grid.Inset.Medium}>
-        {["wide-one", "wide-two"].map((tile) => (
-          <Grid.Item
-            key={tile}
-            id={tile}
-            title={tile}
-            subtitle="2 columns, 16:9"
-            actions={
-              <ActionPanel>
-                <Action title="Copy Name" content={tile} onAction={() => undefined} />
-              </ActionPanel>
-            }
-          />
-        ))}
+      <Grid.Section title="Second section">
+        <Grid.Item
+          id="back"
+          title="back"
+          actions={
+            <ActionPanel>
+              <Action title="Back to list" onAction={() => go({ name: "list" })} />
+            </ActionPanel>
+          }
+        />
       </Grid.Section>
-      <Grid.EmptyView title="No tiles match" description="The empty view is model-driven and can carry actions." />
     </Grid>
   );
 }
 
-// ---------------------------------------------------------------- List with everything
-
-const PAGE_SIZE = 12;
-
-function BigListPage({ depth = 0 }: { depth?: number }) {
-  const navigation = useNavigation();
-  const [page, setPage] = useState(1);
-  const [kind, setKind] = useState("all");
-  const total = 40;
-  const items = Array.from({ length: Math.min(page * PAGE_SIZE, total) }, (_, index) => ({
-    id: `item-${depth}-${index}`,
-    title: `Entry ${index + 1}`,
-    subtitle: kind === "all" ? `page ${page} · entry ${index + 1}` : `filtered by ${kind}`,
-  }));
+function FormPage({ go }: { props: CommandProps; go: (page: Page) => void }) {
   return (
-    <List
-      navigationTitle="Big List"
-      searchBarPlaceholder="Filter entries…"
-      isShowingDetail
-      throttle
-      pagination={{ pageSize: PAGE_SIZE, hasMore: page * PAGE_SIZE < total, onLoadMore: () => setPage((current) => current + 1) }}
-      searchBarAccessory={
-        <List.Dropdown tooltip="Filter by kind" defaultValue="all" onChange={setKind}>
-          <List.Dropdown.Item value="all" title="All kinds" />
-          <List.Dropdown.Item value="text" title="Text" />
-          <List.Dropdown.Item value="image" title="Image" />
-        </List.Dropdown>
-      }
-      actions={
-        <ActionPanel>
-          <Action title="Pop Back" onAction={() => navigation.pop()} />
-        </ActionPanel>
-      }
+    <Form
+      title="Form Rendering"
+      onSubmit={(values) => go({ name: "form-done", values })}
+      actions={<ActionPanel />}
     >
-      {items.map((entry, index) => (
-        <List.Item
-          key={entry.id}
-          id={entry.id}
-          title={entry.title}
-          subtitle={entry.subtitle}
-          icon={index % 2 === 0 ? Icon.Document : Icon.Text}
-          keywords={[`entry`, `${index}`]}
-          accessories={[
-            { text: `row ${index + 1}` },
-            { tag: "live", color: "#59d499" },
-            { date: Date.now() },
-          ]}
-          detail={
-            <List.Item.Detail
-              markdown={`# ${entry.title}\n\nSelected-row detail pane with **markdown** and metadata.`}
-              metadata={
-                <Detail.Metadata>
-                  <Detail.Metadata.Label title="Row" text={String(index + 1)} />
-                  <Detail.Metadata.Link title="Open" target="https://example.com" text="example.com" />
-                </Detail.Metadata>
-              }
-            />
-          }
-          actions={
-            <ActionPanel>
-              <Action title="Push Another List" onAction={() => navigation.push(<BigListPage depth={depth + 1} />)} />
-              <Action title="Pop Back" onAction={() => navigation.pop()} />
-            </ActionPanel>
-          }
-        />
-      ))}
-      <List.EmptyView title="Nothing matches" description="Try clearing the filter." />
-    </List>
-  );
-}
-
-// ---------------------------------------------------------------- Root
-
-export default function Command() {
-  const navigation = useNavigation();
-  const [flowLog, setFlowLog] = useState<string[]>([]);
-  return (
-    <List
-      navigationTitle="Command UX Tests"
-      searchBarPlaceholder="Filter tests…"
-      filtering
-      actions={
-        <ActionPanel>
-          <Action
-            title="Reset Flow Log"
-            onAction={() => setFlowLog([])}
-          />
-        </ActionPanel>
-      }
-    >
-      <List.Section title="Navigation stack" subtitle="push / pop / popToRoot, search text restored">
-        <List.Item
-          id="flow-detail"
-          title="Multi-page flow"
-          subtitle="list -> detail -> form -> submitted"
-          icon={Icon.ArrowRight}
-          actions={
-            <ActionPanel>
-              <Action.Push title="Open Flow" target={<FlowDetailPage />} onPop={() => setFlowLog((previous) => [...previous, "flow page popped"])} />
-            </ActionPanel>
-          }
-        />
-        <List.Item
-          id="big-list"
-          title="Nested lists + pagination"
-          subtitle="push the same page again, onLoadMore pages in"
-          icon={Icon.List}
-          actions={
-            <ActionPanel>
-              <Action.Push title="Open List" target={<BigListPage />} />
-            </ActionPanel>
-          }
-        />
-      </List.Section>
-
-      <List.Section title="Dialogs">
-        <List.Item
-          id="alerts"
-          title="Alerts"
-          subtitle="confirmAlert: simple, destructive, text field"
-          icon={Icon.Warning}
-          actions={
-            <ActionPanel>
-              <Action.Push title="Open Alerts" target={<AlertsPage />} />
-              <Action title="Quick Confirm" onAction={() => void runSimpleAlert((result) => setFlowLog((previous) => [...previous, result]))} />
-            </ActionPanel>
-          }
-        />
-        <List.Item
-          id="toasts"
-          title="Toasts"
-          subtitle="styles + update + actions (smoke check)"
-          icon={Icon.Eye}
-          actions={
-            <ActionPanel>
-              <Action.Push title="Open Toasts" target={<ToastsPage />} />
-            </ActionPanel>
-          }
-        />
-      </List.Section>
-
-      <List.Section title="Views">
-        <List.Item
-          id="grid"
-          title="Grid with sections"
-          subtitle="per-section columns/aspect/inset, 2D navigation"
-          icon={Icon.Grid}
-          actions={
-            <ActionPanel>
-              <Action.Push title="Open Grid" target={<GridPage />} />
-            </ActionPanel>
-          }
-        />
-        <List.Item
-          id="detail"
-          title="Detail with metadata"
-          subtitle="markdown: headings, code, table, image"
-          icon={Icon.Document}
-          actions={
-            <ActionPanel>
-              <Action.Push title="Open Detail" target={<FlowDetailPage />} />
-            </ActionPanel>
-          }
-        />
-      </List.Section>
-
-      {flowLog.length > 0 ? (
-        <List.Section title="Event log" subtitle="onPop / alert results">
-          {flowLog.map((entry, index) => (
-            <List.Item key={`${index}-${entry}`} id={`log-${index}`} title={entry} icon={Icon.Clock} />
-          ))}
-        </List.Section>
-      ) : null}
-
-      <List.EmptyView
-        title="No tests match"
-        description="Clear the filter to see everything."
+      <Form.TextField id="title" label="Title" placeholder="type here" required />
+      <Form.PasswordField id="secret" label="Secret" />
+      <Form.TextArea id="notes" label="Notes" />
+      <Form.Checkbox id="enable" label="Enable the thing" default />
+      <Form.Dropdown
+        id="flavor"
+        label="Flavor"
+        default="vanilla"
+        options={[{ value: "vanilla", title: "Vanilla" }, { value: "chocolate", title: "Chocolate" }]}
       />
-    </List>
+      <Form.DatePicker id="when" label="When" />
+      <Form.Separator />
+      <Form.Description label="Submit sends the values through onSubmit" />
+    </Form>
   );
 }
+
+export default defineReactExtension({
+  manifest,
+  component: (props: CommandProps) => {
+    const [page, setPage] = useState<Page>({ name: "list" });
+    const go = (next: Page) => setPage(next);
+    // Pages render as ELEMENTS (not function calls): each page mounts its own fiber, so the
+    // per-page hook counts never collide in one component position.
+    switch (page.name) {
+      case "detail":
+        return <DetailPage props={props} go={go} />;
+      case "grid":
+        return <GridPage props={props} go={go} />;
+      case "form":
+        return <FormPage props={props} go={go} />;
+      case "form-done":
+        return (
+          <Detail
+            title="Submitted values"
+            markdown={Object.entries(page.values)
+              .map(([key, value]) => `- **${key}**: \`${JSON.stringify(value)}\``)
+              .join("\n")}
+            actions={
+              <ActionPanel>
+                <Action title="Back to list" onAction={() => go({ name: "list" })} />
+              </ActionPanel>
+            }
+          />
+        );
+      default:
+        return <ListPage props={props} go={go} />;
+    }
+  },
+});
