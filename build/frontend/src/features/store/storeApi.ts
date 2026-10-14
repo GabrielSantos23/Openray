@@ -53,14 +53,22 @@ export function startStoreSync(): Promise<{ started: boolean }> {
   return ipc.backend("store.sync", {}) as Promise<{ started: boolean }>;
 }
 
-export function fetchStoreList(query: string, category: string | null = null): Promise<{
+export function fetchStoreList(
+  query: string,
+  offset = 0,
+  category: string | null = null,
+): Promise<{
   syncedAt: string | null;
   categories: string[];
+  total: number;
+  hasMore: boolean;
   extensions: StoreEntry[];
 }> {
-  return ipc.backend("store.list", { query, category }) as Promise<{
+  return ipc.backend("store.list", { query, offset, category }) as Promise<{
     syncedAt: string | null;
     categories: string[];
+    total: number;
+    hasMore: boolean;
     extensions: StoreEntry[];
   }>;
 }

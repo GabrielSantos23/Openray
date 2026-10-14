@@ -192,8 +192,12 @@ function liveExtensionIds(extensionsRoot) {
   return ids;
 }
 
-/** The merged catalog: uploaded entries first, then the GitHub index, with install state applied. */
-function listStoreExtensions({ storeRoot, extensionsRoot, query = "", category = null }) {
+/**
+ * The merged catalog: uploaded entries first, then the GitHub index, with install state applied.
+ * Paginated — the full index is well over a megabyte and a pipe message that size never reached
+ * the renderer; slices of ~100 keep each response small and the list loads more on scroll.
+ */
+function listStoreExtensions({ storeRoot, extensionsRoot, query = "", category = null, offset = 0, limit = 100 }) {
   const index = readIndex(storeRoot);
   const live = liveExtensionIds(extensionsRoot);
   const state = readState(storeRoot);
@@ -212,10 +216,15 @@ function listStoreExtensions({ storeRoot, extensionsRoot, query = "", category =
       (entry.author ?? "").toLowerCase().includes(needle)
     );
   });
+  const start = Math.max(0, Number(offset) || 0);
+  const size = Math.min(Math.max(1, Number(limit) || 100), 500);
   return {
     syncedAt: index?.syncedAt ?? null,
     categories: [...new Set(entries.flatMap((entry) => entry.categories ?? []))].sort(),
-    extensions: filtered.map((entry) => ({
+    total: filtered.length,
+    offset: start,
+    hasMore: start + size < filtered.length,
+    extensions: filtered.slice(start, start + size).map((entry) => ({
       ...entry,
       installed: Boolean(state.installed[`${entry.source}:${entry.name}`]) || live.has(entry.name),
     })),
@@ -485,6 +494,8 @@ function createExtensionStore({ dataRoot, extensionsRoot, fetchImpl = fetch } = 
         extensionsRoot,
         query: String(params?.query ?? ""),
         category: params?.category ?? null,
+        offset: Number(params?.offset) || 0,
+        limit: Number(params?.limit) || 100,
       });
     },
     detail(params) {

@@ -146,6 +146,15 @@ test(
     assert.deepEqual(filtered.extensions.map((entry) => entry.name), ["beta"]);
     const byCategory = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), category: "Media" });
     assert.deepEqual(byCategory.extensions.map((entry) => entry.name), ["alpha"]);
+
+    // The full index is over a megabyte in production — the list paginates.
+    const page = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "", offset: 0, limit: 1 });
+    assert.equal(page.total, 2);
+    assert.equal(page.extensions.length, 1);
+    assert.equal(page.hasMore, true);
+    const last = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "", offset: 1, limit: 1 });
+    assert.equal(last.hasMore, false);
+    assert.equal(last.extensions.length, 1);
   }),
 );
 

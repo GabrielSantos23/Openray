@@ -145,17 +145,52 @@ export function StoreView({
   const [installing, setInstalling] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [listIndex, setListIndex] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const pageRef = useRef(page);
   pageRef.current = page;
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const refreshList = useCallback(async (query: string) => {
     try {
-      const payload = await fetchStoreList(query);
+      const payload = await fetchStoreList(query, 0);
       setEntries(payload.extensions);
+      setHasMore(payload.hasMore);
+      setListIndex(0);
     } catch {
       setEntries([]);
+      setHasMore(false);
     }
   }, []);
+
+  // Scroll sentinel: the catalog is ~3.4k entries — render page by page as the user scrolls so
+  // neither the DOM nor the icon fetches explode.
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || pageRef.current.kind !== "list") return;
+    setLoadingMore(true);
+    try {
+      const payload = await fetchStoreList(searchText, entries.length);
+      setEntries((current) => [...current, ...payload.extensions]);
+      setHasMore(payload.hasMore);
+    } catch {
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, searchText, entries.length]);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || page.kind !== "list") return;
+    const observer = new IntersectionObserver(
+      (observerEntries) => {
+        if (observerEntries.some((observerEntry) => observerEntry.isIntersecting)) void loadMore();
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [page.kind, loadMore]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -275,6 +310,7 @@ export function StoreView({
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setListIndex((index) => Math.min(index + 1, Math.max(entries.length - 1, 0)));
+      if (listIndex >= entries.length - 5) void loadMore();
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setListIndex((index) => Math.max(index - 1, 0));
@@ -382,6 +418,11 @@ export function StoreView({
             ))}
           </ul>
         )}
+        {page.kind === "list" ? (
+          <div ref={sentinelRef} className="store-list__sentinel">
+            {loadingMore ? "Loading more…" : ""}
+          </div>
+        ) : null}
       </div>
     );
   } else if (page.kind === "detail") {
