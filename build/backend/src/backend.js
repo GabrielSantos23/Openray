@@ -63,6 +63,7 @@ function createBackend(options) {
   let gamesHandlers = {};
   let taskbarHandlers = {};
   let notesHandlers = {};
+  let storeHandlers = {};
   // Set by index.js to a launch gate; loadCommand refuses commands the gate rejects.
   let launchGate = null;
 
@@ -842,6 +843,33 @@ function createBackend(options) {
       }
       return { icon: null, iconName };
     },
+
+    // FlowKey extension preferences persist BACKEND-side (`<dataRoot>/flowkey-preferences.json`),
+    // not in localStorage: the Settings window is a separate WebView2 profile, so values typed
+    // there never reached the main window that launches extensions (the Spotify client id bug).
+    async getFlowkeyPreferences(params) {
+      try {
+        const all = JSON.parse(fs.readFileSync(path.join(dataRoot, "flowkey-preferences.json"), "utf-8"));
+        return { values: all[String(params?.uuid ?? "")] ?? {} };
+      } catch {
+        return { values: {} };
+      }
+    },
+    async setFlowkeyPreference(params) {
+      const uuid = String(params?.uuid ?? "");
+      const name = String(params?.name ?? "");
+      if (!uuid || !name) throw new Error("setFlowkeyPreference: uuid and name are required");
+      let all = {};
+      try {
+        all = JSON.parse(fs.readFileSync(path.join(dataRoot, "flowkey-preferences.json"), "utf-8"));
+      } catch {
+        /* first write */
+      }
+      all[uuid] = { ...(all[uuid] ?? {}), [name]: params?.value ?? null };
+      fs.mkdirSync(dataRoot, { recursive: true });
+      fs.writeFileSync(path.join(dataRoot, "flowkey-preferences.json"), JSON.stringify(all, null, 2));
+      return { values: all[uuid] };
+    },
   };
 
   // ---------------------------------------------------------------------------------------------
@@ -1050,9 +1078,12 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
-      // Store (`store.*`): removed with the Store (FlowKey migration M2). Typed error, never a
-      // silent no-op, so stale callers (old frontend bundle, saved hotkeys) surface honestly.
+      // Store (`store.*`): the new extension Store (GitHub catalog + uploads) first; any verb it
+      // does not implement still fails with the typed removed-store error so stale callers
+      // (old frontend bundle, saved hotkeys) surface honestly.
       if (method.startsWith("store.")) {
+        const handler = storeHandlers[method.slice("store.".length)];
+        if (handler) return handler(data ?? {});
         throw new Error(`${method}: the Raycast Store was removed; extensions are installed from the FlowKey library`);
       }
 
@@ -1130,6 +1161,10 @@ function createBackend(options) {
     /** Install the window saved-state handler table. */
     registerWindowStateHandler(handlers) {
       windowStateHandlers = handlers ?? {};
+    },
+    /** Install the extension-store handler table (`store.sync/list/detail/…`; the new Store). */
+    registerStoreHandler(handlers) {
+      storeHandlers = handlers ?? {};
     },
     /** Install the focus session handler table. */
     registerFocusHandler(handlers) {

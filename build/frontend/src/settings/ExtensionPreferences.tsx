@@ -15,9 +15,51 @@ import {
   writeCommandAlias,
   writeCommandHotkey,
 } from "../commandConfig";
-import { readFlowkeyPreferences, writeFlowkeyPreference } from "../features/extensions/preferences";
+import { readFlowkeyPreferences, saveFlowkeyPreference, writeFlowkeyPreference } from "../features/extensions/preferences";
 import type { ExtensionPreference, ExtensionSummary } from "../app/entries";
 import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
+
+/** One text-like preference row: the input drafts locally, Save persists through the backend. */
+function TextPreferenceRow({
+  uuid,
+  preference,
+  stored,
+  onSaved,
+}: {
+  uuid: string;
+  preference: ExtensionPreference;
+  stored: unknown;
+  onSaved: (uuid: string, name: string, value: unknown) => void;
+}) {
+  const [draft, setDraft] = useState<string>(() => String(stored ?? preference.default ?? ""));
+  const [saved, setSaved] = useState(false);
+  const save = async () => {
+    await saveFlowkeyPreference(uuid, preference.name, draft);
+    onSaved(uuid, preference.name, draft);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+  return (
+    <div className="settings-extensions__row" key={preference.name}>
+      <span className="settings-extensions__rowTitle">{preference.title}</span>
+      <span className="settings-extensions__prefInput">
+        <input
+          className="settings-extensions__input"
+          type={preference.type === "password" ? "password" : "text"}
+          value={draft}
+          placeholder={preference.placeholder ?? ""}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void save();
+          }}
+        />
+        <button type="button" className="settings-extensions__save" onClick={() => void save()}>
+          {saved ? "Saved ✓" : "Save"}
+        </button>
+      </span>
+    </div>
+  );
+}
 
 export function ExtensionPreferences() {
   const [extensions, setExtensions] = useState<ExtensionSummary[]>([]);
@@ -32,13 +74,21 @@ export function ExtensionPreferences() {
       };
       const loaded = payload.extensions ?? [];
       setExtensions(loaded);
-      setPreferenceValues((current) => {
-        const next = { ...current };
-        for (const extension of loaded) {
-          if (!(extension.uuid in next)) next[extension.uuid] = readFlowkeyPreferences(extension.uuid);
+      // Values are authoritative in the backend file (the mirror may be stale across windows).
+      const next: Record<string, Record<string, unknown>> = {};
+      for (const extension of loaded) {
+        next[extension.uuid] = readFlowkeyPreferences(extension.uuid);
+      }
+      setPreferenceValues((current) => ({ ...next, ...current }));
+      for (const extension of loaded) {
+        try {
+          const { fetchFlowkeyPreferences } = await import("../features/extensions/preferences");
+          const values = await fetchFlowkeyPreferences(extension.uuid);
+          setPreferenceValues((current) => ({ ...current, [extension.uuid]: { ...current[extension.uuid], ...values } }));
+        } catch {
+          /* keep the mirror */
         }
-        return next;
-      });
+      }
     } catch {
       setExtensions([]);
     }
@@ -59,10 +109,6 @@ export function ExtensionPreferences() {
   const setHotkey = async (key: string, hotkey: string | null) => {
     setHotkeys(writeCommandHotkey(key, hotkey));
     await registerCommandHotkeyWithHost(key, hotkey);
-  };
-
-  const setPreference = (uuid: string, name: string, value: unknown) => {
-    setPreferenceValues((current) => ({ ...current, [uuid]: writeFlowkeyPreference(uuid, name, value) }));
   };
 
   if (extensions.length === 0) {
@@ -117,20 +163,29 @@ export function ExtensionPreferences() {
                 );
               })}
 
-              {preferences.map((preference) => (
-                <div className="settings-extensions__row" key={preference.name}>
-                  <span className="settings-extensions__rowTitle">{preference.title}</span>
-                  {preference.type === "checkbox" ? (
+              {preferences.map((preference) =>
+                preference.type === "checkbox" ? (
+                  <div className="settings-extensions__row" key={preference.name}>
+                    <span className="settings-extensions__rowTitle">{preference.title}</span>
                     <Switch
                       label={preference.title}
                       checked={Boolean(values[preference.name] ?? preference.default)}
-                      onChange={(checked) => setPreference(extension.uuid, preference.name, checked)}
+                      onChange={(checked) => void writeFlowkeyPreference(extension.uuid, preference.name, checked).then((next) => {
+                        setPreferenceValues((current) => ({ ...current, [extension.uuid]: next }));
+                      })}
                     />
-                  ) : preference.type === "dropdown" || preference.type === "appPicker" ? (
+                  </div>
+                ) : preference.type === "dropdown" || preference.type === "appPicker" ? (
+                  <div className="settings-extensions__row" key={preference.name}>
+                    <span className="settings-extensions__rowTitle">{preference.title}</span>
                     <select
                       className="settings-extensions__input"
                       value={String(values[preference.name] ?? preference.default ?? "")}
-                      onChange={(event) => setPreference(extension.uuid, preference.name, event.target.value)}
+                      onChange={(event) =>
+                        void writeFlowkeyPreference(extension.uuid, preference.name, event.target.value).then((next) => {
+                          setPreferenceValues((current) => ({ ...current, [extension.uuid]: next }));
+                        })
+                      }
                     >
                       {((preference.options ?? preference.data ?? [])).map((option) => (
                         <option key={String(option.value ?? option.title)} value={String(option.value ?? option.title)}>
@@ -138,17 +193,19 @@ export function ExtensionPreferences() {
                         </option>
                       ))}
                     </select>
-                  ) : (
-                    <input
-                      className="settings-extensions__input"
-                      type={preference.type === "password" ? "password" : "text"}
-                      value={String(values[preference.name] ?? preference.default ?? "")}
-                      placeholder={preference.placeholder ?? ""}
-                      onChange={(event) => setPreference(extension.uuid, preference.name, event.target.value)}
-                    />
-                  )}
-                </div>
-              ))}
+                  </div>
+                ) : (
+                  <TextPreferenceRow
+                    key={preference.name}
+                    uuid={extension.uuid}
+                    preference={preference}
+                    stored={values[preference.name] ?? preference.default}
+                    onSaved={(uuid, name, value) =>
+                      setPreferenceValues((current) => ({ ...current, [uuid]: { ...(current[uuid] ?? {}), [name]: value } }))
+                    }
+                  />
+                ),
+              )}
             </div>
           </section>
         );

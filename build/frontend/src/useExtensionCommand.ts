@@ -278,10 +278,20 @@ export function useExtensionCommand(
 
     (async () => {
       try {
+        // Preference values are authoritative in the backend file (the Settings window is a
+        // separate WebView2 profile); the passed-in `preferences` are only the localStorage
+        // mirror. Refresh before loadCommand so every launch runs with the saved values.
+        let effectivePreferences = preferences;
+        try {
+          const { fetchFlowkeyPreferences } = await import("./features/extensions/preferences");
+          effectivePreferences = { ...preferences, ...(await fetchFlowkeyPreferences(extension.uuid)) };
+        } catch {
+          /* offline backend: launch with the mirror */
+        }
         const loaded = (await ipc.backend.extensionHost.loadCommand({
           extension,
           command: { ...command, type: "command" },
-          preferences,
+          preferences: effectivePreferences,
           props,
           debug,
           origin: windowIdentifier,

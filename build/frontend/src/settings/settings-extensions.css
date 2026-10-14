@@ -60,3 +60,28 @@
   align-items: center;
   gap: 8px;
 }
+
+/* Text-like preference rows: draft input + explicit Save (backend-persisted). */
+.settings-extensions__prefInput {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6, 6px);
+  flex: 1;
+  max-width: 420px;
+}
+
+.settings-extensions__save {
+  flex: none;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--fg-10);
+  color: var(--color-text-primary, var(--fg));
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.settings-extensions__save:hover {
+  background: var(--fg-20);
+}

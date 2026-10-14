@@ -38,6 +38,7 @@ const { createFocus } = require("./focus");
 const { createGames } = require("./games");
 const { createTaskbar } = require("./taskbar");
 const { createNotes } = require("./notes");
+const { createExtensionStore } = require("./store");
 
 const config = {
   // Must match host/NamedPipeBridge.cs
@@ -167,6 +168,15 @@ const notes = createNotes({
 });
 backend.registerNotesHandler(notes.handlers);
 notes.bootstrap();
+
+// The extension Store (`store.*`): the GitHub catalog (raycast/extensions) plus locally published
+// FlowKey extensions, living under `<dataRoot>/store/`. `store.sync` downloads the catalog in the
+// background; installs of uploaded extensions land in the live extensions root.
+const extensionStore = createExtensionStore({
+  dataRoot: process.env.RAYCAST_MINI_DATA_DIR ?? path.dirname(config.extensionsRoot),
+  extensionsRoot: config.extensionsRoot,
+});
+backend.registerStoreHandler(extensionStore.handlers);
 
 // FlowKey migration M2: the Store is gone. Any Store artifacts still on disk (store.sqlite,
 // Store-installed extension folders, the stale extensions-root node_modules) move into the

@@ -29,6 +29,7 @@ import { WindowManagementArgsView } from "../features/windowManagement/WindowMan
 import { FocusCategoriesSession, FocusFormView, FocusImportView } from "../features/focus/FocusViews";
 import { GameLauncherView } from "../features/games/GameLauncherView";
 import { SearchNotesView } from "../features/notes/SearchNotesView";
+import { StoreView } from "../features/store/StoreView";
 import { noteDeeplink, openNotesWindow } from "../notes";
 import { LoadingBar } from "../LoadingBar";
 import type { ApplicationCommand } from "../applications";
@@ -234,6 +235,18 @@ export function CommandSession({
   }
 
   if (entry.kind === "internal") {
+    if (entry.area === "store") {
+      // The extension Store: browse the synced GitHub catalog + uploads; install lands in the
+      // live extensions root.
+      return (
+        <StoreView
+          searchText={searchText}
+          onSearchTextChange={setSearchText}
+          showToast={showToast}
+          onBack={onBack}
+        />
+      );
+    }
     if (entry.area === "quicklinks") {
       // The InternalCommandEntry type is a product of area × command; only the four quicklinks
       // commands are ever filed under this area (INTERNAL_COMMANDS is the single source).

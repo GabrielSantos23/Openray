@@ -4,7 +4,7 @@
 import type { ReactNode } from "react";
 import { RaycastIcon } from "./icons";
 
-export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search" | "notes";
+export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search" | "notes" | "store";
 
 const AREA_META: Record<InternalArea, { icon: string; tile: string }> = {
   quicklinks: { icon: "link", tile: "command-tile--quicklinks" },
@@ -13,6 +13,7 @@ const AREA_META: Record<InternalArea, { icon: string; tile: string }> = {
   translator: { icon: "Globe", tile: "command-tile--translator" },
   "file-search": { icon: "folder-search", tile: "command-tile--filesearch" },
   notes: { icon: "blank-document", tile: "command-tile--notes" },
+  store: { icon: "extension", tile: "command-tile--store" },
 };
 
 export function CommandTile({ area, size = 22 }: { area: InternalArea; size?: number }): JSX.Element {

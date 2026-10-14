@@ -1605,6 +1605,20 @@ export function MainWindow() {
   // Toast actions merge into whatever action panel is open, like Raycast's `getToastActions()`.
   const toastGroups = useToastActionGroups();
 
+  // The Store's "Open Commands…" page launches an installed FlowKey command through the normal
+  // session path: swap the running Store session for the extension command.
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ uuid: string; command: string }>).detail;
+      const extension = extensions.find((entry) => entry.uuid === detail.uuid);
+      const command = extension?.commands.find((entry) => entry.name === detail.command);
+      if (!extension || !command) return;
+      setSelected({ kind: "extension", extension, command });
+    };
+    window.addEventListener("raycast-mini:launch-extension-command", handler);
+    return () => window.removeEventListener("raycast-mini:launch-extension-command", handler);
+  }, [extensions]);
+
   if (selected) {
     return (
       <>
