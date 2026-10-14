@@ -228,6 +228,61 @@ family as auth-required).
 - **A5**: e2e test launches the pilot in a worker through the normal path and asserts the rendered
   tree; manual check listed for the isolated instance.
 
+**M3 result (ef387b2).** Ported and green. The frontend `Icon` learned `data:image` URIs so the
+adapter's `iconSvg` mapping renders (the M1 gap closes here). A5 found the flowkey routes calling
+bare handler names (`setClipboard`/`showHUD`/…) — they dispatch through `hostHandlers` now, so
+test overrides apply. Backend 179/179.
+
+### M4 — shim, aliases, NODE_PATH removed; grep gate
+
+- Delete `build/api/` (shim + runtime + built bundle + lockfile), `worker-entry.js`'s api require,
+  `NODE_PATH` wiring, old fixtures; `rpc.ts` already moved in M1; `build.ps1` + icon comments
+  rewritten.
+- **A6 grep gate (git grep over tracked files, excluding only docs/ files explicitly marked
+  archived/REA):**
+
+```
+git grep -I -n -i -E "@raycast/api|@raycast/utils|raycast/extensions|raycast\.com" -- . ":(exclude)docs/store-spec.md" ":(exclude)docs/api-coverage.md" ":(exclude)docs/store-implementation-plan.md" ":(exclude)docs/findings-REA.md" ":(exclude)docs/flowkey-migration-plan.md" ":(exclude)docs/calculator-spec.md" ":(exclude)docs/command-ux-spec.md" ":(exclude)docs/focus-games-taskbar-spec.md" ":(exclude)docs/toast-hud-spec.md" ":(exclude)docs/translator-spec.md"
+```
+
+  must return zero hits (product name "RaycastMini" is allowed and never matches these patterns).
+  Run with output in the final report.
+
+**M4 result (bb0f5cd).** `build/api` deleted (−44k lines), FlowKey is the only worker kind,
+`loadCommand` refuses non-manifest extensions with a typed error, the OAuth redirect origin moved
+to the loopback design ahead of M5a. Shipped links that pointed at raycast.com (Quicklinks guide,
+the default "Raycast Manual" quicklink, About website/community/changelog/feedback) now target
+`github.com/GabrielSantos23/RaycastMini` — adjust if the product home changes. Six REA reference
+docs carry banners and join the exclusions. **A6 gate: zero hits.** Backend 174/174, frontend
+38/38, build tests 3/3, tsc+vite clean.
+
+### M5 — Spotify
+
+- **M5a**: OAuth vault (loopback redirect 127.0.0.1, configurable fixed port, BYO client id via
+  `<dataDir>/oauth/spotify.json` or `FLOWKEY_SPOTIFY_CLIENT_ID`), `http.fetch` allowlist +
+  `auth` injection, `secrets`, `image.fetch` host routes. **A7**: vault flow test (authorize →
+  loopback receive → token exchange against a stub provider → `http.fetch` injects the token).
+- **M5b**: `media.current/control` host route (Windows SMTC, new file `MediaControl.cs`, small
+  NativeHost.cs hook). **A8**: capability test with the session metadata.
+- **M5c**: the Spotify extension port (search, library, now-playing, player background commands,
+  lyrics). **A9**: contract tests for the non-network pieces (models, store) + isolated-instance
+  manual checklist.
+- **M5d**: `system.selectedText` only if something we ship needs it.
+
+**M5 result (d6014d2 + a54bf12).** M5a done: `flowkey-vault.js` (BYO client id file/env, PKCE
+S256 over the loopback server on 127.0.0.1:42749/configurable, per-provider token files under
+`<dataRoot>/oauth/`, refresh with refresh-token retention), `http.fetch` injects `Authorization`
+backend-side from `options.auth`, `secrets.*` per extension, `image.fetch` allowlisted +
+cached (downscale pending). A7 green (6 tests, real loopback HTTP, stubbed token endpoint). The
+clipboard-handshake OAuth is deleted. M5c done: the Spotify extension ported (31 commands; the 9
+upstream `ui:"web"` commands render through their tree implementations — the web bundle is not
+ported), A8-style tests pin the unauthorized states (search parks on "Connect Spotify", the
+Connect action surfaces the BYO notice; now-playing resolves instead of hanging). Backend 182/182.
+**Pending: M5b** (SMTC host bridge — `MediaControl.cs` + backend `media.*` routes; playback
+commands surface the typed "not implemented yet" until then) and **M5d** (selectedText, only when
+something needs it). Also pending: the backend `launchCommand` route for `album-songs:<id>`-style
+subview pushes and WebView2 command support if the upstream web views are ever wanted.
+
 ### M4 — shim, aliases, NODE_PATH removed; grep gate
 
 - Delete `build/api/` (shim + runtime + built bundle + lockfile), `worker-entry.js`'s api require,
