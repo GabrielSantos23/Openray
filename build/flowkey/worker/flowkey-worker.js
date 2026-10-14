@@ -59,10 +59,63 @@ let firstRender = true;
 let context = null;
 let manifest = null;
 
+// Same-extension subview navigation (M5b). `Action push="…"`, `window.launchCommand(id)` and the
+// renderer's onPop callback all relaunch this session's component with a different commandId while
+// the renderer page stack pushes/pops — no second worker session is involved.
+const POP_CALLBACK_ID = "__pop__";
+let commandStack = [];
+let pushTargets = new Map();
+let pendingNav = null;
+let pushSeq = 0;
+
 const nativeCall = async (method, params) => {
   return await request("nativeCall", { method, params: params ?? {} });
 };
 const capabilities = nativeSdk.createCapabilities(nativeCall);
+
+/** Push targets of the committed tree: action id -> subview command key. */
+function collectPushTargets(tree) {
+  pushTargets = new Map();
+  const fromActions = (actions) => {
+    for (const action of actions ?? []) {
+      if (action?.id && action.push) pushTargets.set(action.id, String(action.push));
+    }
+  };
+  fromActions(tree?.actions);
+  for (const section of tree?.sections ?? []) {
+    for (const item of section?.items ?? []) fromActions(item?.actions);
+  }
+  for (const item of tree?.items ?? []) fromActions(item?.actions);
+}
+
+/** Switch this session's component to `commandId` and emit a render the renderer pushes a page for. */
+async function switchCommand(commandId, query) {
+  if (!root) throw new Error("launchCommand: no React command is running");
+  const id = String(commandId ?? "");
+  if (!id) throw new Error("launchCommand: commandId is required");
+  const manifestCommand = (manifest?.commands ?? []).find((command) => command.id === id);
+  if (manifestCommand?.mode === "background") {
+    throw new Error(`launchCommand: ${id} is a background command and cannot be pushed`);
+  }
+  commandStack.push({ commandId: id, query: query ?? "" });
+  context = { ...context, commandId: id, query: query ?? "", filterValue: null };
+  pendingNav = { action: "push", navId: `flowkey-push-${++pushSeq}` };
+  root.update(buildProps());
+  root.flushEffects();
+  return {};
+}
+
+/** The renderer popped its top page; unwind to the previous command and update it in place. */
+async function handlePop(popId) {
+  if (commandStack.length <= 1) return {};
+  commandStack.pop();
+  const current = commandStack[commandStack.length - 1];
+  context = { ...context, commandId: current.commandId, query: current.query ?? "", filterValue: null };
+  pendingNav = { action: "localPop", navId: String(popId ?? "") || `flowkey-pop-${++pushSeq}` };
+  root?.update(buildProps());
+  root?.flushEffects();
+  return {};
+}
 
 function buildEnvironment() {
   return {
@@ -85,9 +138,23 @@ function buildProps() {
     environment: buildEnvironment(),
     window: {
       closeMainWindow: () => request("closeMainRaycastWindow", {}),
-      popToRoot: () => request("popToRoot", {}),
+      popToRoot: () => {
+        const hadSubviews = commandStack.length > 1;
+        commandStack.length = 1;
+        // Notify first: the renderer pops its pages, then the re-render below arrives and updates
+        // the surviving root page in place. Both ride the same pipe in FIFO order.
+        const notified = request("popToRoot", {});
+        if (hadSubviews && root) {
+          const current = commandStack[0];
+          context = { ...context, commandId: current.commandId, query: current.query ?? "", filterValue: null };
+          pendingNav = { action: "new", navId: "flowkey" };
+          root.update(buildProps());
+          root.flushEffects();
+        }
+        return notified;
+      },
       clearSearchBar: () => request("clearSearchBar", {}),
-      launchCommand: (commandId, query) => request("launchCommand", { commandId, query }),
+      launchCommand: (commandId, query) => switchCommand(commandId, query),
     },
     native: {
       call: nativeCall,
@@ -99,8 +166,17 @@ function buildProps() {
 }
 
 function emitRender(tree) {
-  const model = uiTreeToRenderModel(tree, { firstRender });
+  // A pending navigation wins for exactly one render (the push/pop the renderer page stack acts
+  // on); every later commit updates the top page in place.
+  let options;
+  if (pendingNav) {
+    options = { firstRender: false, navAction: pendingNav.action, navId: pendingNav.navId, onPopId: POP_CALLBACK_ID };
+    pendingNav = null;
+  } else {
+    options = { firstRender, onPopId: POP_CALLBACK_ID };
+  }
   firstRender = false;
+  const model = uiTreeToRenderModel(tree, options);
   const payload = JSON.stringify({ model, changes: [] });
   return request("render", { renderTree: payload, gzipped: false });
 }
@@ -117,6 +193,10 @@ async function initialize(params) {
     preferences: {},
   };
   manifest = params.flowkey?.manifest ?? null;
+  commandStack = [{ commandId: context.commandId, query: context.query ?? "" }];
+  pushTargets = new Map();
+  pendingNav = null;
+  firstRender = true;
 
   const rawPreferences = params.preferences ?? {};
   context.preferences = Object.fromEntries(
@@ -136,6 +216,11 @@ async function initialize(params) {
     root = new reactUi.ReactRoot(loaded.component, {
       onCommit: (tree, _json, reg) => {
         registry = reg;
+        collectPushTargets(tree);
+        // The renderer pops pages locally and notifies through this id (RenderedView →
+        // callNodeCallback); a fresh registry per commit, so the reserved id never collides with
+        // the extension's actions unless it names one "__pop__" itself.
+        reg.registerExplicit(POP_CALLBACK_ID, (payload) => handlePop(payload));
         void emitRender(tree);
       },
       onError: (error) => {
@@ -169,6 +254,9 @@ async function nativeCallback(params) {
   const outcome = await handler(payload);
   // Tree-mode handlers may return a replacement tree; React mode re-renders through commits.
   if (outcome && typeof outcome === "object" && outcome.type) await emitRender(outcome);
+  // A `push` action navigates after its onAction side effect ran (e.g. warming the subview cache).
+  const pushTarget = pushTargets.get(params.callbackId);
+  if (pushTarget) await switchCommand(pushTarget);
   return {};
 }
 

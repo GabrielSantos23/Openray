@@ -277,11 +277,28 @@ cached (downscale pending). A7 green (6 tests, real loopback HTTP, stubbed token
 clipboard-handshake OAuth is deleted. M5c done: the Spotify extension ported (31 commands; the 9
 upstream `ui:"web"` commands render through their tree implementations — the web bundle is not
 ported), A8-style tests pin the unauthorized states (search parks on "Connect Spotify", the
-Connect action surfaces the BYO notice; now-playing resolves instead of hanging). Backend 182/182.
-**Pending: M5b** (SMTC host bridge — `MediaControl.cs` + backend `media.*` routes; playback
-commands surface the typed "not implemented yet" until then) and **M5d** (selectedText, only when
-something needs it). Also pending: the backend `launchCommand` route for `album-songs:<id>`-style
-subview pushes and WebView2 command support if the upstream web views are ever wanted.
+Connect action surfaces the BYO notice; now-playing resolves instead of hanging).
+
+**M5b result.** `build/host/MediaControl.cs` (Windows SMTC: `media.current` snapshot with the
+timeline projected to now, playing-first session pick; `media.control` playPause/play/pause/next/
+previous/stop with typed errors for no session / unknown command) + a three-line prefix hook in
+`NativeHost.cs`; backend `media.current`/`media.control` nativeCall routes ride the existing
+native hop. Media tests stub the host at the transport boundary and pin routing, payload shape and
+error paths (the real WinRT path is exercised when the app runs).
+
+**Subview navigation (was "launchCommand route pending").** Handled in the worker instead of a
+backend route: `Action push="key"` and `window.launchCommand(key)` relaunch the same session's
+component (new `commandId`, renderer page stack pushes via `navigationInfo.action:"push"`), the
+renderer's Escape path notifies `navigationStack.onPop` (`__pop__` registry id) and the worker
+rewinds its command stack, replying with `localPop` + the renderer's pop id. `window.popToRoot`
+also unwinds the worker stack. The dead backend `hostHandlers.launchCommand` (dispatched to the
+C# host, always errored) is removed. Contract test: push → subview render → onPop → root;
+`window.launchCommand` takes the same path. Component dispatch must delegate subviews as
+elements (different component types), never early-return before hooks.
+
+Backend 186/186 (was 182), frontend 38/38, build tests 3/3, tsc clean. **Pending: M5d**
+(selectedText, only when something needs it) and WebView2 command support if the upstream web
+views are ever wanted; `image.fetch` downscale.
 
 ### M4 — shim, aliases, NODE_PATH removed; grep gate
 

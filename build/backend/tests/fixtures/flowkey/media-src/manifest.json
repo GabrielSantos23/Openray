@@ -1,0 +1,13 @@
+{
+  "id": "media-probe",
+  "name": "media-probe",
+  "version": "1.0.0",
+  "description": "FlowKey media bridge probe",
+  "entry": "main.js",
+  "commands": [
+    { "id": "open", "title": "Open", "mode": "view" }
+  ],
+  "nativeMethods": ["media.current", "media.control"],
+  "httpHosts": [],
+  "preferences": []
+}

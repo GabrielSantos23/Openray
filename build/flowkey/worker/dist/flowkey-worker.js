@@ -26777,13 +26777,19 @@ var require_adapter = __commonJS({
         actions: mapActions(tree.actions)
       };
     }
-    function uiTreeToRenderModel2(tree, { firstRender: firstRender2 }) {
+    function uiTreeToRenderModel2(tree, { firstRender: firstRender2 = false, navAction, navId, onPopId } = {}) {
       const body = toBody(tree);
+      const action = navAction ?? (firstRender2 ? "new" : "idle");
+      let id;
+      if (action === "push") id = navId ?? `flowkey-${action}`;
+      else if (action === "localPop") id = navId ?? null;
+      else id = firstRender2 ? "flowkey" : null;
       const stack = {
         kind: "navigationStack",
         id: "navigationStack",
         body,
-        navigationInfo: { id: firstRender2 ? "flowkey" : null, action: firstRender2 ? "new" : "idle" },
+        navigationInfo: { id, action },
+        onPop: onPopId ?? void 0,
         actions: body.actions
       };
       return { kind: "commandView", navigationStack: stack, actions: body.actions };
@@ -26835,10 +26841,53 @@ var registry = null;
 var firstRender = true;
 var context = null;
 var manifest = null;
+var POP_CALLBACK_ID = "__pop__";
+var commandStack = [];
+var pushTargets = /* @__PURE__ */ new Map();
+var pendingNav = null;
+var pushSeq = 0;
 var nativeCall = async (method, params) => {
   return await request("nativeCall", { method, params: params ?? {} });
 };
 var capabilities = nativeSdk.createCapabilities(nativeCall);
+function collectPushTargets(tree) {
+  pushTargets = /* @__PURE__ */ new Map();
+  const fromActions = (actions) => {
+    for (const action of actions ?? []) {
+      if (action?.id && action.push) pushTargets.set(action.id, String(action.push));
+    }
+  };
+  fromActions(tree?.actions);
+  for (const section of tree?.sections ?? []) {
+    for (const item of section?.items ?? []) fromActions(item?.actions);
+  }
+  for (const item of tree?.items ?? []) fromActions(item?.actions);
+}
+async function switchCommand(commandId, query) {
+  if (!root) throw new Error("launchCommand: no React command is running");
+  const id = String(commandId ?? "");
+  if (!id) throw new Error("launchCommand: commandId is required");
+  const manifestCommand = (manifest?.commands ?? []).find((command) => command.id === id);
+  if (manifestCommand?.mode === "background") {
+    throw new Error(`launchCommand: ${id} is a background command and cannot be pushed`);
+  }
+  commandStack.push({ commandId: id, query: query ?? "" });
+  context = { ...context, commandId: id, query: query ?? "", filterValue: null };
+  pendingNav = { action: "push", navId: `flowkey-push-${++pushSeq}` };
+  root.update(buildProps());
+  root.flushEffects();
+  return {};
+}
+async function handlePop(popId) {
+  if (commandStack.length <= 1) return {};
+  commandStack.pop();
+  const current = commandStack[commandStack.length - 1];
+  context = { ...context, commandId: current.commandId, query: current.query ?? "", filterValue: null };
+  pendingNav = { action: "localPop", navId: String(popId ?? "") || `flowkey-pop-${++pushSeq}` };
+  root?.update(buildProps());
+  root?.flushEffects();
+  return {};
+}
 function buildEnvironment() {
   return {
     extensionId: context.extensionId,
@@ -26859,9 +26908,21 @@ function buildProps() {
     environment: buildEnvironment(),
     window: {
       closeMainWindow: () => request("closeMainRaycastWindow", {}),
-      popToRoot: () => request("popToRoot", {}),
+      popToRoot: () => {
+        const hadSubviews = commandStack.length > 1;
+        commandStack.length = 1;
+        const notified = request("popToRoot", {});
+        if (hadSubviews && root) {
+          const current = commandStack[0];
+          context = { ...context, commandId: current.commandId, query: current.query ?? "", filterValue: null };
+          pendingNav = { action: "new", navId: "flowkey" };
+          root.update(buildProps());
+          root.flushEffects();
+        }
+        return notified;
+      },
       clearSearchBar: () => request("clearSearchBar", {}),
-      launchCommand: (commandId, query) => request("launchCommand", { commandId, query })
+      launchCommand: (commandId, query) => switchCommand(commandId, query)
     },
     native: {
       call: nativeCall,
@@ -26872,8 +26933,15 @@ function buildProps() {
   };
 }
 function emitRender(tree) {
-  const model = uiTreeToRenderModel(tree, { firstRender });
+  let options;
+  if (pendingNav) {
+    options = { firstRender: false, navAction: pendingNav.action, navId: pendingNav.navId, onPopId: POP_CALLBACK_ID };
+    pendingNav = null;
+  } else {
+    options = { firstRender, onPopId: POP_CALLBACK_ID };
+  }
   firstRender = false;
+  const model = uiTreeToRenderModel(tree, options);
   const payload = JSON.stringify({ model, changes: [] });
   return request("render", { renderTree: payload, gzipped: false });
 }
@@ -26889,6 +26957,10 @@ async function initialize(params) {
     preferences: {}
   };
   manifest = params.flowkey?.manifest ?? null;
+  commandStack = [{ commandId: context.commandId, query: context.query ?? "" }];
+  pushTargets = /* @__PURE__ */ new Map();
+  pendingNav = null;
+  firstRender = true;
   const rawPreferences = params.preferences ?? {};
   context.preferences = Object.fromEntries(
     Object.entries(rawPreferences).map(([key, entry]) => [
@@ -26904,6 +26976,8 @@ async function initialize(params) {
     root = new reactUi.ReactRoot(loaded.component, {
       onCommit: (tree, _json, reg) => {
         registry = reg;
+        collectPushTargets(tree);
+        reg.registerExplicit(POP_CALLBACK_ID, (payload) => handlePop(payload));
         void emitRender(tree);
       },
       onError: (error) => {
@@ -26935,6 +27009,8 @@ async function nativeCallback(params) {
   const payload = params.data?.formValues ?? params.data;
   const outcome = await handler(payload);
   if (outcome && typeof outcome === "object" && outcome.type) await emitRender(outcome);
+  const pushTarget = pushTargets.get(params.callbackId);
+  if (pushTarget) await switchCommand(pushTarget);
   return {};
 }
 function terminate() {

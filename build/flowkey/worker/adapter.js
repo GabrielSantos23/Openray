@@ -199,16 +199,25 @@ function toBody(tree) {
 }
 
 /**
- * UiTree -> `{ kind: "commandView", navigationStack }`. `action` is "new" for the first render of
- * a command and "idle" afterwards (the renderer updates the top page in place).
+ * UiTree -> `{ kind: "commandView", navigationStack }`. Navigation: the first render of a command
+ * is "new" (the renderer creates the root page); later commits are "idle" (top page updates in
+ * place). The worker drives subview pushes with `navAction: "push" | "localPop" | "new"` plus a
+ * `navId`, and always advertises `onPop` so Escape unwinds both the renderer page stack and the
+ * worker's command stack.
  */
-function uiTreeToRenderModel(tree, { firstRender }) {
+function uiTreeToRenderModel(tree, { firstRender = false, navAction, navId, onPopId } = {}) {
   const body = toBody(tree);
+  const action = navAction ?? (firstRender ? "new" : "idle");
+  let id;
+  if (action === "push") id = navId ?? `flowkey-${action}`;
+  else if (action === "localPop") id = navId ?? null;
+  else id = firstRender ? "flowkey" : null;
   const stack = {
     kind: "navigationStack",
     id: "navigationStack",
     body,
-    navigationInfo: { id: firstRender ? "flowkey" : null, action: firstRender ? "new" : "idle" },
+    navigationInfo: { id, action },
+    onPop: onPopId ?? undefined,
     actions: body.actions,
   };
   return { kind: "commandView", navigationStack: stack, actions: body.actions };

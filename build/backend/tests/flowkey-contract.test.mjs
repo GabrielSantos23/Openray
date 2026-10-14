@@ -80,6 +80,32 @@ function bodyOf(entry) {
   return JSON.parse(text).model?.navigationStack?.body ?? null;
 }
 
+/** Like bodyOf but returns the whole `{ model, changes }` bundle of a render. */
+function modelOf(entry) {
+  const text = entry.data.gzipped
+    ? require("node:zlib").gunzipSync(Buffer.from(entry.data.renderTree, "base64")).toString()
+    : entry.data.renderTree;
+  return JSON.parse(text).model ?? null;
+}
+
+/** Wait for a render whose full model satisfies `predicate`; returns that model. */
+async function waitForModel(rendered, predicate, { after = 0, timeoutMs = 10000, label = "model" } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let seen = after;
+  while (Date.now() < deadline) {
+    for (const entry of rendered) {
+      if (entry.method !== "extensionHost.render") continue;
+      const seq = entry.data.__seq ?? 0;
+      if (seq <= seen) continue;
+      seen = seq;
+      const model = modelOf(entry);
+      if (predicate(model)) return { model, seq };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`no render matching ${label} within ${timeoutMs}ms`);
+}
+
 function itemById(body, id) {
   return (body?.sections ?? []).flatMap((section) => section.items).find((item) => item.id === id) ?? null;
 }
@@ -235,6 +261,79 @@ test(
       const updated = itemById(second.body, "counter");
       assert.equal(updated.accessories[0].text, "count=1");
       assert.equal(updated.accessories[0].color, "#4aa3ff", "accent accessory color maps to the palette hex");
+    } finally {
+      await backend.dispatchMessage("backend", "extensionHost.unloadEntryPoint", { sessionId: session.sessionId }).catch(() => undefined);
+    }
+  }),
+);
+
+test(
+  "subview navigation: push action and window.launchCommand relaunch the session; onPop unwinds",
+  withFixture(async ({ backend, root, rendered }) => {
+    const session = await loadProbe(backend, root);
+    try {
+      const first = await waitForBody(rendered, (body) => body?.kind === "List", { label: "first render" });
+      const pusher = itemById(first.body, "pusher");
+      const pushAction = pusher.actions.find((action) => action.title === "Push sub");
+      const launchAction = pusher.actions.find((action) => action.title === "Launch sub");
+
+      // `Action push=`: onAction runs first, then the worker relaunches its component with the
+      // push key and emits a "push" render the renderer page stack pushes a page for.
+      await backend.dispatchMessage("backend", "extensionHost.callNodeCallback", {
+        sessionId: session.sessionId,
+        callbackId: pushAction.id,
+        data: {},
+      });
+      const pushed = await waitForModel(
+        rendered,
+        (model) =>
+          model?.navigationStack?.navigationInfo?.action === "push" &&
+          model.navigationStack.body?.sections?.some((section) =>
+            section.items?.some((item) => item.id === "subview"),
+          ),
+        { after: first.seq, label: "push render" },
+      );
+      assert.equal(pushed.model.navigationStack.body.sections[0].items[0].subtitle, "sub:probe");
+      const onPop = pushed.model.navigationStack.onPop;
+      assert.ok(typeof onPop === "string" && onPop.length > 0, "pushed render advertises onPop");
+
+      // The renderer pops its top page locally, then notifies the worker through onPop; the reply
+      // must be a "localPop" render with the same id so the top page updates in place.
+      await backend.dispatchMessage("backend", "extensionHost.callNodeCallback", {
+        sessionId: session.sessionId,
+        callbackId: onPop,
+        data: "pop42",
+      });
+      const popped = await waitForModel(
+        rendered,
+        (model) =>
+          model?.navigationStack?.navigationInfo?.action === "localPop" &&
+          model.navigationStack.navigationInfo.id === "pop42",
+        { after: pushed.seq, label: "localPop render" },
+      );
+      assert.ok(
+        popped.model.navigationStack.body?.sections?.some((section) =>
+          section.items?.some((item) => item.id === "env"),
+        ),
+        "pop rewinds the component to the root command",
+      );
+
+      // `window.launchCommand` takes the same path without a `push` prop.
+      await backend.dispatchMessage("backend", "extensionHost.callNodeCallback", {
+        sessionId: session.sessionId,
+        callbackId: launchAction.id,
+        data: {},
+      });
+      const launched = await waitForModel(
+        rendered,
+        (model) =>
+          model?.navigationStack?.navigationInfo?.action === "push" &&
+          model.navigationStack.body?.sections?.some((section) =>
+            section.items?.some((item) => item.id === "subview" && item.subtitle === "sub:probe"),
+          ),
+        { after: popped.seq, label: "launchCommand push render" },
+      );
+      assert.ok(launched.model.navigationStack.navigationInfo.id.startsWith("flowkey-push-"));
     } finally {
       await backend.dispatchMessage("backend", "extensionHost.unloadEntryPoint", { sessionId: session.sessionId }).catch(() => undefined);
     }

@@ -366,3 +366,32 @@ test("documented adapter gaps: unexpressible FlowKey features survive adaptation
   assert.equal(handBuilt.navigationStack.body.sections[0].subtitle, "sub");
   assert.equal(handBuilt.navigationStack.body.isLoading, true);
 });
+
+test("adapter navigation: push/localPop/new nav actions carry ids, every render advertises onPop", () => {
+  const tree = { type: "list", sections: [{ items: [{ id: "i", title: "T" }] }] };
+
+  // First render of a command: action "new" with the stable root page id, plus the onPop callback
+  // id the renderer's Escape path invokes.
+  const first = uiTreeToRenderModel(tree, { firstRender: true, onPopId: "__pop__" });
+  assert.equal(first.navigationStack.navigationInfo.action, "new");
+  assert.equal(first.navigationStack.navigationInfo.id, "flowkey");
+  assert.equal(first.navigationStack.onPop, "__pop__");
+
+  // Later commits update the top page in place (idle, no id).
+  const idle = uiTreeToRenderModel(tree, { firstRender: false, onPopId: "__pop__" });
+  assert.equal(idle.navigationStack.navigationInfo.action, "idle");
+  assert.equal(idle.navigationStack.navigationInfo.id, null);
+
+  // A subview push carries the worker-generated page id; the local-pop reply echoes the
+  // renderer's pop id so the top page updates in place instead of pushing again.
+  const pushed = uiTreeToRenderModel(tree, { firstRender: false, navAction: "push", navId: "flowkey-push-1", onPopId: "__pop__" });
+  assert.equal(pushed.navigationStack.navigationInfo.action, "push");
+  assert.equal(pushed.navigationStack.navigationInfo.id, "flowkey-push-1");
+  const localPop = uiTreeToRenderModel(tree, { firstRender: false, navAction: "localPop", navId: "pop42", onPopId: "__pop__" });
+  assert.equal(localPop.navigationStack.navigationInfo.action, "localPop");
+  assert.equal(localPop.navigationStack.navigationInfo.id, "pop42");
+
+  // Without an explicit onPop id the field serializes away (direct adapter callers, tests).
+  const bare = uiTreeToRenderModel(tree, { firstRender: true });
+  assert.equal(bare.navigationStack.onPop, undefined);
+});

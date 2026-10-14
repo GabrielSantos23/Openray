@@ -357,16 +357,8 @@ function createBackend(options) {
     async updateCommandMetadata(ctx, params) {
       return toRenderer("extensionHost.updateCommandMetadata", { ...params, sessionId: ctx.worker.id });
     },
-    async launchCommand(ctx, params) {
-      return dispatch("backend", "extensionHost.loadCommand", {
-        extension: ctx.extension,
-        command: { name: params.name, type: params.type, mode: "view" },
-        preferences: {},
-        props: params.arguments ?? {},
-        launchContext: params.context ?? null,
-        debug: false,
-      });
-    },
+    // `window.launchCommand` never reaches the backend: the worker relaunches its own component
+    // (same-extension push, M5b). Cross-extension launches would need a real route here.
 
     // --- file / shell routes the extended API surface forwards natively -----------------------
     async "fileSystem.moveToTrash"(ctx, params) {
@@ -585,6 +577,12 @@ function createBackend(options) {
           if (!fs.existsSync(file)) fs.writeFileSync(file, bytes);
           return { ok: true, uri: `file:///${file.replace(/\\/g, "/")}` };
         }
+        case "media.current":
+          // SMTC snapshot / transport control: the C# host owns the WinRT session manager, the
+          // same split as clipboard and fileSystem routes.
+          return dispatch("backend", "media.current", {});
+        case "media.control":
+          return dispatch("backend", "media.control", { command: String(call.command ?? "") });
         default:
           throw new Error(`FlowKey native method ${method} is not implemented yet`);
       }

@@ -24,8 +24,10 @@ public static class NativeHost
                         ? FocusSession.DispatchAsync(method, data)
                         : method.StartsWith("games.", StringComparison.Ordinal)
                             ? GameMode.DispatchAsync(method, data)
-                            : method.StartsWith("taskbar.", StringComparison.Ordinal)
-                                ? Taskbar.DispatchAsync(method, data)
+                        : method.StartsWith("taskbar.", StringComparison.Ordinal)
+                            ? Taskbar.DispatchAsync(method, data)
+                            : method.StartsWith("media.", StringComparison.Ordinal)
+                                ? MediaControl.DispatchAsync(method, data)
                                 : DispatchCoreAsync(method, data);
 
     private static Task<object?> DispatchCoreAsync(string method, JsonElement? data) => method switch
