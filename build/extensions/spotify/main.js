@@ -740,6 +740,9 @@ var SpotifyClient = class {
     }
     return { items: collected, next: null, total: collected.length };
   }
+  track(trackId, signal) {
+    return this.api(`/tracks/${trackId}`, { signal });
+  }
   artist(artistId) {
     return this.api(`/artists/${artistId}`);
   }
@@ -866,91 +869,6 @@ function removeSearch(query) {
 }
 function clearRecentSearches() {
   entries = [];
-}
-
-// src/search-model.ts
-var SEARCH_FILTERS = [
-  { value: "all", label: "All" },
-  { value: "artists", label: "Artists" },
-  { value: "tracks", label: "Songs" },
-  { value: "albums", label: "Albums" },
-  { value: "playlists", label: "Playlists" },
-  { value: "shows", label: "Podcasts & Shows" },
-  { value: "episodes", label: "Episodes" }
-];
-var ALL_TYPES = ["track", "artist", "album", "playlist", "show", "episode"];
-function typesForFilter(filter) {
-  switch (filter) {
-    case "artists":
-      return ["artist"];
-    case "tracks":
-      return ["track"];
-    case "albums":
-      return ["album"];
-    case "playlists":
-      return ["playlist"];
-    case "shows":
-      return ["show"];
-    case "episodes":
-      return ["episode"];
-    default:
-      return ALL_TYPES;
-  }
-}
-function pruneResults(results) {
-  const pruned = {};
-  for (const key of ["tracks", "artists", "albums", "playlists", "shows", "episodes"]) {
-    const page = results[key];
-    if (page) {
-      pruned[key] = { ...page, items: page.items.filter((item) => Boolean(item)) };
-    }
-  }
-  return pruned;
-}
-function isAborted(error) {
-  return error?.code === "aborted";
-}
-function describeError(error) {
-  if (error instanceof SpotifyApiError) {
-    const suffix = error.status ? ` (${error.status})` : "";
-    return suffix && error.message.endsWith(suffix) ? error.message : `${error.message}${suffix}`;
-  }
-  const candidate = error;
-  return candidate?.message ?? "Something went wrong";
-}
-async function startRadio(client, seeds, signal) {
-  const recommendations = await client.recommendations(seeds);
-  const uris = (recommendations.tracks ?? []).map((track) => track.uri);
-  if (uris.length === 0) {
-    throw new SpotifyApiError("noRadioTracks", "Spotify returned no radio tracks");
-  }
-  await client.play({ uris });
-}
-function filterLibrary(results, query) {
-  const needle = query.trim().toLowerCase();
-  if (needle.length === 0) {
-    return results;
-  }
-  const match = (haystacks) => haystacks.some((value) => value.toLowerCase().includes(needle));
-  const filtered = {};
-  const writable = filtered;
-  for (const key of ["tracks", "artists", "albums", "playlists", "shows", "episodes"]) {
-    const page = results[key];
-    if (!page) continue;
-    writable[key] = {
-      ...page,
-      items: page.items.filter((item) => {
-        const candidate = item;
-        return match([
-          candidate.name ?? "",
-          ...candidate.artists?.map((artist) => artist.name) ?? [],
-          candidate.owner?.display_name ?? "",
-          candidate.publisher ?? ""
-        ]);
-      })
-    };
-  }
-  return filtered;
 }
 
 // src/store.ts
@@ -1102,6 +1020,126 @@ function peekArtistAlbums(artistId) {
   return artistAlbumsCache.get(artistId) ?? null;
 }
 
+// src/search-model.ts
+var SEARCH_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "artists", label: "Artists" },
+  { value: "tracks", label: "Songs" },
+  { value: "albums", label: "Albums" },
+  { value: "playlists", label: "Playlists" },
+  { value: "shows", label: "Podcasts & Shows" },
+  { value: "episodes", label: "Episodes" }
+];
+var ALL_TYPES = ["track", "artist", "album", "playlist", "show", "episode"];
+function typesForFilter(filter) {
+  switch (filter) {
+    case "artists":
+      return ["artist"];
+    case "tracks":
+      return ["track"];
+    case "albums":
+      return ["album"];
+    case "playlists":
+      return ["playlist"];
+    case "shows":
+      return ["show"];
+    case "episodes":
+      return ["episode"];
+    default:
+      return ALL_TYPES;
+  }
+}
+function pruneResults(results) {
+  const pruned = {};
+  for (const key of ["tracks", "artists", "albums", "playlists", "shows", "episodes"]) {
+    const page = results[key];
+    if (page) {
+      pruned[key] = { ...page, items: page.items.filter((item) => Boolean(item)) };
+    }
+  }
+  return pruned;
+}
+function isAborted(error) {
+  return error?.code === "aborted";
+}
+function describeError(error) {
+  if (error instanceof SpotifyApiError) {
+    const suffix = error.status ? ` (${error.status})` : "";
+    const message = suffix && error.message.endsWith(suffix) ? error.message : `${error.message}${suffix}`;
+    if (error.status === 403) {
+      return message + " - in Development Mode, add this account under User Management in your Spotify dashboard";
+    }
+    return message;
+  }
+  const candidate = error;
+  return candidate?.message ?? "Something went wrong";
+}
+async function startRadio(client, seeds, signal) {
+  let uris = [];
+  try {
+    const recommendations = await client.recommendations(seeds);
+    uris = (recommendations.tracks ?? []).map((track) => track.uri).filter(Boolean);
+  } catch (caught) {
+    if (isAborted(caught)) throw caught;
+    uris = [];
+  }
+  if (uris.length === 0) {
+    const artistId = await radioArtistId(client, seeds, signal);
+    if (artistId) {
+      const top = await loadArtistTopTracks(client, artistId);
+      uris = top.map((track) => track.uri).filter(Boolean);
+    }
+  }
+  if (uris.length === 0) {
+    throw new SpotifyApiError("noRadioTracks", "Spotify returned no radio tracks");
+  }
+  const seedUris = (seeds.tracks ?? []).map((id) => `spotify:track:${id}`);
+  const queue = [...seedUris, ...uris.filter((uri) => !seedUris.includes(uri))].slice(0, 25);
+  await client.play({ uris: queue });
+}
+async function radioArtistId(client, seeds, signal) {
+  if (seeds.artists?.length) {
+    return seeds.artists[0];
+  }
+  const trackId = seeds.tracks?.[0];
+  if (!trackId) {
+    return null;
+  }
+  try {
+    const track = await client.track(trackId, signal);
+    return track?.artists?.[0]?.id ?? null;
+  } catch (caught) {
+    if (isAborted(caught)) throw caught;
+    return null;
+  }
+}
+function filterLibrary(results, query) {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) {
+    return results;
+  }
+  const match = (haystacks) => haystacks.some((value) => value.toLowerCase().includes(needle));
+  const filtered = {};
+  const writable = filtered;
+  for (const key of ["tracks", "artists", "albums", "playlists", "shows", "episodes"]) {
+    const page = results[key];
+    if (!page) continue;
+    writable[key] = {
+      ...page,
+      items: page.items.filter((item) => {
+        const candidate = item;
+        return match([
+          candidate.name ?? "",
+          ...candidate.artists?.map((artist) => artist.name) ?? [],
+          candidate.owner?.display_name ?? "",
+          candidate.publisher ?? ""
+        ]);
+      })
+    };
+  }
+  return filtered;
+}
+
 // ../../flowkey/cli/shims/react-jsx-runtime.ts
 var host4 = globalThis.__FLOWKEY_HOST__;
 var jsxRuntime = host4?.reactJsx ?? {};
@@ -1154,6 +1192,12 @@ function TracksView({
   errorTitle,
   errorMessage
 }) {
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 4e3);
+    return () => clearTimeout(timer);
+  }, [notice]);
   if (errorMessage) {
     return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: errorTitle, description: errorMessage }) });
   }
@@ -1166,18 +1210,21 @@ function TracksView({
   if (visible.length === 0) {
     return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "No matching songs" }) });
   }
-  return /* @__PURE__ */ jsx(List, { children: visible.map((track) => /* @__PURE__ */ jsx(
-    List.Item,
-    {
-      id: track.id,
-      title: track.name,
-      subtitle: trackSubtitle(track),
-      kind: "track",
-      actions: trackActions(track, client, () => {
-      }, new AbortController().signal)
-    },
-    track.id
-  )) });
+  return /* @__PURE__ */ jsxs(List, { children: [
+    notice ? /* @__PURE__ */ jsx(List.Section, { title: "Status", children: /* @__PURE__ */ jsx(List.Item, { id: "notice", title: notice, icon: { lucide: "info" } }) }) : null,
+    visible.map((track) => /* @__PURE__ */ jsx(
+      List.Item,
+      {
+        id: track.id,
+        title: track.name,
+        subtitle: trackSubtitle(track),
+        kind: "track",
+        icon: listImage(track.album?.images),
+        actions: trackActions(track, client, setNotice, new AbortController().signal)
+      },
+      track.id
+    ))
+  ] });
 }
 function useLoaded(cached, load, client) {
   const [value, setValue] = useState(cached);
@@ -2525,10 +2572,6 @@ function activeLineIndex(lines, positionMs) {
   }
   return index;
 }
-function sameMedia(a, b) {
-  if (!a || !b) return false;
-  return a.playing === b.playing && a.title === b.title && a.artist === b.artist && Math.abs(projectedPositionMs(a) - projectedPositionMs(b)) < 900;
-}
 
 // src/player-commands.tsx
 var SEEK_STEP_MS = 15e3;
@@ -3102,6 +3145,14 @@ function playlistArtwork(playlist) {
   const url = playlist.images?.at(-1)?.url ?? playlist.images?.[0]?.url;
   return url ? { uri: url } : void 0;
 }
+function playlistSubtitle(playlist) {
+  const parts = [];
+  const count = playlistTrackCount(playlist);
+  if (count > 0) parts.push(`${count} tracks`);
+  const owner = playlist.owner?.display_name ?? "";
+  if (owner) parts.push(owner);
+  return parts.join(" \xB7 ") || "playlist";
+}
 function useOwnedPlaylists(client, ready) {
   const [state, setState] = useState({
     playlists: null,
@@ -3145,7 +3196,7 @@ function PlaylistPicker({
       {
         id: playlist.id,
         title: playlist.name,
-        subtitle: `${playlistTrackCount(playlist)} tracks`,
+        subtitle: playlistSubtitle(playlist),
         kind: "playlist",
         icon: playlistArtwork(playlist),
         actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
@@ -3246,8 +3297,10 @@ function FindLyricsCommand(props) {
     const poll = async () => {
       try {
         const state = await props.native.call("media.current");
-        if (alive && !sameMedia(mediaRef.current, state)) {
-          mediaRef.current = state;
+        if (!alive) return;
+        const previous = mediaRef.current;
+        mediaRef.current = state;
+        if ((previous?.title ?? "") !== (state?.title ?? "") || (previous?.artist ?? "") !== (state?.artist ?? "")) {
           setMedia(state);
         }
       } catch {

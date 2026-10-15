@@ -8,7 +8,6 @@ import {
   activeLineIndex,
   parseLrc,
   projectedPositionMs,
-  sameMedia,
   type LyricsState,
   type MediaState,
 } from './lyrics';
@@ -748,6 +747,15 @@ function playlistArtwork(playlist: SpotifyPlaylist): { uri: string } | undefined
   return url ? { uri: url } : undefined;
 }
 
+function playlistSubtitle(playlist: SpotifyPlaylist): string {
+  const parts: string[] = [];
+  const count = playlistTrackCount(playlist);
+  if (count > 0) parts.push(`${count} tracks`);
+  const owner = playlist.owner?.display_name ?? '';
+  if (owner) parts.push(owner);
+  return parts.join(' · ') || 'playlist';
+}
+
 /** The user's editable playlists (owner == me), fetched fresh so counts and covers are current. */
 function useOwnedPlaylists(
   client: SpotifyClient,
@@ -810,7 +818,7 @@ function PlaylistPicker({
             key={playlist.id}
             id={playlist.id}
             title={playlist.name}
-            subtitle={`${playlistTrackCount(playlist)} tracks`}
+            subtitle={playlistSubtitle(playlist)}
             kind="playlist"
             icon={playlistArtwork(playlist)}
             actions={
@@ -957,8 +965,16 @@ export function FindLyricsCommand(props: CommandProps): ReactNode {
     const poll = async () => {
       try {
         const state = await props.native.call<MediaState | null>('media.current');
-        if (alive && !sameMedia(mediaRef.current, state)) {
-          mediaRef.current = state;
+        if (!alive) return;
+        // The 250ms karaoke ticker reads mediaRef for fresh positions; the media STATE only
+        // changes when the song itself changes. Playback progress must never re-run the lyrics
+        // fetch effect — its cleanup cancels the in-flight lookup and the spinner never ends.
+        const previous = mediaRef.current;
+        mediaRef.current = state;
+        if (
+          (previous?.title ?? '') !== (state?.title ?? '') ||
+          (previous?.artist ?? '') !== (state?.artist ?? '')
+        ) {
           setMedia(state);
         }
       } catch {

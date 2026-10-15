@@ -392,6 +392,10 @@ export class SpotifyClient {
     return { items: collected, next: null, total: collected.length };
   }
 
+  track(trackId: string, signal?: AbortSignal): Promise<SpotifyTrack> {
+    return this.api(`/tracks/${trackId}`, { signal });
+  }
+
   artist(artistId: string): Promise<SpotifyArtist> {
     return this.api(`/artists/${artistId}`);
   }

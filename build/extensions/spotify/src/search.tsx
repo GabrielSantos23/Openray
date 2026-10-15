@@ -430,7 +430,7 @@ type Mode = 'list' | 'grid';
 // Icons ride as the CDN URL itself — the renderer's <img> loads it directly, so no artwork has
 // to be proxied through the worker (large data: URIs there OOM the worker on big result sets).
 // List rows take the smallest rendition; grid tiles take the mid one so they stay sharp at 2x.
-function listImage(images: { url?: string }[] | undefined): { uri: string } | undefined {
+export function listImage(images: { url?: string }[] | undefined): { uri: string } | undefined {
   const url = images?.at(-1)?.url ?? images?.[0]?.url;
   return url ? { uri: url } : undefined;
 }

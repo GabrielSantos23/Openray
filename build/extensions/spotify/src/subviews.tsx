@@ -14,7 +14,7 @@ import {
   peekArtistTracks,
   peekLikedTracks,
 } from './store';
-import { albumActions, trackActions } from './search';
+import { albumActions, listImage, trackActions } from './search';
 
 const ALBUM_SONGS_PREFIX = 'album-songs:';
 const ARTIST_SONGS_PREFIX = 'artist-songs:';
@@ -74,6 +74,12 @@ function TracksView({
   errorTitle: string;
   errorMessage: string;
 }) {
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   if (errorMessage) {
     return (
       <List>
@@ -100,6 +106,11 @@ function TracksView({
   }
   return (
     <List>
+      {notice ? (
+        <List.Section title="Status">
+          <List.Item id="notice" title={notice} icon={{ lucide: 'info' }} />
+        </List.Section>
+      ) : null}
       {visible.map((track) => (
         <List.Item
           key={track.id}
@@ -107,7 +118,8 @@ function TracksView({
           title={track.name}
           subtitle={trackSubtitle(track)}
           kind="track"
-          actions={trackActions(track, client, () => {}, new AbortController().signal)}
+          icon={listImage(track.album?.images)}
+          actions={trackActions(track, client, setNotice, new AbortController().signal)}
         />
       ))}
     </List>

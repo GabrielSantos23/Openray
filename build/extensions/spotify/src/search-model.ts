@@ -4,6 +4,7 @@
  * the web bundle cannot carry the tree reconciler.
  */
 import { SpotifyApiError, type SpotifyClient } from './api/client';
+import { loadArtistTopTracks } from './store';
 import type {
   Paged,
   SpotifyAlbum,
@@ -99,7 +100,17 @@ export function isAborted(error: unknown): boolean {
 export function describeError(error: unknown): string {
   if (error instanceof SpotifyApiError) {
     const suffix = error.status ? ` (${error.status})` : '';
-    return suffix && error.message.endsWith(suffix) ? error.message : `${error.message}${suffix}`;
+    const message =
+      suffix && error.message.endsWith(suffix) ? error.message : `${error.message}${suffix}`;
+    // Spotify answers 403 on write endpoints when the dashboard app is in Development Mode and
+    // the connected account is not in its User Management allowlist (reads keep working).
+    if (error.status === 403) {
+      return (
+        message +
+        ' - in Development Mode, add this account under User Management in your Spotify dashboard'
+      );
+    }
+    return message;
   }
   const candidate = error as { message?: string };
   return candidate?.message ?? 'Something went wrong';
@@ -110,12 +121,50 @@ export async function startRadio(
   seeds: { tracks?: string[]; artists?: string[] },
   signal?: AbortSignal,
 ): Promise<void> {
-  const recommendations = await client.recommendations(seeds);
-  const uris = (recommendations.tracks ?? []).map((track) => track.uri);
+  // /recommendations is no longer available to Spotify apps created after November 2024; build
+  // the radio from the seed's artist top tracks when the service cannot answer.
+  let uris: string[] = [];
+  try {
+    const recommendations = await client.recommendations(seeds);
+    uris = (recommendations.tracks ?? []).map((track) => track.uri).filter(Boolean);
+  } catch (caught) {
+    if (isAborted(caught)) throw caught;
+    uris = [];
+  }
+  if (uris.length === 0) {
+    const artistId = await radioArtistId(client, seeds, signal);
+    if (artistId) {
+      const top = await loadArtistTopTracks(client, artistId);
+      uris = top.map((track) => track.uri).filter(Boolean);
+    }
+  }
   if (uris.length === 0) {
     throw new SpotifyApiError('noRadioTracks', 'Spotify returned no radio tracks');
   }
-  await client.play({ uris });
+  const seedUris = (seeds.tracks ?? []).map((id) => `spotify:track:${id}`);
+  const queue = [...seedUris, ...uris.filter((uri) => !seedUris.includes(uri))].slice(0, 25);
+  await client.play({ uris: queue });
+}
+
+async function radioArtistId(
+  client: SpotifyClient,
+  seeds: { tracks?: string[]; artists?: string[] },
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (seeds.artists?.length) {
+    return seeds.artists[0];
+  }
+  const trackId = seeds.tracks?.[0];
+  if (!trackId) {
+    return null;
+  }
+  try {
+    const track = await client.track(trackId, signal);
+    return track?.artists?.[0]?.id ?? null;
+  } catch (caught) {
+    if (isAborted(caught)) throw caught;
+    return null;
+  }
 }
 
 /** Case-insensitive local filter over names, artists, owners and publishers. */
