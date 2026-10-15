@@ -205,7 +205,18 @@ function iconKind(action: ViewAction): string {
  * carries none.
  */
 export function ActionModelIcon({ icon, fallbackTitle }: { icon: unknown; fallbackTitle: string }) {
-  const source = (icon as { source?: { light?: string } } | undefined)?.source?.light;
+  const spec = icon as { source?: { light?: string }; svg?: unknown; color?: unknown } | undefined;
+  if (typeof spec?.svg === "string" && spec.svg.length > 0) {
+    return (
+      <span
+        aria-hidden
+        className="action-panel__svgIcon"
+        style={{ color: typeof spec.color === "string" ? spec.color : undefined }}
+        dangerouslySetInnerHTML={{ __html: spec.svg }}
+      />
+    );
+  }
+  const source = spec?.source?.light;
   if (typeof source === "string" && source.startsWith("emoji://")) {
     return <span style={{ fontSize: 13, lineHeight: 1 }}>{decodeURIComponent(source.slice("emoji://".length))}</span>;
   }

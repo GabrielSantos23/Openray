@@ -95,6 +95,24 @@
   margin-bottom: var(--space-12);
 }
 
+/* Inline extension SVGs (lucide set): stroke uses currentColor, so the icon color tints them. */
+.icon svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+  margin: 0 auto;
+}
+
+.action-panel__svgIcon {
+  display: inline-flex;
+}
+
+.action-panel__svgIcon svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
 .icon--emoji {
   font-size: 14px;
   line-height: 1;

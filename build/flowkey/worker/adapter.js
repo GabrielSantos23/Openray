@@ -27,19 +27,28 @@ function accessoryColor(color) {
 }
 
 function mapIcon(item) {
-  if (item.iconName) return { source: { light: `icon://${item.iconName}.png` } };
-  if (item.iconSvg) {
-    return { source: { light: `data:image/svg+xml;base64,${Buffer.from(item.iconSvg).toString("base64")}` } };
-  }
-  if (item.iconUri) return { source: { light: item.iconUri } };
-  if (typeof item.icon === "string" && item.icon.length > 0) {
+  let mapped;
+  if (item.iconName) {
+    mapped = { source: { light: `icon://${item.iconName}.png` } };
+  } else if (item.iconSvg) {
+    mapped = {
+      source: { light: `data:image/svg+xml;base64,${Buffer.from(item.iconSvg).toString("base64")}` },
+      // Raw markup rides along so the renderer can inline the SVG and tint it with `color`
+      // (an <img> of an SVG cannot inherit currentColor, so a tint would never apply).
+      svg: item.iconSvg,
+    };
+  } else if (item.iconUri) {
+    mapped = { source: { light: item.iconUri } };
+  } else if (typeof item.icon === "string" && item.icon.length > 0) {
     if (/^(https?:|data:|file:)/.test(item.icon) || /\.(png|jpe?g|gif|svg|webp|ico)$/i.test(item.icon)) {
-      return { source: { light: item.icon } };
+      mapped = { source: { light: item.icon } };
+    } else {
+      // Emoji icon: carried as an emoji:// URL the renderer draws as text.
+      mapped = { source: { light: `emoji://${encodeURIComponent(item.icon)}` } };
     }
-    // Emoji icon: carried as an emoji:// URL the renderer draws as text.
-    return { source: { light: `emoji://${encodeURIComponent(item.icon)}` } };
   }
-  return undefined;
+  if (mapped && item.iconColor) mapped.color = item.iconColor;
+  return mapped;
 }
 
 function filterAccessory(filter) {

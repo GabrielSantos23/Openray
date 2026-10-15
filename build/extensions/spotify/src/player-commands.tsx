@@ -791,8 +791,19 @@ function PlaylistPicker({
   actionLabel: string;
   onPick: (playlist: SpotifyPlaylist) => Promise<void>;
 }): ReactNode {
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   return (
     <List>
+      {notice ? (
+        <List.Section title="Status">
+          <List.Item id="notice" title={notice} icon={{ lucide: 'info' }} />
+        </List.Section>
+      ) : null}
       <List.Section title={title}>
         {playlists.map((playlist) => (
           <List.Item
@@ -807,7 +818,12 @@ function PlaylistPicker({
                 <Action
                   title={actionLabel}
                   onAction={async () => {
-                    await onPick(playlist);
+                    try {
+                      await onPick(playlist);
+                      setNotice(`${actionLabel}: done`);
+                    } catch (caught) {
+                      if (!isAborted(caught)) setNotice(describeError(caught));
+                    }
                   }}
                 />
               </ActionPanel>
@@ -967,6 +983,11 @@ export function FindLyricsCommand(props: CommandProps): ReactNode {
     let alive = true;
     setLyrics(null);
     setError('');
+    // The lyrics lookup chains up to four service queries; whatever happens, the spinner must
+    // always settle — a stalled service surfaces as an error instead of "Searching…" forever.
+    const timer = setTimeout(() => {
+      if (alive) setError('The lyrics service did not answer in time.');
+    }, 45_000);
     client
       .findLyrics(title, artist)
       .then((hit) => {
@@ -987,9 +1008,13 @@ export function FindLyricsCommand(props: CommandProps): ReactNode {
       })
       .catch((caught) => {
         if (alive && !isAborted(caught)) setError(describeError(caught));
+      })
+      .finally(() => {
+        clearTimeout(timer);
       });
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
   }, [media, client]);
 

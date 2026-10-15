@@ -26632,18 +26632,27 @@ var require_adapter = __commonJS({
       return ACCESSORY_COLORS2[color] ?? color;
     }
     function mapIcon(item) {
-      if (item.iconName) return { source: { light: `icon://${item.iconName}.png` } };
-      if (item.iconSvg) {
-        return { source: { light: `data:image/svg+xml;base64,${Buffer.from(item.iconSvg).toString("base64")}` } };
-      }
-      if (item.iconUri) return { source: { light: item.iconUri } };
-      if (typeof item.icon === "string" && item.icon.length > 0) {
+      let mapped;
+      if (item.iconName) {
+        mapped = { source: { light: `icon://${item.iconName}.png` } };
+      } else if (item.iconSvg) {
+        mapped = {
+          source: { light: `data:image/svg+xml;base64,${Buffer.from(item.iconSvg).toString("base64")}` },
+          // Raw markup rides along so the renderer can inline the SVG and tint it with `color`
+          // (an <img> of an SVG cannot inherit currentColor, so a tint would never apply).
+          svg: item.iconSvg
+        };
+      } else if (item.iconUri) {
+        mapped = { source: { light: item.iconUri } };
+      } else if (typeof item.icon === "string" && item.icon.length > 0) {
         if (/^(https?:|data:|file:)/.test(item.icon) || /\.(png|jpe?g|gif|svg|webp|ico)$/i.test(item.icon)) {
-          return { source: { light: item.icon } };
+          mapped = { source: { light: item.icon } };
+        } else {
+          mapped = { source: { light: `emoji://${encodeURIComponent(item.icon)}` } };
         }
-        return { source: { light: `emoji://${encodeURIComponent(item.icon)}` } };
       }
-      return void 0;
+      if (mapped && item.iconColor) mapped.color = item.iconColor;
+      return mapped;
     }
     function filterAccessory(filter) {
       return filter?.options?.length ? { sections: [{ items: filter.options.map((option) => ({ id: option.value, title: option.label })) }] } : void 0;

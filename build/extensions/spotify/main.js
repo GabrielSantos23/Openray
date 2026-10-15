@@ -1443,6 +1443,7 @@ function SearchCommand({ query, filterValue, native, signal, preferences }) {
       error ? /* @__PURE__ */ jsx(Grid.EmptyView, { title: "Search failed", description: error }) : null,
       !error && loading ? /* @__PURE__ */ jsx(Grid.EmptyView, { title: "Searching\u2026" }) : null,
       !error && !loading && items.length === 0 ? /* @__PURE__ */ jsx(Grid.EmptyView, { title: "No results", description: `Nothing found for "${query.trim()}"` }) : null,
+      notice ? /* @__PURE__ */ jsx(Grid.Section, { title: "Status", children: /* @__PURE__ */ jsx(Grid.Item, { id: "notice", title: notice, icon: { lucide: "info" } }) }) : null,
       items
     ] });
   }
@@ -1452,6 +1453,7 @@ function SearchCommand({ query, filterValue, native, signal, preferences }) {
     error ? /* @__PURE__ */ jsx(List.EmptyView, { title: "Search failed", description: error }) : null,
     !error && searching ? /* @__PURE__ */ jsx(List.EmptyView, { title: "Searching\u2026" }) : null,
     !error && !searching && sections.length === 0 ? /* @__PURE__ */ jsx(List.EmptyView, { title: "No results", description: `Nothing found for "${query.trim()}"` }) : null,
+    notice ? /* @__PURE__ */ jsx(List.Section, { title: "Status", children: /* @__PURE__ */ jsx(List.Item, { id: "notice", title: notice, icon: { lucide: "info" } }) }) : null,
     sections
   ] });
 }
@@ -3130,26 +3132,40 @@ function PlaylistPicker({
   actionLabel,
   onPick
 }) {
-  return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.Section, { title, children: playlists.map((playlist) => /* @__PURE__ */ jsx(
-    List.Item,
-    {
-      id: playlist.id,
-      title: playlist.name,
-      subtitle: `${playlistTrackCount(playlist)} tracks`,
-      kind: "playlist",
-      icon: playlistArtwork(playlist),
-      actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
-        Action,
-        {
-          title: actionLabel,
-          onAction: async () => {
-            await onPick(playlist);
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 4e3);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  return /* @__PURE__ */ jsxs(List, { children: [
+    notice ? /* @__PURE__ */ jsx(List.Section, { title: "Status", children: /* @__PURE__ */ jsx(List.Item, { id: "notice", title: notice, icon: { lucide: "info" } }) }) : null,
+    /* @__PURE__ */ jsx(List.Section, { title, children: playlists.map((playlist) => /* @__PURE__ */ jsx(
+      List.Item,
+      {
+        id: playlist.id,
+        title: playlist.name,
+        subtitle: `${playlistTrackCount(playlist)} tracks`,
+        kind: "playlist",
+        icon: playlistArtwork(playlist),
+        actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
+          Action,
+          {
+            title: actionLabel,
+            onAction: async () => {
+              try {
+                await onPick(playlist);
+                setNotice(`${actionLabel}: done`);
+              } catch (caught) {
+                if (!isAborted(caught)) setNotice(describeError(caught));
+              }
+            }
           }
-        }
-      ) })
-    },
-    playlist.id
-  )) }) });
+        ) })
+      },
+      playlist.id
+    )) })
+  ] });
 }
 function AddToPlaylistCommand(props) {
   const client = useMemo(() => new SpotifyClient(props.native.call), [props.native]);
@@ -3254,6 +3270,9 @@ function FindLyricsCommand(props) {
     let alive = true;
     setLyrics(null);
     setError("");
+    const timer = setTimeout(() => {
+      if (alive) setError("The lyrics service did not answer in time.");
+    }, 45e3);
     client.findLyrics(title, artist).then((hit) => {
       if (!alive) return;
       if (!hit) {
@@ -3271,9 +3290,12 @@ function FindLyricsCommand(props) {
       setLyrics(state);
     }).catch((caught) => {
       if (alive && !isAborted(caught)) setError(describeError(caught));
+    }).finally(() => {
+      clearTimeout(timer);
     });
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
   }, [media, client]);
   useEffect(() => {

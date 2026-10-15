@@ -204,6 +204,11 @@ export function SearchCommand({ query, filterValue, native, signal, preferences 
         {!error && !loading && items.length === 0 ? (
           <Grid.EmptyView title="No results" description={`Nothing found for "${query.trim()}"`} />
         ) : null}
+        {notice ? (
+          <Grid.Section title="Status">
+            <Grid.Item id="notice" title={notice} icon={{ lucide: 'info' }} />
+          </Grid.Section>
+        ) : null}
         {items}
       </Grid>
     );
@@ -217,6 +222,11 @@ export function SearchCommand({ query, filterValue, native, signal, preferences 
       {!error && searching ? <List.EmptyView title="Searching…" /> : null}
       {!error && !searching && sections.length === 0 ? (
         <List.EmptyView title="No results" description={`Nothing found for "${query.trim()}"`} />
+      ) : null}
+      {notice ? (
+        <List.Section title="Status">
+          <List.Item id="notice" title={notice} icon={{ lucide: 'info' }} />
+        </List.Section>
       ) : null}
       {sections}
     </List>

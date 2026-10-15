@@ -27,7 +27,19 @@ import type {
 } from "./useExtensionCommand";
 
 function Icon({ icon, fallback = "AppWindow" }: { icon?: unknown; fallback?: string }) {
-  const source = (icon as { source?: { light?: string; dark?: string } })?.source?.light;
+  const spec = icon as { source?: { light?: string; dark?: string }; svg?: unknown; color?: unknown } | undefined;
+  // Extension-supplied SVG markup is inlined (not an <img>) so `color` tints it via currentColor.
+  if (typeof spec?.svg === "string" && spec.svg.length > 0) {
+    return (
+      <span
+        className="icon"
+        aria-hidden
+        style={{ color: typeof spec.color === "string" ? spec.color : undefined }}
+        dangerouslySetInnerHTML={{ __html: spec.svg }}
+      />
+    );
+  }
+  const source = spec?.source?.light;
   if (typeof source === "string" && source.startsWith("emoji://")) {
     return (
       <span className="icon icon--emoji" aria-hidden>
@@ -329,8 +341,12 @@ export function RenderedView({
 
   const sections = body.sections;
   const items = flatItems(body);
+  // `filtering: false` means the extension owns filtering (the search text re-renders the command
+  // server-side) — the renderer must then show the sections as they arrive, not re-filter them.
   const visibleSections = sections
-    ? filterSections(sections, query, body.keepSectionOrder ?? false)
+    ? filtering
+      ? filterSections(sections, query, body.keepSectionOrder ?? false)
+      : sections
     : undefined;
   const visibleItems = useMemo(
     () => (visibleSections ? visibleSections.flatMap((section) => section.items) : filtering ? items.filter((item) => itemMatches(item, query)) : items),
