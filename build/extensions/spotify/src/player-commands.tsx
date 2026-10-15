@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CommandProps } from '@flowkey-mini/react-ui';
 import { Action, ActionPanel, Detail, List } from '@flowkey-mini/react-ui';
 import { SpotifyApiError, SpotifyClient, type NativeCallFn } from './api/client';
-import type { SpotifyDevice, SpotifyPlaybackState, SpotifyTrack } from './api/types';
+import type { SpotifyDevice, SpotifyPlaybackState, SpotifyPlaylist, SpotifyTrack } from './api/types';
 import { formatMs } from './format';
 import {
   activeLineIndex,
@@ -13,7 +13,7 @@ import {
   type MediaState,
 } from './lyrics';
 import { describeError, isAborted } from './search-model';
-import { loadLibrary } from './store';
+import { trackActions } from './search';
 
 const VOLUME_STEP = 10;
 const SEEK_STEP_MS = 15_000;
@@ -584,6 +584,7 @@ export function QueueCommand(props: CommandProps): ReactNode {
   const client = useMemo(() => new SpotifyClient(props.native.call), [props.native]);
   const [queue, setQueue] = useState<Awaited<ReturnType<SpotifyClient['queue']>> | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   useEffect(() => {
     let alive = true;
     client
@@ -598,6 +599,16 @@ export function QueueCommand(props: CommandProps): ReactNode {
       alive = false;
     };
   }, [client]);
+  const current = queue && isTrack(queue.currently_playing) ? queue.currently_playing : null;
+  const queuedTracks = queue ? queue.queue.filter(isTrack) : [];
+  const entries = queuedTracks.filter(
+    (track, index) => queuedTracks.findIndex((other) => other.id === track.id) === index,
+  );
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   if (error) {
     return (
       <List>
@@ -612,8 +623,10 @@ export function QueueCommand(props: CommandProps): ReactNode {
       </List>
     );
   }
-  const entries = queue.queue.filter(isTrack);
-  const current = isTrack(queue.currently_playing) ? queue.currently_playing : null;
+  const artworkIcon = (track: SpotifyTrack) => {
+    const url = track.album?.images?.at(-1)?.url;
+    return url ? { uri: url } : undefined;
+  };
   return (
     <List>
       {entries.length === 0 && !current ? <List.EmptyView title="Queue is empty" /> : null}
@@ -624,6 +637,8 @@ export function QueueCommand(props: CommandProps): ReactNode {
             title={current.name}
             subtitle={current.artists.map((artist) => artist.name).join(', ')}
             kind="track"
+            icon={artworkIcon(current)}
+            actions={trackActions(current, client, setNotice, props.signal)}
           />
         </List.Section>
       ) : null}
@@ -636,22 +651,15 @@ export function QueueCommand(props: CommandProps): ReactNode {
               title={track.name}
               subtitle={`${track.artists.map((artist) => artist.name).join(', ')} · ${formatMs(track.duration_ms)}`}
               kind="track"
-              actions={
-                <ActionPanel>
-                  <Action
-                    title="Play Now"
-                    onAction={async () => {
-                      try {
-                        await client.play({ uris: [track.uri] });
-                      } catch (caught) {
-                        if (!isAborted(caught)) setError(describeError(caught));
-                      }
-                    }}
-                  />
-                </ActionPanel>
-              }
+              icon={artworkIcon(track)}
+              actions={trackActions(track, client, setNotice, props.signal)}
             />
           ))}
+        </List.Section>
+      ) : null}
+      {notice ? (
+        <List.Section title="Status">
+          <List.Item id="notice" title={notice} icon={{ lucide: 'info' }} />
         </List.Section>
       ) : null}
     </List>
@@ -727,32 +735,101 @@ export function DevicesCommand(props: CommandProps): ReactNode {
   );
 }
 
-export function AddToPlaylistCommand(props: CommandProps): ReactNode {
-  const client = useMemo(() => new SpotifyClient(props.native.call), [props.native]);
-  const result = usePlaybackContext(client);
-  const [playlists, setPlaylists] = useState<Awaited<ReturnType<typeof loadLibrary>> | null>(null);
-  const [libraryError, setLibraryError] = useState('');
+/** Tolerates both the API shape (`{total}`) and defensive shapes (number/array). */
+function playlistTrackCount(playlist: SpotifyPlaylist): number {
+  const tracks = playlist.tracks as unknown;
+  if (typeof tracks === 'number') return tracks;
+  if (Array.isArray(tracks)) return tracks.length;
+  return (tracks as { total?: number } | null)?.total ?? 0;
+}
+
+function playlistArtwork(playlist: SpotifyPlaylist): { uri: string } | undefined {
+  const url = playlist.images?.at(-1)?.url ?? playlist.images?.[0]?.url;
+  return url ? { uri: url } : undefined;
+}
+
+/** The user's editable playlists (owner == me), fetched fresh so counts and covers are current. */
+function useOwnedPlaylists(
+  client: SpotifyClient,
+  ready: boolean,
+): { playlists: SpotifyPlaylist[] | null; error: string } {
+  const [state, setState] = useState<{ playlists: SpotifyPlaylist[] | null; error: string }>({
+    playlists: null,
+    error: '',
+  });
   useEffect(() => {
-    if (result.kind !== 'context') return;
+    if (!ready) return;
     let alive = true;
-    loadLibrary(client)
-      .then((library) => {
-        if (alive) setPlaylists(library);
+    Promise.all([client.myPlaylists(50), client.me()])
+      .then(([page, me]) => {
+        if (!alive) return;
+        const mine = (page.items ?? []).filter(
+          (playlist): playlist is SpotifyPlaylist =>
+            Boolean(playlist) && playlist.owner?.id === me.id,
+        );
+        setState({ playlists: mine, error: '' });
       })
       .catch((caught) => {
-        if (alive && !isAborted(caught)) setLibraryError(describeError(caught));
+        if (!alive || isAborted(caught)) return;
+        setState({ playlists: null, error: describeError(caught) });
       });
     return () => {
       alive = false;
     };
-  }, [client, result]);
+  }, [client, ready]);
+  return state;
+}
+
+function PlaylistPicker({
+  title,
+  playlists,
+  actionLabel,
+  onPick,
+}: {
+  title: string;
+  playlists: SpotifyPlaylist[];
+  actionLabel: string;
+  onPick: (playlist: SpotifyPlaylist) => Promise<void>;
+}): ReactNode {
+  return (
+    <List>
+      <List.Section title={title}>
+        {playlists.map((playlist) => (
+          <List.Item
+            key={playlist.id}
+            id={playlist.id}
+            title={playlist.name}
+            subtitle={`${playlistTrackCount(playlist)} tracks`}
+            kind="playlist"
+            icon={playlistArtwork(playlist)}
+            actions={
+              <ActionPanel>
+                <Action
+                  title={actionLabel}
+                  onAction={async () => {
+                    await onPick(playlist);
+                  }}
+                />
+              </ActionPanel>
+            }
+          />
+        ))}
+      </List.Section>
+    </List>
+  );
+}
+
+export function AddToPlaylistCommand(props: CommandProps): ReactNode {
+  const client = useMemo(() => new SpotifyClient(props.native.call), [props.native]);
+  const result = usePlaybackContext(client);
+  const { playlists, error } = useOwnedPlaylists(client, result.kind === 'context');
   return (
     <ContextGate result={result}>
       {({ track }) => {
-        if (libraryError) {
+        if (error) {
           return (
             <List>
-              <List.EmptyView title="Could not load playlists" description={libraryError} />
+              <List.EmptyView title="Could not load playlists" description={error} />
             </List>
           );
         }
@@ -763,10 +840,7 @@ export function AddToPlaylistCommand(props: CommandProps): ReactNode {
             </List>
           );
         }
-        const owned = playlists.results.playlists?.items.filter(
-          (playlist) => playlist && playlist.owner?.id === playlists.me.id,
-        );
-        if (!owned || owned.length === 0) {
+        if (playlists.length === 0) {
           return (
             <List>
               <List.EmptyView title="No editable playlists found" />
@@ -774,33 +848,14 @@ export function AddToPlaylistCommand(props: CommandProps): ReactNode {
           );
         }
         return (
-          <List>
-            <List.Section title={`Add ${track.name} to…`}>
-              {owned.map((playlist) => (
-                <List.Item
-                  key={playlist.id}
-                  id={playlist.id}
-                  title={playlist.name}
-                  subtitle={`${playlist.tracks?.total ?? 0} tracks`}
-                  kind="playlist"
-                  actions={
-                    <ActionPanel>
-                      <Action
-                        title="Add Track"
-                        onAction={async () => {
-                          try {
-                            await client.addToPlaylist(playlist.id, [track.uri]);
-                          } catch (caught) {
-                            if (!isAborted(caught)) setLibraryError(describeError(caught));
-                          }
-                        }}
-                      />
-                    </ActionPanel>
-                  }
-                />
-              ))}
-            </List.Section>
-          </List>
+          <PlaylistPicker
+            title={`Add ${track.name} to…`}
+            playlists={playlists}
+            actionLabel="Add Track"
+            onPick={async (playlist) => {
+              await client.addToPlaylist(playlist.id, [track.uri]);
+            }}
+          />
         );
       }}
     </ContextGate>
@@ -810,29 +865,14 @@ export function AddToPlaylistCommand(props: CommandProps): ReactNode {
 export function RemoveFromPlaylistCommand(props: CommandProps): ReactNode {
   const client = useMemo(() => new SpotifyClient(props.native.call), [props.native]);
   const result = usePlaybackContext(client);
-  const [playlists, setPlaylists] = useState<Awaited<ReturnType<typeof loadLibrary>> | null>(null);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    if (result.kind !== 'context') return;
-    let alive = true;
-    loadLibrary(client)
-      .then((library) => {
-        if (alive) setPlaylists(library);
-      })
-      .catch((caught) => {
-        if (alive && !isAborted(caught)) setError(describeError(caught));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [client, result]);
+  const { playlists, error } = useOwnedPlaylists(client, result.kind === 'context');
   return (
     <ContextGate result={result}>
       {({ track }) => {
         if (error) {
           return (
             <List>
-              <List.EmptyView title="Something went wrong" description={error} />
+              <List.EmptyView title="Could not load playlists" description={error} />
             </List>
           );
         }
@@ -843,10 +883,7 @@ export function RemoveFromPlaylistCommand(props: CommandProps): ReactNode {
             </List>
           );
         }
-        const owned = playlists.results.playlists?.items.filter(
-          (playlist) => playlist && playlist.owner?.id === playlists.me.id,
-        );
-        if (!owned || owned.length === 0) {
+        if (playlists.length === 0) {
           return (
             <List>
               <List.EmptyView title="No editable playlists found" />
@@ -854,33 +891,14 @@ export function RemoveFromPlaylistCommand(props: CommandProps): ReactNode {
           );
         }
         return (
-          <List>
-            <List.Section title={`Remove ${track.name} from…`}>
-              {owned.map((playlist) => (
-                <List.Item
-                  key={playlist.id}
-                  id={playlist.id}
-                  title={playlist.name}
-                  subtitle={`${playlist.tracks?.total ?? 0} tracks`}
-                  kind="playlist"
-                  actions={
-                    <ActionPanel>
-                      <Action
-                        title="Remove Track"
-                        onAction={async () => {
-                          try {
-                            await client.removeFromPlaylist(playlist.id, track.uri);
-                          } catch (caught) {
-                            if (!isAborted(caught)) setError(describeError(caught));
-                          }
-                        }}
-                      />
-                    </ActionPanel>
-                  }
-                />
-              ))}
-            </List.Section>
-          </List>
+          <PlaylistPicker
+            title={`Remove ${track.name} from…`}
+            playlists={playlists}
+            actionLabel="Remove Track"
+            onPick={async (playlist) => {
+              await client.removeFromPlaylist(playlist.id, track.uri);
+            }}
+          />
         );
       }}
     </ContextGate>
@@ -898,7 +916,9 @@ function lyricsMarkdown(
   const body = lyrics.synced
     ? lyrics.lines
         .map((line, i) => {
-          if (i === activeIndex) return `**♪ ${line.text}**`;
+          // The active line is a large heading (h2 keeps markdownTitle from hijacking it);
+          // sung lines dim as strikethrough, upcoming lines stay plain.
+          if (i === activeIndex) return `## ♪ ${line.text}`;
           if (activeIndex >= 0 && i < activeIndex) return `~~${line.text}~~`;
           return ' ' + line.text;
         })
@@ -1017,18 +1037,21 @@ export function FindLyricsCommand(props: CommandProps): ReactNode {
         <ActionPanel>
           <Action
             title="Play / Pause"
+            icon={{ lucide: 'play' }}
             onAction={async () => {
               await props.native.call('media.control', { command: 'playPause' });
             }}
           />
           <Action
             title="Next Track"
+            icon={{ lucide: 'forward' }}
             onAction={async () => {
               await props.native.call('media.control', { command: 'next' });
             }}
           />
           <Action
             title="Previous Track"
+            icon={{ lucide: 'rewind' }}
             onAction={async () => {
               await props.native.call('media.control', { command: 'previous' });
             }}

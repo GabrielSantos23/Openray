@@ -57,6 +57,7 @@ export function fetchStoreList(
   query: string,
   offset = 0,
   category: string | null = null,
+  showAll = false,
 ): Promise<{
   syncedAt: string | null;
   categories: string[];
@@ -64,7 +65,7 @@ export function fetchStoreList(
   hasMore: boolean;
   extensions: StoreEntry[];
 }> {
-  return ipc.backend("store.list", { query, offset, category }) as Promise<{
+  return ipc.backend("store.list", { query, offset, category, showAll }) as Promise<{
     syncedAt: string | null;
     categories: string[];
     total: number;
@@ -77,12 +78,19 @@ export function fetchStoreDetail(name: string, source: "github" | "uploaded"): P
   return ipc.backend("store.detail", { name, source }) as Promise<StoreDetail>;
 }
 
-export function fetchStoreIcon(name: string, source: "github" | "uploaded"): Promise<string | null> {
-  return ipc.backend("store.icon", { name, source }) as Promise<string | null>;
+export interface StoreIconResult {
+  icon: string | null;
+  emoji?: string | null;
 }
 
-export function fetchStoreScreenshot(name: string, screenshotPath: string): Promise<string | null> {
-  return ipc.backend("store.screenshot", { name, path: screenshotPath }) as Promise<string | null>;
+export async function fetchStoreIcon(name: string, source: "github" | "uploaded"): Promise<StoreIconResult> {
+  const result = (await ipc.backend("store.icon", { name, source })) as { icon?: string | null; emoji?: string | null };
+  return { icon: result?.icon ?? null, emoji: result?.emoji ?? null };
+}
+
+export async function fetchStoreScreenshot(name: string, screenshotPath: string): Promise<string | null> {
+  const result = (await ipc.backend("store.screenshot", { name, path: screenshotPath })) as { uri?: string | null };
+  return result?.uri ?? null;
 }
 
 export function installStoreExtension(name: string, source: "github" | "uploaded"): Promise<{ installed: boolean; runnable: boolean; live?: string | null }> {
@@ -105,9 +113,9 @@ export function launchStoreCommand(uuid: string, commandName: string): void {
 }
 
 // Session-level icon cache: one backend round trip per extension per window.
-const iconCache = new Map<string, string | null>();
+const iconCache = new Map<string, StoreIconResult | null>();
 
-export async function cachedStoreIcon(name: string, source: "github" | "uploaded"): Promise<string | null> {
+export async function cachedStoreIcon(name: string, source: "github" | "uploaded"): Promise<StoreIconResult | null> {
   const key = `${source}:${name}`;
   if (iconCache.has(key)) return iconCache.get(key) ?? null;
   try {

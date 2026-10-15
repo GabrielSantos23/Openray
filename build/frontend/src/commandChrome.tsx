@@ -60,7 +60,7 @@ export function CommandFooter({
             <>
               {primary.key ? <span className="kbd">{primary.key}</span> : null}
               <span className="kbd footer-primary__return" aria-hidden>
-                ⏎
+                ↵
               </span>
             </>
           ) : null}

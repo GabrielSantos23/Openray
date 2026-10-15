@@ -196,14 +196,23 @@ function liveExtensionIds(extensionsRoot) {
  * The merged catalog: uploaded entries first, then the GitHub index, with install state applied.
  * Paginated — the full index is well over a megabyte and a pipe message that size never reached
  * the renderer; slices of ~100 keep each response small and the list loads more on scroll.
+ *
+ * The default browse list is what can actually run here (uploaded FlowKey extensions plus GitHub
+ * entries that were installed); the unported ~3,400 Raycast-only entries stay behind `showAll`
+ * so the Store does not drown them out.
  */
-function listStoreExtensions({ storeRoot, extensionsRoot, query = "", category = null, offset = 0, limit = 100 }) {
+function listStoreExtensions({ storeRoot, extensionsRoot, query = "", category = null, offset = 0, limit = 100, showAll = false }) {
   const index = readIndex(storeRoot);
   const live = liveExtensionIds(extensionsRoot);
   const state = readState(storeRoot);
+  const uploaded = uploads.listUploadedExtensions(storeRoot);
+  const uploadedNames = new Set(uploaded.map((entry) => entry.name));
+  const githubEntries = showAll
+    ? (index?.extensions ?? [])
+    : (index?.extensions ?? []).filter((entry) => Boolean(state.installed[`github:${entry.name}`]));
   const entries = [
-    ...uploads.listUploadedExtensions(storeRoot),
-    ...(index?.extensions ?? []),
+    ...uploaded,
+    ...githubEntries.filter((entry) => !uploadedNames.has(entry.name)),
   ];
   const needle = query.trim().toLowerCase();
   const filtered = entries.filter((entry) => {
@@ -363,17 +372,34 @@ async function storeDetail({ storeRoot, extensionsRoot, fetchImpl = fetch, name,
   };
 }
 
+const IMAGE_MIME = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", ico: "image/x-icon" };
+
+function dataUrlFromFile(file) {
+  const mime = IMAGE_MIME[path.extname(file).slice(1).toLowerCase()] ?? "image/png";
+  return `data:${mime};base64,${fs.readFileSync(file).toString("base64")}`;
+}
+
 /** The extension icon as a data URL (lazily downloaded from the repo, cached on disk). */
 async function storeIcon({ storeRoot, extensionsRoot, fetchImpl = fetch, name, source }) {
   const key = `${source}-${path.basename(name)}`;
   if (source === "uploaded") {
     const dir = uploads.uploadedDir(storeRoot, name);
     const manifest = uploads.readJson(path.join(dir, "manifest.json"));
-    const iconFile = manifest?.icon ? path.join(dir, "assets", manifest.icon) : null;
-    if (iconFile && fs.existsSync(iconFile)) {
-      return { icon: `data:image/${path.extname(iconFile).slice(1)};base64,${fs.readFileSync(iconFile).toString("base64")}` };
+    const declared = typeof manifest?.icon === "string" ? manifest.icon : null;
+    if (declared) {
+      for (const candidate of [path.join(dir, "assets", declared), path.join(dir, declared)]) {
+        try {
+          if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+            return { icon: dataUrlFromFile(candidate), emoji: null };
+          }
+        } catch {
+          /* unreadable candidate falls through */
+        }
+      }
     }
-    return { icon: null };
+    // Manifest icons may be emoji (FlowKey convention) rather than files — surface them as-is.
+    const emoji = declared && !/[\\/]/.test(declared) && !declared.includes(".") ? declared : null;
+    return { icon: null, emoji };
   }
   // A live FlowKey install of the same name wins: the store shows what actually runs.
   const liveIcon = path.join(extensionsRoot, path.basename(name), "icon.png");
@@ -393,8 +419,9 @@ async function storeIcon({ storeRoot, extensionsRoot, fetchImpl = fetch, name, s
   }
   const pkg = uploads.readJson(path.join(storePaths(storeRoot).catalog, path.basename(name), "package.json"));
   if (!pkg?.icon) return { icon: null };
-  const remotePath = `extensions/${name}/assets/${pkg.icon}`;
-  const bytes = await github.fetchRawBuffer(remotePath, fetchImpl);
+  // package.json `icon` is repo-root-relative to the extension directory (e.g. "command-icon.png"
+  // or "assets/icon.png") — it already carries its own folder.
+  const bytes = await github.fetchRawBuffer(`extensions/${name}/${String(pkg.icon).replace(/^\.\//, "")}`, fetchImpl);
   const ext = path.extname(pkg.icon) || ".png";
   fs.mkdirSync(iconsDir, { recursive: true });
   fs.writeFileSync(path.join(iconsDir, `${key}${ext}`), bytes);
@@ -496,6 +523,7 @@ function createExtensionStore({ dataRoot, extensionsRoot, fetchImpl = fetch } = 
         category: params?.category ?? null,
         offset: Number(params?.offset) || 0,
         limit: Number(params?.limit) || 100,
+        showAll: params?.showAll === true,
       });
     },
     detail(params) {

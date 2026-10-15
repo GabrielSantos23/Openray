@@ -17,6 +17,7 @@ function RootCommand({ props }: { props: CommandProps }) {
   const [count, setCount] = useState(0);
   const [secretEcho, setSecretEcho] = useState("(no secret read)");
   const [oauthEcho, setOauthEcho] = useState("(no oauth status)");
+  const [imageEcho, setImageEcho] = useState("(no image)");
 
     useEffect(() => {
       let cancelled = false;
@@ -57,7 +58,7 @@ function RootCommand({ props }: { props: CommandProps }) {
         <List.Item
           id="vault"
           title="Vault"
-          subtitle={`secret=${secretEcho} oauth=${oauthEcho}`}
+          subtitle={`secret=${secretEcho} oauth=${oauthEcho} img=${imageEcho}`}
           actions={
             <ActionPanel>
               <Action
@@ -83,6 +84,15 @@ function RootCommand({ props }: { props: CommandProps }) {
               <Action
                 title="Image bad host"
                 onAction={() => props.native.call("image.fetch", { url: "https://evil.example/x.png" })}
+              />
+              <Action
+                title="Image data uri"
+                onAction={async () => {
+                  const result = await props.native.call("image.fetch", {
+                    url: process.env.RAYCASTMINI_TEST_IMAGE_URL ?? "https://i.scdn.co/none.png",
+                  });
+                  setImageEcho(String(result.uri));
+                }}
               />
               <Action
                 title="Fetch auth undeclared"

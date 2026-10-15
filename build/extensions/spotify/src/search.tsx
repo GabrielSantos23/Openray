@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { cloneElement, createElement, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import type { CommandProps } from '@flowkey-mini/react-ui';
 import { Action, ActionPanel, Grid, List } from '@flowkey-mini/react-ui';
 import { SpotifyApiError, SpotifyClient } from './api/client';
@@ -13,7 +13,6 @@ import type {
 import { externalUrl, formatMs, trackUrl } from './format';
 import { clearRecentSearches, recentSearches, rememberSearch, removeSearch } from './recent';
 import {
-  collectArtworkUrls,
   describeError,
   isAborted,
   pruneResults,
@@ -53,9 +52,7 @@ export function SearchCommand({ query, filterValue, native, signal, preferences 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [artwork, setArtwork] = useState<Record<string, string>>({});
   const [recentVersion, setRecentVersion] = useState(0);
-  const artworkDone = useRef(new Set<string>());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -128,26 +125,6 @@ export function SearchCommand({ query, filterValue, native, signal, preferences 
     };
   }, [authState, query]);
 
-  const artworkKey = collectArtworkUrls(results).join('|');
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      for (const url of artworkKey.split('|')) {
-        if (!url || artworkDone.current.has(url)) continue;
-        artworkDone.current.add(url);
-        try {
-          const uri = await client.fetchImage(url, signal);
-          if (alive) setArtwork((previous) => ({ ...previous, [url]: uri }));
-        } catch {
-          if (alive) artworkDone.current.delete(url);
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [client, signal, artworkKey]);
-
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(''), NOTICE_CLEAR_MS);
@@ -219,7 +196,7 @@ export function SearchCommand({ query, filterValue, native, signal, preferences 
   }
 
   if (GRID_FILTERS.has(filter)) {
-    const items = buildGridItems(results, filter, artwork, client, setNotice, signal);
+    const items = buildGridItems(results, filter, client, setNotice, signal);
     return (
       <Grid columns={5} title={gridTitle(filter)}>
         {error ? <Grid.EmptyView title="Search failed" description={error} /> : null}
@@ -232,7 +209,7 @@ export function SearchCommand({ query, filterValue, native, signal, preferences 
     );
   }
 
-  const sections = buildListSections(results, filter, artwork, client, setNotice, signal);
+  const sections = buildListSections(results, filter, client, setNotice, signal);
   const searching = loading || results === null;
   return (
     <List filter={SEARCH_FILTERS}>
@@ -257,16 +234,35 @@ export interface SectionOptions {
   likedSongsItem?: ReactNode;
 }
 
+/**
+ * The serializer rejects a repeated item id across the whole tree (Raycast's own duplicate-key
+ * error). Spotify search can return the same entity in two sections — or twice in one — so later
+ * duplicates get a stable `~n` suffix instead of failing the render.
+ */
+function withFreshIds(nodes: ReactNode[], seen: Set<string>): ReactNode[] {
+  return nodes.map((node) => {
+    const id = (node as { props?: { id?: unknown } } | null)?.props?.id;
+    if (typeof id !== 'string' || id.length === 0) return node;
+    if (!seen.has(id)) {
+      seen.add(id);
+      return node;
+    }
+    let n = 2;
+    while (seen.has(`${id}~${n}`)) n += 1;
+    return cloneElement(node as ReactElement, { id: `${id}~${n}` });
+  });
+}
+
 export function buildListSections(
   results: SearchResults | null,
   filter: string,
-  artwork: Record<string, string>,
   client: SpotifyClient,
   setNotice: (message: string) => void,
   signal: AbortSignal,
   options: SectionOptions = {},
 ): ReactNode[] {
   const sections: ReactNode[] = [];
+  const seenIds = new Set<string>();
   const allLimit = (fallback: number) => options.sectionLimit ?? fallback;
   const artists = results?.artists?.items ?? [];
   const tracks = results?.tracks?.items ?? [];
@@ -280,17 +276,12 @@ export function buildListSections(
       createElement(
         List.Section,
         { title: 'Artists', key: 'artists' },
-        artists
-          .slice(0, filter === 'all' ? allLimit(3) : 50)
-          .map((artist) =>
-            artistListItem(
-              artist,
-              artwork[artist.images?.[0]?.url ?? ''],
-              client,
-              setNotice,
-              signal,
-            ),
-          ),
+        withFreshIds(
+          artists
+            .slice(0, filter === 'all' ? allLimit(3) : 50)
+            .map((artist) => artistListItem(artist, client, setNotice, signal)),
+          seenIds,
+        ),
       ),
     );
   }
@@ -299,9 +290,12 @@ export function buildListSections(
       createElement(
         List.Section,
         { title: options.tracksTitle ?? 'Songs', key: 'tracks' },
-        tracks
-          .slice(0, filter === 'all' ? allLimit(4) : 50)
-          .map((track) => trackListItem(track, artwork, client, setNotice, signal)),
+        withFreshIds(
+          tracks
+            .slice(0, filter === 'all' ? allLimit(4) : 50)
+            .map((track) => trackListItem(track, client, setNotice, signal)),
+          seenIds,
+        ),
       ),
     );
   }
@@ -310,9 +304,12 @@ export function buildListSections(
       createElement(
         List.Section,
         { title: 'Albums', key: 'albums' },
-        albums
-          .slice(0, filter === 'all' ? allLimit(6) : 50)
-          .map((album) => albumListItem('list', album, artwork, client, setNotice, signal)),
+        withFreshIds(
+          albums
+            .slice(0, filter === 'all' ? allLimit(6) : 50)
+            .map((album) => albumListItem('list', album, client, setNotice, signal)),
+          seenIds,
+        ),
       ),
     );
   }
@@ -323,9 +320,12 @@ export function buildListSections(
     sections.push(
       createElement(List.Section, { title: 'Playlists', key: 'playlists' }, [
         ...(options.likedSongsItem ? [options.likedSongsItem] : []),
-        ...playlists
-          .slice(0, filter === 'all' ? allLimit(6) : 50)
-          .map((playlist) => playlistListItem(playlist, artwork, client, setNotice, signal)),
+        ...withFreshIds(
+          playlists
+            .slice(0, filter === 'all' ? allLimit(6) : 50)
+            .map((playlist) => playlistListItem(playlist, client, setNotice, signal)),
+          seenIds,
+        ),
       ]),
     );
   }
@@ -334,9 +334,12 @@ export function buildListSections(
       createElement(
         List.Section,
         { title: 'Podcasts & Shows', key: 'shows' },
-        shows
-          .slice(0, filter === 'all' ? allLimit(3) : 50)
-          .map((show) => showListItem('list', show, artwork, client, setNotice, signal)),
+        withFreshIds(
+          shows
+            .slice(0, filter === 'all' ? allLimit(3) : 50)
+            .map((show) => showListItem('list', show, client, setNotice, signal)),
+          seenIds,
+        ),
       ),
     );
   }
@@ -345,9 +348,12 @@ export function buildListSections(
       createElement(
         List.Section,
         { title: options.episodesTitle ?? 'Episodes', key: 'episodes' },
-        episodes
-          .slice(0, filter === 'all' ? allLimit(3) : 50)
-          .map((episode) => episodeListItem(episode, artwork, client, setNotice, signal)),
+        withFreshIds(
+          episodes
+            .slice(0, filter === 'all' ? allLimit(3) : 50)
+            .map((episode) => episodeListItem(episode, client, setNotice, signal)),
+          seenIds,
+        ),
       ),
     );
   }
@@ -357,53 +363,71 @@ export function buildListSections(
 export function buildGridItems(
   results: SearchResults | null,
   filter: string,
-  artwork: Record<string, string>,
   client: SpotifyClient,
   setNotice: (message: string) => void,
   signal: AbortSignal,
 ): ReactNode[] {
+  const seenIds = new Set<string>();
   if (filter === 'artists') {
-    return (results?.artists?.items ?? []).map((artist) =>
-      createElement(Grid.Item, {
-        key: artist.id,
-        id: artist.id,
-        title: artist.name,
-        kind: 'artist',
-        icon: iconSpec(artwork[artist.images?.[0]?.url ?? '']),
-        actions: artistActions(artist, client, setNotice, signal),
-      }),
+    return withFreshIds(
+      (results?.artists?.items ?? []).map((artist) =>
+        createElement(Grid.Item, {
+          key: artist.id,
+          id: artist.id,
+          title: artist.name,
+          kind: 'artist',
+          icon: gridImage(artist.images),
+          actions: artistActions(artist, client, setNotice, signal),
+        }),
+      ),
+      seenIds,
     );
   }
   if (filter === 'albums') {
-    return (results?.albums?.items ?? []).map((album) =>
-      createElement(Grid.Item, {
-        key: album.id,
-        id: album.id,
-        title: album.name,
-        subtitle: `${artistNames(album.artists)} · ${album.release_date.slice(0, 4)}`,
-        kind: 'album',
-        icon: iconSpec(artwork[album.images?.[0]?.url ?? '']),
-        actions: albumActions(album, client, setNotice, signal),
-      }),
+    return withFreshIds(
+      (results?.albums?.items ?? []).map((album) =>
+        createElement(Grid.Item, {
+          key: album.id,
+          id: album.id,
+          title: album.name,
+          subtitle: `${artistNames(album.artists)} · ${album.release_date.slice(0, 4)}`,
+          kind: 'album',
+          icon: gridImage(album.images),
+          actions: albumActions(album, client, setNotice, signal),
+        }),
+      ),
+      seenIds,
     );
   }
-  return (results?.shows?.items ?? []).map((show) =>
-    createElement(Grid.Item, {
-      key: show.id,
-      id: show.id,
-      title: show.name,
-      subtitle: show.publisher,
-      kind: 'show',
-      icon: iconSpec(artwork[show.images?.[0]?.url ?? '']),
-      actions: showActions(show, client, setNotice, signal),
-    }),
+  return withFreshIds(
+    (results?.shows?.items ?? []).map((show) =>
+      createElement(Grid.Item, {
+        key: show.id,
+        id: show.id,
+        title: show.name,
+        subtitle: show.publisher,
+        kind: 'show',
+        icon: gridImage(show.images),
+        actions: showActions(show, client, setNotice, signal),
+      }),
+    ),
+    seenIds,
   );
 }
 
 type Mode = 'list' | 'grid';
 
-function iconSpec(uri: string | undefined) {
-  return uri ? { uri } : undefined;
+// Icons ride as the CDN URL itself — the renderer's <img> loads it directly, so no artwork has
+// to be proxied through the worker (large data: URIs there OOM the worker on big result sets).
+// List rows take the smallest rendition; grid tiles take the mid one so they stay sharp at 2x.
+function listImage(images: { url?: string }[] | undefined): { uri: string } | undefined {
+  const url = images?.at(-1)?.url ?? images?.[0]?.url;
+  return url ? { uri: url } : undefined;
+}
+
+function gridImage(images: { url?: string }[] | undefined): { uri: string } | undefined {
+  const url = (images?.length ?? 0) > 1 ? images?.[1]?.url : images?.[0]?.url;
+  return url ? { uri: url } : undefined;
 }
 
 function artistNames(artists: { name: string }[]): string {
@@ -412,7 +436,6 @@ function artistNames(artists: { name: string }[]): string {
 
 function artistListItem(
   artist: SpotifyArtist,
-  iconUri: string | undefined,
   client: SpotifyClient,
   setNotice: (message: string) => void,
   signal: AbortSignal,
@@ -422,14 +445,13 @@ function artistListItem(
     id: artist.id,
     title: artist.name,
     kind: 'artist',
-    icon: iconSpec(iconUri),
+    icon: listImage(artist.images),
     actions: artistActions(artist, client, setNotice, signal),
   });
 }
 
 function trackListItem(
   track: SpotifyTrack,
-  artwork: Record<string, string>,
   client: SpotifyClient,
   setNotice: (message: string) => void,
   signal: AbortSignal,
@@ -440,7 +462,7 @@ function trackListItem(
     title: track.name,
     subtitle: `${artistNames(track.artists)} · ${formatMs(track.duration_ms)}`,
     kind: 'track',
-    icon: iconSpec(artwork[track.album?.images?.at(-1)?.url ?? '']),
+    icon: listImage(track.album?.images),
     actions: trackActions(track, client, setNotice, signal),
   });
 }
@@ -448,7 +470,6 @@ function trackListItem(
 function albumListItem(
   mode: Mode,
   album: SpotifyAlbum,
-  artwork: Record<string, string>,
   client: SpotifyClient,
   setNotice: (message: string) => void,
   signal: AbortSignal,
@@ -460,7 +481,7 @@ function albumListItem(
       title: album.name,
       subtitle: `${artistNames(album.artists)} · ${album.release_date.slice(0, 4)}`,
       kind: 'album',
-      icon: iconSpec(artwork[album.images?.[0]?.url ?? '']),
+      icon: gridImage(album.images),
       actions: albumActions(album, client, setNotice, signal),
     });
   }
@@ -470,14 +491,13 @@ function albumListItem(
     title: album.name,
     subtitle: `${artistNames(album.artists)} · ${album.release_date.slice(0, 4)}`,
     kind: 'album',
-    icon: iconSpec(artwork[album.images?.[0]?.url ?? '']),
+    icon: listImage(album.images),
     actions: albumActions(album, client, setNotice, signal),
   });
 }
 
 function playlistListItem(
   playlist: SpotifyPlaylist,
-  artwork: Record<string, string>,
   client: SpotifyClient,
   setNotice: (message: string) => void,
   signal: AbortSignal,
@@ -488,7 +508,7 @@ function playlistListItem(
     title: playlist.name,
     subtitle: playlist.owner?.display_name ?? '',
     kind: 'playlist',
-    icon: iconSpec(artwork[playlist.images?.at(-1)?.url ?? '']),
+    icon: listImage(playlist.images),
     actions: playlistActions(playlist, client, setNotice, signal),
   });
 }
@@ -496,7 +516,6 @@ function playlistListItem(
 function showListItem(
   mode: Mode,
   show: SpotifyShow,
-  artwork: Record<string, string>,
   client: SpotifyClient,
   setNotice: (message: string) => void,
   signal: AbortSignal,
@@ -507,14 +526,13 @@ function showListItem(
     title: show.name,
     subtitle: show.publisher,
     kind: 'show',
-    icon: iconSpec(artwork[show.images?.[0]?.url ?? '']),
+    icon: mode === 'grid' ? gridImage(show.images) : listImage(show.images),
     actions: showActions(show, client, setNotice, signal),
   });
 }
 
 function episodeListItem(
   episode: SpotifyEpisode,
-  artwork: Record<string, string>,
   client: SpotifyClient,
   setNotice: (message: string) => void,
   signal: AbortSignal,
@@ -525,7 +543,7 @@ function episodeListItem(
     title: episode.name,
     subtitle: episode.show?.name ?? '',
     kind: 'episode',
-    icon: iconSpec(artwork[episode.show?.images?.at(-1)?.url ?? episode.images?.at(-1)?.url ?? '']),
+    icon: listImage(episode.show?.images ?? episode.images),
     actions: episodeActions(episode, client, setNotice, signal),
   });
 }
@@ -540,6 +558,7 @@ function artistActions(
     <ActionPanel>
       <Action
         title="Play"
+        icon={{ lucide: 'play' }}
         onAction={async () => {
           try {
             await client.play({ context_uri: `spotify:artist:${artist.id}` }, undefined);
@@ -550,6 +569,7 @@ function artistActions(
       />
       <Action
         title="Start Radio"
+        icon={{ lucide: 'forward' }}
         onAction={async () => {
           try {
             await startRadio(client, { artists: [artist.id] }, signal);
@@ -561,6 +581,7 @@ function artistActions(
       />
       <Action
         title="Go to Songs"
+        icon={{ lucide: 'music' }}
         push={artistSongsKey(artist.id)}
         onAction={() => {
           warmArtistSongs(client, artist.id);
@@ -568,6 +589,7 @@ function artistActions(
       />
       <Action
         title="Go to Albums"
+        icon={{ lucide: 'image' }}
         push={artistAlbumsKey(artist.id)}
         onAction={() => {
           warmArtistAlbums(client, artist.id);
@@ -575,6 +597,7 @@ function artistActions(
       />
       <Action
         title="Copy Artist Link"
+        icon={{ lucide: 'copy-clipboard' }}
         onAction={async () => {
           await copyToClipboard(client, externalUrl('artist', artist.id));
           setNotice('Copied artist link');
@@ -594,6 +617,7 @@ export function trackActions(
     <ActionPanel>
       <Action
         title="Play"
+        icon={{ lucide: 'play' }}
         onAction={async () => {
           try {
             await client.play({ uris: [track.uri] });
@@ -605,6 +629,7 @@ export function trackActions(
       />
       <Action
         title="Like / Unlike"
+        icon={{ lucide: 'star' }}
         onAction={async () => {
           try {
             const liked = await client.containsSavedTracks([track.id]);
@@ -622,6 +647,7 @@ export function trackActions(
       />
       <Action
         title="Add to Queue"
+        icon={{ lucide: 'list' }}
         onAction={async () => {
           try {
             await client.addToQueue(track.uri);
@@ -633,6 +659,7 @@ export function trackActions(
       />
       <Action
         title="Start Radio"
+        icon={{ lucide: 'forward' }}
         onAction={async () => {
           try {
             await startRadio(client, { tracks: [track.id] }, signal);
@@ -644,6 +671,7 @@ export function trackActions(
       />
       <Action
         title="Copy Track Link"
+        icon={{ lucide: 'copy-clipboard' }}
         onAction={async () => {
           await copyToClipboard(client, trackUrl(track));
           setNotice('Copied track link');
@@ -663,6 +691,7 @@ export function albumActions(
     <ActionPanel>
       <Action
         title="Play"
+        icon={{ lucide: 'play' }}
         onAction={async () => {
           try {
             await client.play({ context_uri: `spotify:album:${album.id}` });
@@ -673,6 +702,7 @@ export function albumActions(
       />
       <Action
         title="Add / Remove from Library"
+        icon={{ lucide: 'star' }}
         onAction={async () => {
           try {
             const saved = await client.containsSavedAlbums([album.id]);
@@ -690,6 +720,7 @@ export function albumActions(
       />
       <Action
         title="Copy Album Link"
+        icon={{ lucide: 'copy-clipboard' }}
         onAction={async () => {
           await copyToClipboard(client, externalUrl('album', album.id));
           setNotice('Copied album link');
@@ -697,6 +728,7 @@ export function albumActions(
       />
       <Action
         title="Go to Songs"
+        icon={{ lucide: 'music' }}
         push={albumSongsKey(album.id)}
         onAction={() => {
           warmAlbumSongs(client, album.id);
@@ -716,6 +748,7 @@ function playlistActions(
     <ActionPanel>
       <Action
         title="Play"
+        icon={{ lucide: 'play' }}
         onAction={async () => {
           try {
             await client.play({ context_uri: `spotify:playlist:${playlist.id}` });
@@ -726,6 +759,7 @@ function playlistActions(
       />
       <Action
         title="Copy Playlist Link"
+        icon={{ lucide: 'copy-clipboard' }}
         onAction={async () => {
           await copyToClipboard(client, externalUrl('playlist', playlist.id));
           setNotice('Copied playlist link');
@@ -745,6 +779,7 @@ function showActions(
     <ActionPanel>
       <Action
         title="Play"
+        icon={{ lucide: 'play' }}
         onAction={async () => {
           try {
             await client.play({ context_uri: `spotify:show:${show.id}` });
@@ -755,6 +790,7 @@ function showActions(
       />
       <Action
         title="Copy Show Link"
+        icon={{ lucide: 'copy-clipboard' }}
         onAction={async () => {
           await copyToClipboard(client, externalUrl('show', show.id));
           setNotice('Copied show link');
@@ -774,6 +810,7 @@ function episodeActions(
     <ActionPanel>
       <Action
         title="Play"
+        icon={{ lucide: 'play' }}
         onAction={async () => {
           try {
             await client.play({ uris: [episode.uri] });
@@ -785,6 +822,7 @@ function episodeActions(
       />
       <Action
         title="Add to Queue"
+        icon={{ lucide: 'list' }}
         onAction={async () => {
           try {
             await client.addToQueue(episode.uri);
@@ -866,6 +904,7 @@ function ConnectView({
           <ActionPanel>
             <Action
               title="Copy Redirect URI"
+              icon={{ lucide: 'link' }}
               onAction={async () => {
                 if (!redirectUri) return;
                 await copyToClipboard(client, redirectUri);
@@ -883,6 +922,7 @@ function ConnectView({
           <ActionPanel>
             <Action
               title="Connect Spotify"
+              icon={{ lucide: 'forward' }}
               onAction={async () => {
                 if (!configuredClientId) {
                   setNotice('Add your Spotify client id in FlowKey Settings → Spotify (Save), then connect again.');

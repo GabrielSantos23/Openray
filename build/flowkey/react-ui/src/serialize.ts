@@ -70,7 +70,7 @@ const GRID_ITEM_ALLOWED = [
 ];
 const GRID_SECTION_ALLOWED = ['title', 'subtitle'];
 const ACTION_PANEL_ALLOWED: string[] = [];
-const ACTION_ALLOWED = ['title', 'primary', 'push', 'onAction', 'id', 'style', 'shortcut'];
+const ACTION_ALLOWED = ['title', 'icon', 'primary', 'push', 'onAction', 'id', 'style', 'shortcut'];
 const EMPTY_VIEW_ALLOWED = ['title', 'description'];
 
 const ROOT_TYPES = new Set(['list', 'detail', 'grid', 'form']);
@@ -365,9 +365,14 @@ function serializeSection(node: HostNode, state: SerializeState): UiSection {
 function serializeItem(node: HostNode, state: SerializeState, paneAllowed: boolean): UiItem {
   const type = paneAllowed ? 'list-item' : 'grid-item';
   checkProps(type, node.props, paneAllowed ? LIST_ITEM_ALLOWED : GRID_ITEM_ALLOWED);
-  const id = requireString(type, node.props, 'id');
+  let id = requireString(type, node.props, 'id');
+  // Raycast throws on a repeated item id; live data (search, library) legitimately returns the
+  // same entity twice, and a hard throw takes the whole command down. Later duplicates get a
+  // stable `~n` suffix instead — first occurrence keeps its id, so selection/actions stay put.
   if (state.seenItemIds.has(id)) {
-    throw new ReactUiError(`duplicate item id '${id}' in tree`);
+    let n = 2;
+    while (state.seenItemIds.has(`${id}~${n}`)) n += 1;
+    id = `${id}~${n}`;
   }
   state.seenItemIds.add(id);
   const title = requireString(type, node.props, 'title');
@@ -865,23 +870,8 @@ function serializeActionElement(
   if (typeof onAction !== 'function') {
     throw new ReactUiError(`<action> requires a function prop 'onAction'`);
   }
-  const primary = optionalBoolean('action', props, 'primary');
-  const push = optionalString('action', props, 'push');
-  if (push !== undefined && push.length === 0) {
-    throw new ReactUiError(`<action> prop 'push' must be a non-empty sub-view key`);
-  }
-  const style = props['style'];
-  if (style !== undefined && style !== 'destructive') {
-    throw new ReactUiError(`<action> prop 'style' must be 'destructive'`);
-  }
-  const shortcut = optionalShortcut(props);
-  const extras = {
-    primary,
-    push,
-    style: style as UiAction['style'],
-    shortcut,
-  };
   const explicitId = optionalString('action', props, 'id');
+  let id: string;
   if (explicitId !== undefined) {
     if (explicitId === '__open__') {
       throw new ReactUiError(
@@ -893,9 +883,28 @@ function serializeActionElement(
     }
     state.seenActionIds.add(explicitId);
     state.registry.registerExplicit(explicitId, onAction as ActionHandler);
-    return finishAction({ id: explicitId, title }, extras);
+    id = explicitId;
+  } else {
+    id = state.registry.register(onAction as ActionHandler);
   }
-  return finishAction({ id: state.registry.register(onAction as ActionHandler), title }, extras);
+  const action: UiAction = { id, title };
+  Object.assign(action, optionalIcon('action', props, 'icon'));
+  const primary = optionalBoolean('action', props, 'primary');
+  const push = optionalString('action', props, 'push');
+  if (push !== undefined && push.length === 0) {
+    throw new ReactUiError(`<action> prop 'push' must be a non-empty sub-view key`);
+  }
+  const style = props['style'];
+  if (style !== undefined && style !== 'destructive') {
+    throw new ReactUiError(`<action> prop 'style' must be 'destructive'`);
+  }
+  const shortcut = optionalShortcut(props);
+  return finishAction(action, {
+    primary,
+    push,
+    style: style as UiAction['style'],
+    shortcut,
+  });
 }
 
 function finishAction(

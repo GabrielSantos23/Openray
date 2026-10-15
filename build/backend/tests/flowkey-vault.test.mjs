@@ -28,18 +28,18 @@ const vendorRequire = createRequire(path.join(FLOWKEY, "vendor", "package.json")
 const UUID = "contract-probe-uuid";
 let pipeSeq = 0;
 
-test("loadProviderConfig: env wins over the auth json; redirectPort clamps; redirectUri overrides the callback", () => {
+test("loadProviderConfig: env wins over the auth json; redirectUri overrides the default callback", () => {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), "vault-config-"));
   try {
     const oauthDir = path.join(dataRoot, "oauth");
     fs.mkdirSync(oauthDir, { recursive: true });
     fs.writeFileSync(
       path.join(oauthDir, "spotify-auth.json"),
-      JSON.stringify({ clientId: "file-id", redirectPort: 51515 }),
+      JSON.stringify({ clientId: "file-id" }),
     );
     const fromFile = vault.loadProviderConfig(dataRoot, "spotify");
-    assert.deepEqual(fromFile, { clientId: "file-id", redirectPort: 51515, redirectUri: null });
-    assert.equal(vault.redirectUriOf(fromFile), "http://127.0.0.1:51515/oauth/callback");
+    assert.deepEqual(fromFile, { clientId: "file-id", redirectUri: null });
+    assert.equal(vault.redirectUriOf(fromFile), vault.DEFAULT_REDIRECT_URI, "no override falls back to the registered default");
 
     fs.writeFileSync(
       path.join(oauthDir, "spotify-auth.json"),
@@ -58,7 +58,8 @@ test("loadProviderConfig: env wins over the auth json; redirectPort clamps; redi
     process.env.FLOWKEY_SPOTIFY_CLIENT_ID = "env-id";
     try {
       const fromEnv = vault.loadProviderConfig(dataRoot, "spotify");
-      assert.deepEqual(fromEnv, { clientId: "env-id", redirectPort: vault.DEFAULT_REDIRECT_PORT, redirectUri: null });
+      assert.deepEqual(fromEnv, { clientId: "env-id", redirectUri: null });
+      assert.equal(vault.redirectUriOf(fromEnv), vault.DEFAULT_REDIRECT_URI);
     } finally {
       delete process.env.FLOWKEY_SPOTIFY_CLIENT_ID;
     }
@@ -66,7 +67,7 @@ test("loadProviderConfig: env wins over the auth json; redirectPort clamps; redi
     fs.writeFileSync(path.join(oauthDir, "spotify-auth.json"), "{not json");
     const broken = vault.loadProviderConfig(dataRoot, "spotify");
     assert.equal(broken.clientId, null, "broken config falls back to env/none");
-    assert.equal(broken.redirectPort, vault.DEFAULT_REDIRECT_PORT);
+    assert.equal(broken.redirectUri, null);
   } finally {
     fs.rmSync(dataRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
@@ -174,19 +175,23 @@ test("exchangeCode posts the PKCE form; authorize() end to end with stubbed fetc
     };
   };
   try {
-    // BYO client id config (the refresh path needs it when the vault expires).
+    // BYO client id + explicit redirect override (keeps the test off the shared default port).
+    const overrideUri = "http://127.0.0.1:42805/my/callback";
     fs.mkdirSync(path.join(dataRoot, "oauth"), { recursive: true });
-    fs.writeFileSync(path.join(dataRoot, "oauth", "spotify-auth.json"), JSON.stringify({ clientId: "byo-id" }));
+    fs.writeFileSync(
+      path.join(dataRoot, "oauth", "spotify-auth.json"),
+      JSON.stringify({ clientId: "byo-id", redirectUri: overrideUri }),
+    );
     const status = await vault.authorize(dataRoot, "spotify", {
       clientIdOverride: "byo-id",
       open: async (url) => {
         opened.push(url);
         // Simulate the browser landing on the loopback callback.
-        const port = new URL(new URL(url).searchParams.get("redirect_uri")).port;
+        const redirect = new URL(new URL(url).searchParams.get("redirect_uri"));
         await new Promise((resolve) => setTimeout(resolve, 100));
         await new Promise((resolve, reject) => {
           http
-            .get(`http://127.0.0.1:${port}/oauth/callback?code=the-code&state=${new URL(url).searchParams.get("state")}`, (r) => r.resume().on("close", resolve))
+            .get(`http://127.0.0.1:${redirect.port}${redirect.pathname}?code=the-code&state=${new URL(url).searchParams.get("state")}`, (r) => r.resume().on("close", resolve))
             .on("error", reject);
         });
       },
@@ -203,7 +208,7 @@ test("exchangeCode posts the PKCE form; authorize() end to end with stubbed fetc
     assert.equal(body.get("code"), "the-code");
     assert.equal(body.get("client_id"), "byo-id");
     assert.ok(body.get("code_verifier").length >= 43, "PKCE verifier ships");
-    assert.equal(body.get("redirect_uri"), "http://127.0.0.1:42749/oauth/callback");
+    assert.equal(body.get("redirect_uri"), "http://127.0.0.1:42805/my/callback");
 
     // The vault holds the tokens on disk.
     const tokens = vault.vaultRead(dataRoot, "spotify");
@@ -399,3 +404,47 @@ test(
     );
   }),
 );
+
+// image.fetch success path: the extension gets a renderer-loadable URL on the raycastmini-img
+// virtual host (the C# main window maps it onto the cache folder), with the bytes cached on disk.
+test("image.fetch returns a virtual-host url for a declared loopback host", async () => {
+  const server = http.createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "image/png" });
+    response.end(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  process.env.RAYCASTMINI_TEST_IMAGE_URL = `http://127.0.0.1:${port}/icon.png`;
+  try {
+    await withBackend(async ({ backend, session, vaultItem, rendered, dataRoot }) => {
+      await runAction(backend, session, actionByTitle(vaultItem, "Image data uri"));
+      const deadline = Date.now() + 10000;
+      let echo = null;
+      outer: while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const entries = rendered.filter((entry) => entry.method === "extensionHost.render");
+        for (let i = entries.length - 1; i >= 0; i--) {
+          const text = entries[i].data.gzipped
+            ? require("node:zlib").gunzipSync(Buffer.from(entries[i].data.renderTree, "base64")).toString()
+            : entries[i].data.renderTree;
+          const item = (JSON.parse(text).model?.navigationStack?.body ?? null)?.sections
+            ?.flatMap((section) => section.items)
+            .find((entry) => entry.id === "vault");
+          if (item?.subtitle?.includes("img=https://raycastmini-img/")) {
+            echo = item.subtitle;
+            break outer;
+          }
+        }
+      }
+      assert.ok(echo, "vault echoes the fetched image as a virtual-host url");
+      assert.match(echo, /img=https:\/\/raycastmini-img\/[0-9a-f]{40}\.png/);
+      const cacheDir = path.join(dataRoot, "oauth", "image-cache");
+      const cached = fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir) : [];
+      assert.equal(cached.length, 1, "the fetched bytes are cached once under the data dir");
+      assert.match(cached[0], /\.png$/);
+    })();
+  } finally {
+    delete process.env.RAYCASTMINI_TEST_IMAGE_URL;
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

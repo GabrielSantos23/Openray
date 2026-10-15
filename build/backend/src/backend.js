@@ -172,6 +172,9 @@ function createBackend(options) {
       async nativeCallback(callbackId, data) {
         return sendRequest("nativeCallback", { callbackId, data });
       },
+      async setSearchState(params) {
+        return sendRequest("setSearchState", params);
+      },
       onNotify(handler) {
         notifyHandlers.push(handler);
       },
@@ -465,7 +468,7 @@ function createBackend(options) {
             method: call.method ?? "GET",
             headers,
             body: call.body,
-            signal: AbortSignal.timeout(30_000),
+            signal: AbortSignal.timeout(Math.min(Math.max(Number(call.timeoutMs) || 30_000, 1_000), 30_000)),
           });
           const bodyText = await response.text();
           return { status: response.status, headers: Object.fromEntries(response.headers.entries()), bodyText };
@@ -570,7 +573,7 @@ function createBackend(options) {
         case "image.fetch": {
           const url = String(call.url ?? "");
           let imgHost;
-          try { imgHost = new URL(url).host; } catch { throw new Error(`image.fetch: invalid url ${url}`); }
+          try { imgHost = new URL(url).hostname; } catch { throw new Error(`image.fetch: invalid url ${url}`); }
           const hosts = ctx.flowkeyManifest?.httpHosts ?? [];
           const allowed = hosts.some((declared) =>
             declared.startsWith(".") ? imgHost.endsWith(declared.slice(1)) || imgHost === declared.slice(1) : imgHost === declared,
@@ -585,7 +588,10 @@ function createBackend(options) {
           fs.mkdirSync(cacheDir, { recursive: true });
           const file = path.join(cacheDir, `${hash}.${ext}`);
           if (!fs.existsSync(file)) fs.writeFileSync(file, bytes);
-          return { ok: true, uri: `file:///${file.replace(/\\/g, "/")}` };
+          // The renderer loads images through the `raycastmini-img` virtual host (mapped by the
+          // C# main window onto this cache folder) — plain URLs keep the render tree small,
+          // where per-item data: URIs OOM the worker on library-sized artwork sets.
+          return { ok: true, uri: `https://raycastmini-img/${hash}.${ext}` };
         }
         case "media.current":
           // SMTC snapshot / transport control: the C# host owns the WinRT session manager, the
@@ -599,9 +605,6 @@ function createBackend(options) {
     },
 
     // --- OAuth vault (M5a): BYO client id + loopback PKCE; tokens never reach the extension ---
-    async "oauth.redirectOrigin"() {
-      return { redirectURI: `http://127.0.0.1:${flowkeyVault.DEFAULT_REDIRECT_PORT}/oauth/callback` };
-    },
     async "oauth.authorize"(ctx, params) {
       const provider = String(params.provider ?? "");
       if (!(ctx.flowkeyManifest?.oauth ?? []).includes(provider)) {
@@ -816,11 +819,14 @@ function createBackend(options) {
     },
 
     // An installed extension's manifest icon as a data URL (re-homed from the Store's
-    // `store.getIcon`); `iconName` carries FlowKey lucide icon names for the RaycastIcon fallback.
-    async getExtensionIcon(_ctx, params) {
+    // `store.getIcon`); `iconName` carries FlowKey lucide icon names for the RaycastIcon fallback,
+    // `emoji` carries manifest icons declared as emoji (e.g. the Spotify "🎧").
+    // NOTE: extensionHost handlers are invoked with `(data)` — a `(ctx, params)` signature here
+    // silently read `params` as undefined and disabled every extension icon.
+    async getExtensionIcon(params) {
       const uuid = String(params?.uuid ?? "");
       if (!uuid || uuid.includes("..") || uuid.includes("/") || uuid.includes("\\")) {
-        return { icon: null, iconName: null };
+        return { icon: null, iconName: null, emoji: null };
       }
       const dir = P.extensionDir(uuid);
       let icon = "";
@@ -835,7 +841,11 @@ function createBackend(options) {
           /* try the other manifest kind */
         }
       }
-      if (!icon || icon.includes("..") || path.isAbsolute(icon)) return { icon: null, iconName };
+      if (!icon) return { icon: null, iconName, emoji: null };
+      if (!icon.includes("..") && !path.isAbsolute(icon) && !/[\\/]/.test(icon) && !icon.includes(".")) {
+        return { icon: null, iconName, emoji: icon };
+      }
+      if (icon.includes("..") || path.isAbsolute(icon)) return { icon: null, iconName, emoji: null };
       for (const candidate of [path.join(dir, "assets", icon), path.join(dir, icon)]) {
         try {
           const bytes = fs.readFileSync(candidate);
@@ -845,12 +855,21 @@ function createBackend(options) {
             : lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "image/jpeg"
             : lower.endsWith(".ico") ? "image/x-icon"
             : "application/octet-stream";
-          return { icon: `data:${mime};base64,${bytes.toString("base64")}`, iconName };
+          return { icon: `data:${mime};base64,${bytes.toString("base64")}`, iconName, emoji: null };
         } catch {
           /* try next */
         }
       }
-      return { icon: null, iconName };
+      return { icon: null, iconName, emoji: null };
+    },
+
+    // Search-bar push from the renderer: the running command re-renders with the new
+    // query/filterValue (Raycast's launchProps.searchText semantics).
+    async setSearchState(params) {
+      const workerId = activeSessions.get(params.sessionId);
+      if (!workerId) throw new Error(`no worker for session ${params.sessionId}`);
+      const worker = sessions.get(workerId);
+      return worker.setSearchState({ query: params.query, filterValue: params.filterValue });
     },
 
     // FlowKey extension preferences persist BACKEND-side (`<dataRoot>/flowkey-preferences.json`),

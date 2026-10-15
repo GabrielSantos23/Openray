@@ -11,6 +11,12 @@ export interface UiAction {
   style?: 'destructive';
   /** Display-only shortcut hint (the shell's keycap rendering). */
   shortcut?: UiShortcut;
+  /** Action icon (same vocabulary as UiItem icons: emoji string, lucide name, uri or svg). */
+  icon?: string;
+  iconName?: string;
+  iconColor?: string;
+  iconUri?: string;
+  iconSvg?: string;
 }
 
 export interface UiPaneField {

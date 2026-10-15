@@ -83,7 +83,7 @@ function listUploadedExtensions(storeRoot) {
       name: manifest.id,
       title: manifest.name ?? manifest.id,
       description: manifest.description ?? "",
-      author: meta.author ?? manifest.author ?? null,
+      author: meta.author ?? (typeof manifest.author === "string" ? manifest.author : null) ?? "published locally",
       categories: meta.categories ?? [],
       icon: manifest.icon ?? null,
       contributors: [],

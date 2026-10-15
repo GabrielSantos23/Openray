@@ -41,11 +41,25 @@
   aspect-ratio: var(--grid-aspect, 1);
 }
 
-/* Raycast's compact store grids: the tile fills the column, the icon stays ~45% of it. */
-.grid__content img,
-.grid__content svg {
-  max-width: 45%;
-  max-height: 45%;
+/* Content images (Grid.Item.content) fill the tile; icon glyphs keep a Raycast-like ~55%. */
+.grid__content > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.grid__content .icon {
+  width: 55%;
+  height: 55%;
+  background: transparent;
+  border-radius: 0;
+}
+
+.grid__content .icon img,
+.grid__content .icon svg,
+.grid__content > svg {
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
@@ -68,6 +82,27 @@
   font-size: var(--font-size-11);
   font-weight: var(--font-weight-600);
   color: var(--color-text-tertiary);
+}
+
+/* Detail.Image (Now Playing artwork etc.): rounded art block under the markdown pane title. */
+.detail__image {
+  width: 220px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-8);
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-12);
+}
+
+.icon--emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Lyrics (Detail markdown): the active line is an h2 — Spotify green, larger than the lyrics. */
+.markdown h2 {
+  color: var(--green, #1db954);
 }
 
 .list__sectionSubtitle {
@@ -172,9 +207,10 @@
 }
 
 .detail__title {
-  font-size: var(--font-size-18);
-  font-weight: var(--font-weight-600);
-  padding: var(--space-8) 0;
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 700;
+  padding: var(--space-8) 0 var(--space-4);
 }
 
 .detail__aside {

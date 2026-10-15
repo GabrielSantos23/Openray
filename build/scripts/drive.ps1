@@ -59,6 +59,18 @@ $cb = [DrvNs.Drv+EnumWindowsProc] {
 if ($global:hits.Count -eq 0) { Write-Output "novisible"; $Out = ""; }
 $hwnd = if ($global:hits.Count -gt 0) { $global:hits[$global:hits.Count - 1] } else { [System.IntPtr]::Zero }
 
+# Send one VK, optionally with ctrl/shift held. (Defined before every call site — PowerShell only
+# knows a function once execution has passed its definition.)
+function Send-Vk([byte]$vk, [bool]$ctrl, [bool]$shift = $false) {
+    if ($ctrl) { [void]$t::keybd_event(0x11, 0, 0, [System.UIntPtr]::Zero) }
+    if ($shift) { [void]$t::keybd_event(0x10, 0, 0, [System.UIntPtr]::Zero) }
+    [void]$t::keybd_event($vk, 0, 0, [System.UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 40
+    [void]$t::keybd_event($vk, 0, 2, [System.UIntPtr]::Zero)
+    if ($shift) { [void]$t::keybd_event(0x10, 0, 2, [System.UIntPtr]::Zero) }
+    if ($ctrl) { [void]$t::keybd_event(0x11, 0, 2, [System.UIntPtr]::Zero) }
+}
+
 if ($Hotkey) {
     [void]$t::keybd_event(0x11, 0, 0, [System.UIntPtr]::Zero)
     [void]$t::keybd_event(0x12, 0, 0, [System.UIntPtr]::Zero)
@@ -118,7 +130,7 @@ if ($hwnd -ne [System.IntPtr]::Zero -and -not $NoForeground) {
     }
 }
 
-if (($Type -ne "" -or $Keys -ne "") -and -not $NoForeground) {
+if ($hwnd -ne [System.IntPtr]::Zero -and -not $NoForeground) {
     # Safety: only ever inject keys while the launcher is exactly the foreground window —
     # keystrokes aimed at a hidden launcher would land in whatever the user has open.
     if ($hwnd -eq [System.IntPtr]::Zero -or $t::GetForegroundWindow() -ne $hwnd) {
@@ -188,17 +200,6 @@ if ($Keys -ne "") {
         elseif ($vkMap.ContainsKey($key)) { Send-Vk $vkMap[$key] $false }
         Start-Sleep -Milliseconds 320
     }
-}
-
-# Send one VK, optionally with ctrl/shift held.
-function Send-Vk([byte]$vk, [bool]$ctrl, [bool]$shift = $false) {
-    if ($ctrl) { [void]$t::keybd_event(0x11, 0, 0, [System.UIntPtr]::Zero) }
-    if ($shift) { [void]$t::keybd_event(0x10, 0, 0, [System.UIntPtr]::Zero) }
-    [void]$t::keybd_event($vk, 0, 0, [System.UIntPtr]::Zero)
-    Start-Sleep -Milliseconds 40
-    [void]$t::keybd_event($vk, 0, 2, [System.UIntPtr]::Zero)
-    if ($shift) { [void]$t::keybd_event(0x10, 0, 2, [System.UIntPtr]::Zero) }
-    if ($ctrl) { [void]$t::keybd_event(0x11, 0, 2, [System.UIntPtr]::Zero) }
 }
 
 Start-Sleep -Milliseconds $WaitMs

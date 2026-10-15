@@ -5,7 +5,6 @@ import { SpotifyApiError, SpotifyClient } from './api/client';
 import type { SpotifyPlaybackState, SpotifyTrack } from './api/types';
 import { formatMs } from './format';
 import { describeError, isAborted } from './search-model';
-import { loadArtwork } from './store';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -44,18 +43,25 @@ function nowPlayingActions({
     <ActionPanel>
       <Action
         title={state.is_playing ? 'Pause' : 'Play'}
+        icon={{ lucide: state.is_playing ? 'pause' : 'play' }}
         primary
         onAction={run('toggle', state.is_playing ? 'Paused' : 'Playing', () =>
           state.is_playing ? client.pause() : client.play({}),
         )}
       />
-      <Action title="Next" onAction={run('next', 'Skipped to next track', () => client.next())} />
+      <Action
+        title="Next"
+        icon={{ lucide: 'forward' }}
+        onAction={run('next', 'Skipped to next track', () => client.next())}
+      />
       <Action
         title="Previous"
+        icon={{ lucide: 'rewind' }}
         onAction={run('previous', 'Went back to previous track', () => client.previous())}
       />
       <Action
         title={liked ? 'Unlike' : 'Like'}
+        icon={{ lucide: 'star' }}
         onAction={run('like', 'Updated Liked Songs', async () => {
           if (liked) {
             await client.removeFromSavedTracks([track.id]);
@@ -68,10 +74,12 @@ function nowPlayingActions({
       />
       <Action
         title={state.shuffle_state ? 'Shuffle Off' : 'Shuffle On'}
+        icon={{ lucide: 'switch' }}
         onAction={run('shuffle', 'Updated shuffle', () => client.setShuffle(!state.shuffle_state))}
       />
       <Action
         title={`Repeat: ${state.repeat_state}`}
+        icon={{ lucide: 'arrow-clockwise' }}
         onAction={run('repeat', 'Updated repeat', () => {
           const order: SpotifyPlaybackState['repeat_state'][] = ['off', 'track', 'context'];
           const next = order[(order.indexOf(state.repeat_state) + 1) % order.length];
@@ -80,6 +88,7 @@ function nowPlayingActions({
       />
       <Action
         title="Copy Track Link"
+        icon={{ lucide: 'copy-clipboard' }}
         onAction={async () => {
           await client.copyText(`https://open.spotify.com/track/${track.id}`);
           setNotice('Copied track link');
@@ -87,6 +96,7 @@ function nowPlayingActions({
       />
       <Action
         title="Copy Artist and Title"
+        icon={{ lucide: 'copy-clipboard' }}
         onAction={async () => {
           await client.copyText(
             `${track.artists.map((artist) => artist.name).join(', ')} - ${track.name}`,
@@ -166,18 +176,6 @@ export function NowPlayingCommand({ native, signal }: CommandProps): ReactNode {
   }, [client, authState, pollVersion]);
 
   const currentTrack = state && state.item && isTrack(state.item) ? state.item : null;
-  const artworkUrl = currentTrack?.album?.images[0]?.url ?? '';
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  useEffect(() => {
-    if (!artworkUrl) return;
-    let alive = true;
-    loadArtwork(client, artworkUrl).then((uri) => {
-      if (alive && uri) setImageUri(uri);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [client, artworkUrl]);
 
   const [liked, setLiked] = useState<boolean | null>(null);
   const likedTrackId = currentTrack?.id ?? null;
@@ -243,32 +241,23 @@ export function NowPlayingCommand({ native, signal }: CommandProps): ReactNode {
     );
   }
   const artists = track.artists.map((artist) => artist.name).join(', ');
+  const artworkUrl = track.album?.images?.[0]?.url ?? '';
+  // Raycast's Now Playing layout: the track title + by-line open the detail pane and the cover
+  // sits under them; metadata runs down the right column.
   return (
     <Detail
       title={track.name}
       subtitle={`by ${artists}`}
-      imageUri={imageUri ?? undefined}
-      markdown={notice || undefined}
+      imageUri={artworkUrl || undefined}
+      markdown={notice ? notice : `# ${track.name}\n\nby ${artists}`}
       actions={nowPlayingActions({ client, state, track, refresh, setNotice, liked, setLiked })}
     >
       <Detail.Metadata>
         <Detail.Metadata.Field label="Track" value={track.name} />
         <Detail.Metadata.Field label="Duration" value={formatMs(track.duration_ms)} />
-        <Detail.Metadata.Field
-          label="Progress"
-          value={
-            state.progress_ms === null
-              ? formatMs(track.duration_ms)
-              : `${formatMs(state.progress_ms)} / ${formatMs(track.duration_ms)}`
-          }
-        />
         <Detail.Metadata.Field label="Artists" value={artists} />
         <Detail.Metadata.Field label="Album" value={track.album?.name ?? 'Unknown album'} />
         <Detail.Metadata.Field label="Liked" value={liked === null ? '…' : liked ? 'Yes' : 'No'} />
-        <Detail.Metadata.Field
-          label="Device"
-          value={state.device ? state.device.name : 'Unknown'}
-        />
       </Detail.Metadata>
     </Detail>
   );

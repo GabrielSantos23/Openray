@@ -31,6 +31,7 @@ function gunzipToString(data: Uint8Array): string {
 export interface ViewAction {
   id: string;
   title: string;
+  icon?: unknown;
   shortcut?: string;
   style?: string;
   type?: string;
@@ -154,6 +155,7 @@ export interface ViewBody {
   aspectRatio?: string;
   fit?: string;
   inset?: string;
+  image?: string;
   markdown?: string;
   metadata?: MetadataItem[];
   fields?: ViewFormField[];

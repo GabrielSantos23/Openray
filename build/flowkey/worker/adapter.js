@@ -6,12 +6,10 @@
 //
 // Known unexpressible-in-renderer features (reported, not silently dropped — see
 // flowkey-adapter.test.mjs "documented adapter gaps"):
-//   * `iconSvg` -> data URI maps across but the frontend `Icon` only <img>s URLs ending in an
-//     image extension, so inline SVG falls back to the generic icon until the renderer learns
-//     data URIs.
+//   * `iconSvg` -> data URI maps across and the frontend <img>s it.
 //   * `iconColor` has no ray item-icon field (accessory colors do map).
-//   * Emoji icons (`icon: "🚀"`) and `DetailTree.imageUri` / `UiPane.previewImageUri` have no
-//     ray model counterpart; dropped.
+//   * Emoji icons map to `emoji://` URLs the renderer draws as text; `DetailTree.imageUri` maps
+//     to `body.image`. `UiPane.previewImageUri` is dropped.
 //   * `DetailTree.mediaKeys` / `subtitle` are dropped (media controls land in M5b).
 //   * Action `primary` is carried as an extra field; the ray renderer treats `actions[0]` as
 //     primary, so FlowKey `primary: true` on a later action is not honored positionally.
@@ -34,8 +32,12 @@ function mapIcon(item) {
     return { source: { light: `data:image/svg+xml;base64,${Buffer.from(item.iconSvg).toString("base64")}` } };
   }
   if (item.iconUri) return { source: { light: item.iconUri } };
-  if (typeof item.icon === "string" && /^(https?:|data:|file:)|\.(png|jpe?g|gif|svg|webp|ico)$/i.test(item.icon)) {
-    return { source: { light: item.icon } };
+  if (typeof item.icon === "string" && item.icon.length > 0) {
+    if (/^(https?:|data:|file:)/.test(item.icon) || /\.(png|jpe?g|gif|svg|webp|ico)$/i.test(item.icon)) {
+      return { source: { light: item.icon } };
+    }
+    // Emoji icon: carried as an emoji:// URL the renderer draws as text.
+    return { source: { light: `emoji://${encodeURIComponent(item.icon)}` } };
   }
   return undefined;
 }
@@ -50,6 +52,7 @@ function mapActions(actions) {
   return (actions ?? []).map((action) => ({
     id: action.id,
     title: action.title ?? "Action",
+    icon: mapIcon(action),
     shortcut: action.shortcut ? [action.shortcut.modifiers ?? [], action.shortcut.key].flat().join("+") : undefined,
     style: action.style,
     primary: action.primary ? "primary" : undefined,
@@ -145,6 +148,7 @@ function toBody(tree) {
     return {
       kind: "Detail",
       navigationTitle: tree.title,
+      image: tree.imageUri,
       markdown: tree.description,
       metadata: mapMetadataFields(tree.fields),
       actions: mapActions(tree.actions),
@@ -156,16 +160,19 @@ function toBody(tree) {
       : (tree.items ?? []).length
         ? [{ items: (tree.items ?? []).map(mapItem) }]
         : [];
-    return {
-      kind: "Grid",
-      columns: tree.columns ?? 5,
-      sections,
-      isLoading: tree.isLoading,
-      searchBarPlaceholder: tree.searchBarPlaceholder,
-      searchBarAccessory: filterAccessory(tree.filter),
-      emptyView: tree.emptyView,
-      actions: mapActions(tree.actions),
-    };
+  return {
+    kind: "Grid",
+    columns: tree.columns ?? 5,
+    // The extension owns filtering: search text re-renders the command server-side
+    // (setSearchState), so the renderer must not filter the rows again client-side.
+    filtering: false,
+    sections,
+    isLoading: tree.isLoading,
+    searchBarPlaceholder: tree.searchBarPlaceholder,
+    searchBarAccessory: filterAccessory(tree.filter),
+    emptyView: tree.emptyView,
+    actions: mapActions(tree.actions),
+  };
   }
   if (tree.type === "form") {
     const actions = mapActions(tree.actions);
@@ -183,6 +190,7 @@ function toBody(tree) {
   return {
     kind: "List",
     isLoading: tree.isLoading,
+    filtering: false,
     searchBarPlaceholder: tree.searchBarPlaceholder,
     searchBarAccessory: filterAccessory(tree.filter),
     sections: (tree.sections ?? []).map((section) => ({

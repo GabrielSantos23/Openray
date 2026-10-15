@@ -7,7 +7,6 @@ import { formatMs } from './format';
 import {
   loadAlbumTracks,
   loadArtistAlbums,
-  loadArtwork,
   loadArtistTopTracks,
   loadLikedTracks,
   peekAlbumTracks,
@@ -208,36 +207,22 @@ export function ArtistAlbumsRoot(props: CommandProps): ReactNode {
 }
 
 function AlbumsGrid({ albums, client }: { albums: SpotifyAlbum[]; client: SpotifyClient }): ReactNode {
-  const [artwork, setArtwork] = useState<Record<string, string>>({});
-  const urls = albums.map((album) => album.images[0]?.url ?? '').filter(Boolean);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      for (const url of urls) {
-        const uri = await loadArtwork(client, url);
-        if (alive && uri) {
-          setArtwork((previous) => ({ ...previous, [url]: uri }));
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [client, urls.join('|')]);
   return createElement(
     Grid,
     { columns: 5, title: albums[0]?.artists[0]?.name ?? 'Albums' },
-    albums.map((album) =>
-      createElement(Grid.Item, {
+    albums.map((album) => {
+      const images = album.images ?? [];
+      const url = (images.length > 1 ? images[1]?.url : images[0]?.url) ?? images[0]?.url;
+      return createElement(Grid.Item, {
         key: album.id,
         id: album.id,
         title: album.name,
         subtitle: `${album.artists.map((artist) => artist.name).join(', ')} · ${album.release_date.slice(0, 4)}`,
         kind: 'album',
-        icon: artwork[album.images[0]?.url ?? ''] ? { uri: artwork[album.images[0]?.url ?? ''] } : undefined,
+        icon: url ? { uri: url } : undefined,
         actions: albumActions(album, client, () => {}, new AbortController().signal),
-      }),
-    ),
+      });
+    }),
   );
 }
 

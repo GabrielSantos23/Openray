@@ -24857,9 +24857,11 @@ function serializeSection(node, state) {
 function serializeItem(node, state, paneAllowed) {
   const type = paneAllowed ? "list-item" : "grid-item";
   checkProps(type, node.props, paneAllowed ? LIST_ITEM_ALLOWED : GRID_ITEM_ALLOWED);
-  const id = requireString(type, node.props, "id");
+  let id = requireString(type, node.props, "id");
   if (state.seenItemIds.has(id)) {
-    throw new ReactUiError(`duplicate item id '${id}' in tree`);
+    let n = 2;
+    while (state.seenItemIds.has(`${id}~${n}`)) n += 1;
+    id = `${id}~${n}`;
   }
   state.seenItemIds.add(id);
   const title = requireString(type, node.props, "title");
@@ -25271,23 +25273,8 @@ function serializeActionElement(element, state) {
   if (typeof onAction !== "function") {
     throw new ReactUiError(`<action> requires a function prop 'onAction'`);
   }
-  const primary = optionalBoolean("action", props, "primary");
-  const push = optionalString("action", props, "push");
-  if (push !== void 0 && push.length === 0) {
-    throw new ReactUiError(`<action> prop 'push' must be a non-empty sub-view key`);
-  }
-  const style = props["style"];
-  if (style !== void 0 && style !== "destructive") {
-    throw new ReactUiError(`<action> prop 'style' must be 'destructive'`);
-  }
-  const shortcut = optionalShortcut(props);
-  const extras = {
-    primary,
-    push,
-    style,
-    shortcut
-  };
   const explicitId = optionalString("action", props, "id");
+  let id;
   if (explicitId !== void 0) {
     if (explicitId === "__open__") {
       throw new ReactUiError(
@@ -25299,9 +25286,28 @@ function serializeActionElement(element, state) {
     }
     state.seenActionIds.add(explicitId);
     state.registry.registerExplicit(explicitId, onAction);
-    return finishAction({ id: explicitId, title }, extras);
+    id = explicitId;
+  } else {
+    id = state.registry.register(onAction);
   }
-  return finishAction({ id: state.registry.register(onAction), title }, extras);
+  const action = { id, title };
+  Object.assign(action, optionalIcon("action", props, "icon"));
+  const primary = optionalBoolean("action", props, "primary");
+  const push = optionalString("action", props, "push");
+  if (push !== void 0 && push.length === 0) {
+    throw new ReactUiError(`<action> prop 'push' must be a non-empty sub-view key`);
+  }
+  const style = props["style"];
+  if (style !== void 0 && style !== "destructive") {
+    throw new ReactUiError(`<action> prop 'style' must be 'destructive'`);
+  }
+  const shortcut = optionalShortcut(props);
+  return finishAction(action, {
+    primary,
+    push,
+    style,
+    shortcut
+  });
 }
 function finishAction(action, extras) {
   if (extras.primary === true) action.primary = true;
@@ -25385,7 +25391,7 @@ var init_serialize = __esm({
     ];
     GRID_SECTION_ALLOWED = ["title", "subtitle"];
     ACTION_PANEL_ALLOWED = [];
-    ACTION_ALLOWED = ["title", "primary", "push", "onAction", "id", "style", "shortcut"];
+    ACTION_ALLOWED = ["title", "icon", "primary", "push", "onAction", "id", "style", "shortcut"];
     EMPTY_VIEW_ALLOWED = ["title", "description"];
     ROOT_TYPES = /* @__PURE__ */ new Set(["list", "detail", "grid", "form"]);
     ACCESSORY_COLORS = ["success", "danger", "accent", "secondary"];
@@ -26631,8 +26637,11 @@ var require_adapter = __commonJS({
         return { source: { light: `data:image/svg+xml;base64,${Buffer.from(item.iconSvg).toString("base64")}` } };
       }
       if (item.iconUri) return { source: { light: item.iconUri } };
-      if (typeof item.icon === "string" && /^(https?:|data:|file:)|\.(png|jpe?g|gif|svg|webp|ico)$/i.test(item.icon)) {
-        return { source: { light: item.icon } };
+      if (typeof item.icon === "string" && item.icon.length > 0) {
+        if (/^(https?:|data:|file:)/.test(item.icon) || /\.(png|jpe?g|gif|svg|webp|ico)$/i.test(item.icon)) {
+          return { source: { light: item.icon } };
+        }
+        return { source: { light: `emoji://${encodeURIComponent(item.icon)}` } };
       }
       return void 0;
     }
@@ -26643,6 +26652,7 @@ var require_adapter = __commonJS({
       return (actions ?? []).map((action) => ({
         id: action.id,
         title: action.title ?? "Action",
+        icon: mapIcon(action),
         shortcut: action.shortcut ? [action.shortcut.modifiers ?? [], action.shortcut.key].flat().join("+") : void 0,
         style: action.style,
         primary: action.primary ? "primary" : void 0
@@ -26732,6 +26742,7 @@ var require_adapter = __commonJS({
         return {
           kind: "Detail",
           navigationTitle: tree.title,
+          image: tree.imageUri,
           markdown: tree.description,
           metadata: mapMetadataFields(tree.fields),
           actions: mapActions(tree.actions)
@@ -26742,6 +26753,9 @@ var require_adapter = __commonJS({
         return {
           kind: "Grid",
           columns: tree.columns ?? 5,
+          // The extension owns filtering: search text re-renders the command server-side
+          // (setSearchState), so the renderer must not filter the rows again client-side.
+          filtering: false,
           sections,
           isLoading: tree.isLoading,
           searchBarPlaceholder: tree.searchBarPlaceholder,
@@ -26765,6 +26779,7 @@ var require_adapter = __commonJS({
       return {
         kind: "List",
         isLoading: tree.isLoading,
+        filtering: false,
         searchBarPlaceholder: tree.searchBarPlaceholder,
         searchBarAccessory: filterAccessory(tree.filter),
         sections: (tree.sections ?? []).map((section) => ({
@@ -26886,6 +26901,20 @@ async function handlePop(popId) {
   pendingNav = { action: "localPop", navId: String(popId ?? "") || `flowkey-pop-${++pushSeq}` };
   root?.update(buildProps());
   root?.flushEffects();
+  return {};
+}
+async function setSearchState(params) {
+  if (!root) return {};
+  const text = String(params?.query ?? "");
+  const filterValue = params?.filterValue === void 0 ? context.filterValue : params.filterValue;
+  const top = commandStack[commandStack.length - 1];
+  if (top) {
+    top.query = text;
+    top.filterValue = filterValue;
+  }
+  context = { ...context, query: text, filterValue };
+  root.update(buildProps());
+  root.flushEffects();
   return {};
 }
 function buildEnvironment() {
@@ -27023,6 +27052,7 @@ function terminate() {
 }
 registerMethod("initialize", initialize);
 registerMethod("nativeCallback", nativeCallback);
+registerMethod("setSearchState", setSearchState);
 registerMethod("terminate", terminate);
 /*! Bundled license information:
 

@@ -50,10 +50,11 @@ const PKGS = {
 
 const TREE = {
   // Paths are relative to the extension directory — the real `git/trees/<sha>` contract.
+  // Icons sit at the extension root (package.json `icon` is already the full relative path).
   alpha: [
     { path: "package.json", type: "blob", size: 10 },
     { path: "README.md", type: "blob", size: 10 },
-    { path: "assets/extension-icon.png", type: "blob", size: PNG.length },
+    { path: "extension-icon.png", type: "blob", size: PNG.length },
     { path: "assets/screenshots/one.png", type: "blob", size: PNG.length },
     { path: "assets/screenshots/two.png", type: "blob", size: PNG.length },
     { path: "metadata/screenshot-1.png", type: "blob", size: PNG.length },
@@ -61,7 +62,7 @@ const TREE = {
   ],
   beta: [
     { path: "package.json", type: "blob", size: 10 },
-    { path: "assets/icon.png", type: "blob", size: PNG.length },
+    { path: "icon.png", type: "blob", size: PNG.length },
   ],
 };
 
@@ -101,7 +102,7 @@ async function startFixture() {
       if (rest.join("/") === "assets/screenshots/one.png") return respond(200, PNG, "image/png");
       if (rest.join("/") === "assets/screenshots/two.png") return respond(200, PNG, "image/png");
       if (rest.join("/") === "metadata/screenshot-1.png") return respond(200, PNG, "image/png");
-      if (rest.join("/") === `assets/${PKGS[name]?.icon}`) return respond(200, PNG, "image/png");
+      if (rest.join("/") === PKGS[name]?.icon) return respond(200, PNG, "image/png");
       return respond(404, "nope", "text/plain");
     }
     respond(404, "nope", "text/plain");
@@ -138,21 +139,25 @@ test(
     assert.equal(status.extensionCount, 2);
     assert.equal(status.headCommitDate, "2026-10-01T00:00:00Z");
 
-    const list = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "" });
+    // The default browse list hides the unported GitHub entries; `showAll` reveals them.
+    const defaultList = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "" });
+    assert.deepEqual(defaultList.extensions.map((entry) => entry.title), []);
+
+    const list = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "", showAll: true });
     assert.deepEqual(list.extensions.map((entry) => entry.title), ["Alpha Player", "Beta Notes"]);
     assert.deepEqual(list.categories, ["Media", "Productivity"]);
 
-    const filtered = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "beta" });
+    const filtered = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "beta", showAll: true });
     assert.deepEqual(filtered.extensions.map((entry) => entry.name), ["beta"]);
-    const byCategory = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), category: "Media" });
+    const byCategory = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), category: "Media", showAll: true });
     assert.deepEqual(byCategory.extensions.map((entry) => entry.name), ["alpha"]);
 
     // The full index is over a megabyte in production — the list paginates.
-    const page = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "", offset: 0, limit: 1 });
+    const page = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "", offset: 0, limit: 1, showAll: true });
     assert.equal(page.total, 2);
     assert.equal(page.extensions.length, 1);
     assert.equal(page.hasMore, true);
-    const last = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "", offset: 1, limit: 1 });
+    const last = store.listStoreExtensions({ storeRoot, extensionsRoot: os.tmpdir(), query: "", offset: 1, limit: 1, showAll: true });
     assert.equal(last.hasMore, false);
     assert.equal(last.extensions.length, 1);
   }),
@@ -193,7 +198,7 @@ test(
     assert.equal(githubInstall.installed, true);
     assert.equal(githubInstall.runnable, false, "a @raycast/api source is not runnable until ported");
     assert.ok(fs.existsSync(path.join(storeRoot, "installed", "beta", "package.json")));
-    assert.ok(fs.existsSync(path.join(storeRoot, "installed", "beta", "assets", "icon.png")));
+    assert.ok(fs.existsSync(path.join(storeRoot, "installed", "beta", "icon.png")));
     assert.equal(fs.existsSync(path.join(extensionsRoot, "beta")), false, "the live root stays FlowKey-only");
     assert.equal(
       store.listStoreExtensions({ storeRoot, extensionsRoot, query: "beta" }).extensions[0].installed,
@@ -204,13 +209,28 @@ test(
     // An uploaded FlowKey extension imports, lists, and installs into the live root.
     const sourceDir = path.join(extensionsRoot, "..", "upload-src");
     fs.mkdirSync(path.join(sourceDir, "assets"), { recursive: true });
-    fs.writeFileSync(path.join(sourceDir, "manifest.json"), JSON.stringify({ id: "my-probe", name: "My Probe", version: "1.0.0", commands: [] }));
+    fs.writeFileSync(path.join(sourceDir, "manifest.json"), JSON.stringify({ id: "my-probe", name: "My Probe", version: "1.0.0", icon: "🎧", commands: [] }));
     fs.writeFileSync(path.join(sourceDir, "main.js"), "module.exports = {};");
     const imported = uploads.importUploadedExtension({ storeRoot, sourceDir, author: "gabriel" });
     assert.equal(imported.name, "my-probe");
     const listed = uploads.listUploadedExtensions(storeRoot);
     assert.equal(listed.length, 1);
     assert.equal(listed[0].author, "gabriel");
+
+    // Manifest icons that are emoji (no file) surface as emoji, not broken images.
+    const emojiIcon = await store.storeIcon({ storeRoot, extensionsRoot, fetchImpl, name: "my-probe", source: "uploaded" });
+    assert.equal(emojiIcon.icon, null);
+    assert.equal(emojiIcon.emoji, "🎧");
+
+    // A file icon resolves from the uploaded copy's assets directory.
+    const fileSrcDir = path.join(extensionsRoot, "..", "upload-src-file");
+    fs.mkdirSync(path.join(fileSrcDir, "assets"), { recursive: true });
+    fs.writeFileSync(path.join(fileSrcDir, "manifest.json"), JSON.stringify({ id: "my-probe-2", name: "My Probe 2", version: "1.0.0", icon: "command-icon.png", commands: [] }));
+    fs.writeFileSync(path.join(fileSrcDir, "assets", "command-icon.png"), PNG);
+    uploads.importUploadedExtension({ storeRoot, sourceDir: fileSrcDir });
+    const fileIcon = await store.storeIcon({ storeRoot, extensionsRoot, fetchImpl, name: "my-probe-2", source: "uploaded" });
+    assert.match(fileIcon.icon, /^data:image\/png;base64,/);
+    assert.equal(fileIcon.emoji, null);
 
     const install = await store.installStoreExtension({ storeRoot, extensionsRoot, fetchImpl, name: "my-probe", source: "uploaded" });
     assert.equal(install.runnable, true);

@@ -11,14 +11,23 @@ const http = require("node:http");
 const path = require("node:path");
 
 const OAUTH_DIR = "oauth";
-const DEFAULT_REDIRECT_PORT = 42749;
+// The loopback callback URL the provider dashboard has registered (Spotify compares the string
+// exactly, so every step — authorize URL, token exchange, loopback server — must use this one).
+const DEFAULT_REDIRECT_URI = "http://127.0.0.1:8888/callback";
 const EXPIRY_SKEW_MS = 60_000;
 
 const PROVIDERS = {
   spotify: {
     authorizeUrl: "https://accounts.spotify.com/authorize",
     tokenUrl: "https://accounts.spotify.com/api/token",
-    scopes: "user-read-playback-state user-modify-playback-state user-read-currently-playing",
+    // Library (user-library-*), playlists (playlist-*) and profile scopes are required by the
+    // Your Library / Add-to-Playlist commands — without them Spotify answers 403
+    // "insufficient client scope". Changing this list requires a fresh Connect (re-auth).
+    scopes:
+      "user-read-playback-state user-modify-playback-state user-read-currently-playing " +
+      "user-read-private user-read-email user-top-read user-follow-read " +
+      "user-library-read user-library-modify " +
+      "playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private",
     envVar: "FLOWKEY_SPOTIFY_CLIENT_ID",
     redirectEnvVar: "FLOWKEY_SPOTIFY_REDIRECT_URI",
     configFile: "spotify-auth.json",
@@ -31,23 +40,18 @@ function oauthDir(dataRoot) {
 
 /**
  * BYO client id: env var wins, then `<dataRoot>/oauth/<provider>-auth.json`
- * (`{"clientId":"...","redirectPort":0,"redirectUri":"http://127.0.0.1:42749/oauth/callback"}`).
- * `redirectUri` overrides the whole loopback callback URL (port + path) so it can match whatever
- * the provider dashboard has registered — Spotify compares the string exactly. Mirrors FlowKey's
- * SpotifyAuthConfig.
+ * (`{"clientId":"...","redirectUri":"http://127.0.0.1:8888/callback"}`). `redirectUri` overrides
+ * the whole loopback callback URL (port + path) so it can match whatever the provider dashboard
+ * has registered — Spotify compares the string exactly. Mirrors FlowKey's SpotifyAuthConfig.
  */
 function loadProviderConfig(dataRoot, provider) {
   const spec = PROVIDERS[provider];
   if (!spec) throw new Error(`unknown oauth provider ${provider}`);
   let fromFile = null;
-  let redirectPort = DEFAULT_REDIRECT_PORT;
   let redirectUri = null;
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(oauthDir(dataRoot), spec.configFile), "utf-8"));
     if (typeof raw.clientId === "string" && raw.clientId.trim() !== "") fromFile = raw.clientId.trim();
-    if (Number.isInteger(raw.redirectPort) && raw.redirectPort > 0 && raw.redirectPort <= 65535) {
-      redirectPort = raw.redirectPort;
-    }
     if (typeof raw.redirectUri === "string" && /^https?:\/\/127\.0\.0\.1(:\d+)?\//.test(raw.redirectUri.trim())) {
       redirectUri = raw.redirectUri.trim().replace(/\/+$/, "");
     }
@@ -60,12 +64,12 @@ function loadProviderConfig(dataRoot, provider) {
   if (!redirectUri && redirectFromEnv && /^https?:\/\/127\.0\.0\.1(:\d+)?\//.test(redirectFromEnv.trim())) {
     redirectUri = redirectFromEnv.trim().replace(/\/+$/, "");
   }
-  return { clientId, redirectPort, redirectUri };
+  return { clientId, redirectUri };
 }
 
 /** The exact callback URL every step must agree on (the dashboard registration included). */
 function redirectUriOf(config) {
-  return config.redirectUri ?? `http://127.0.0.1:${config.redirectPort}/oauth/callback`;
+  return config.redirectUri ?? DEFAULT_REDIRECT_URI;
 }
 
 function vaultPath(dataRoot, provider) {
@@ -275,7 +279,7 @@ async function getValidToken(dataRoot, provider, { fetchImpl, now = Date.now } =
 }
 
 module.exports = {
-  DEFAULT_REDIRECT_PORT,
+  DEFAULT_REDIRECT_URI,
   PROVIDERS,
   authorize,
   buildAuthorizeUrl,

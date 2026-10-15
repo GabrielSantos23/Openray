@@ -157,9 +157,35 @@ export class SpotifyClient {
     plainLyrics: string;
     syncedLyrics?: string | null;
   } | null> {
-    const url =
-      `https://lrclib.net/api/search?track_name=${encodeURIComponent(trackName)}` +
-      `&artist_name=${encodeURIComponent(artistName)}`;
+    // SMTC titles carry noise ("(Official Video)", "feat. X", "- Remastered 2011"); the exact
+    // query runs first, then cleaned variants, then a free-text search, so junk titles still hit.
+    const cleanedTitle = cleanMediaTitle(trackName) || trackName;
+    const cleanedArtist = cleanMediaTitle(artistName) || artistName;
+    const queries = [
+      `track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}`,
+      `track_name=${encodeURIComponent(cleanedTitle)}&artist_name=${encodeURIComponent(cleanedArtist)}`,
+      `q=${encodeURIComponent(`${cleanedTitle} ${cleanedArtist}`.trim())}`,
+      `q=${encodeURIComponent(cleanedTitle)}`,
+    ];
+    for (const query of queries) {
+      const hit = await this.searchLyricsOnce(query, trackName, artistName, signal);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  private async searchLyricsOnce(
+    query: string,
+    trackName: string,
+    artistName: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    trackName: string;
+    artistName: string;
+    plainLyrics: string;
+    syncedLyrics?: string | null;
+  } | null> {
+    const url = `https://lrclib.net/api/search?${query}`;
     const call = () =>
       this.call<FetchResult>(
         'http.fetch',
@@ -424,6 +450,17 @@ export class SpotifyClient {
     }
     return this.api(`/recommendations?${parts.join('&')}&limit=50`);
   }
+}
+
+/** Strips the noise media players append to titles: "(Official Video)", "feat. X", "- Live", … */
+function cleanMediaTitle(title: string): string {
+  const cleaned = title
+    .replace(/[(\[].*?[)\]]/g, ' ')
+    .replace(/\b(feat\.?|ft\.?)\b.*$/i, ' ')
+    .replace(/\s+-\s+[^-]*$/, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return cleaned.length >= 2 ? cleaned : title.trim();
 }
 
 function parseBody<T>(status: number, bodyText: string, service = 'spotify'): T {

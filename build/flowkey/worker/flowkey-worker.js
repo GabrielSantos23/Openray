@@ -117,6 +117,27 @@ async function handlePop(popId) {
   return {};
 }
 
+/**
+ * Search-bar state push from the renderer (Raycast's searchText/filterValue semantics): the
+ * running command re-renders with the new `query` / `filterValue` props, top page updated in
+ * place. The renderer stops filtering rows client-side for command pages (the adapter marks
+ * them `filtering: false`), so this is the only filter that applies.
+ */
+async function setSearchState(params) {
+  if (!root) return {};
+  const text = String(params?.query ?? "");
+  const filterValue = params?.filterValue === undefined ? context.filterValue : params.filterValue;
+  const top = commandStack[commandStack.length - 1];
+  if (top) {
+    top.query = text;
+    top.filterValue = filterValue;
+  }
+  context = { ...context, query: text, filterValue };
+  root.update(buildProps());
+  root.flushEffects();
+  return {};
+}
+
 function buildEnvironment() {
   return {
     extensionId: context.extensionId,
@@ -272,4 +293,5 @@ function terminate() {
 
 registerMethod("initialize", initialize);
 registerMethod("nativeCallback", nativeCallback);
+registerMethod("setSearchState", setSearchState);
 registerMethod("terminate", terminate);

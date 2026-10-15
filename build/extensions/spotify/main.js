@@ -93,7 +93,7 @@ var manifest_default = {
   name: "Spotify",
   version: "0.1.0",
   description: "Search Spotify, browse your library, and control playback.",
-  icon: "\u{1F3A7}",
+  icon: "assets/extension-icon.png",
   commands: [
     {
       id: "search",
@@ -560,7 +560,22 @@ var SpotifyClient = class {
     return this.api("/me/player?additional_types=episode", { signal });
   }
   async findLyrics(trackName, artistName, signal) {
-    const url = `https://lrclib.net/api/search?track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}`;
+    const cleanedTitle = cleanMediaTitle(trackName) || trackName;
+    const cleanedArtist = cleanMediaTitle(artistName) || artistName;
+    const queries = [
+      `track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}`,
+      `track_name=${encodeURIComponent(cleanedTitle)}&artist_name=${encodeURIComponent(cleanedArtist)}`,
+      `q=${encodeURIComponent(`${cleanedTitle} ${cleanedArtist}`.trim())}`,
+      `q=${encodeURIComponent(cleanedTitle)}`
+    ];
+    for (const query of queries) {
+      const hit = await this.searchLyricsOnce(query, trackName, artistName, signal);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  async searchLyricsOnce(query, trackName, artistName, signal) {
+    const url = `https://lrclib.net/api/search?${query}`;
     const call = () => this.call(
       "http.fetch",
       { url, method: "GET", timeoutMs: 15e3 },
@@ -776,6 +791,10 @@ var SpotifyClient = class {
     return this.api(`/recommendations?${parts.join("&")}&limit=50`);
   }
 };
+function cleanMediaTitle(title) {
+  const cleaned = title.replace(/[(\[].*?[)\]]/g, " ").replace(/\b(feat\.?|ft\.?)\b.*$/i, " ").replace(/\s+-\s+[^-]*$/, " ").replace(/\s{2,}/g, " ").trim();
+  return cleaned.length >= 2 ? cleaned : title.trim();
+}
 function parseBody(status, bodyText, service = "spotify") {
   if (status === 204 || bodyText.length === 0) {
     return null;
@@ -887,32 +906,6 @@ function pruneResults(results) {
     }
   }
   return pruned;
-}
-function collectArtworkUrls(results) {
-  if (!results) return [];
-  const urls = [];
-  const push = (url) => {
-    if (url) urls.push(url);
-  };
-  for (const artist of results.artists?.items ?? []) {
-    push(artist.images?.[0]?.url);
-  }
-  for (const album of results.albums?.items ?? []) {
-    push(album.images?.[0]?.url);
-  }
-  for (const playlist of results.playlists?.items ?? []) {
-    push(playlist.images?.at(-1)?.url);
-  }
-  for (const show of results.shows?.items ?? []) {
-    push(show.images?.[0]?.url);
-  }
-  for (const episode of results.episodes?.items ?? []) {
-    push(episode.show?.images?.at(-1)?.url ?? episode.images?.at(-1)?.url);
-  }
-  for (const track of results.tracks?.items ?? []) {
-    push(track.album?.images?.at(-1)?.url);
-  }
-  return urls;
 }
 function isAborted(error) {
   return error?.code === "aborted";
@@ -1108,28 +1101,6 @@ function peekArtistTracks(artistId) {
 function peekArtistAlbums(artistId) {
   return artistAlbumsCache.get(artistId) ?? null;
 }
-var artworkCache = /* @__PURE__ */ new Map();
-async function loadArtwork(client, url) {
-  const cached = artworkCache.get(url);
-  if (cached) {
-    return cached;
-  }
-  const key = `artwork:${url}`;
-  const pending = inflight.get(key);
-  if (pending) {
-    return pending;
-  }
-  const promise = client.fetchImage(url).then((uri) => {
-    artworkCache.set(url, uri);
-    return uri;
-  }).catch(() => null);
-  inflight.set(key, promise);
-  try {
-    return await promise;
-  } finally {
-    inflight.delete(key);
-  }
-}
 
 // ../../flowkey/cli/shims/react-jsx-runtime.ts
 var host4 = globalThis.__FLOWKEY_HOST__;
@@ -1290,37 +1261,23 @@ function ArtistAlbumsRoot(props) {
   return createElement(AlbumsGrid, { albums: visible, client });
 }
 function AlbumsGrid({ albums, client }) {
-  const [artwork, setArtwork] = useState({});
-  const urls = albums.map((album) => album.images[0]?.url ?? "").filter(Boolean);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      for (const url of urls) {
-        const uri = await loadArtwork(client, url);
-        if (alive && uri) {
-          setArtwork((previous) => ({ ...previous, [url]: uri }));
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [client, urls.join("|")]);
   return createElement(
     Grid,
     { columns: 5, title: albums[0]?.artists[0]?.name ?? "Albums" },
-    albums.map(
-      (album) => createElement(Grid.Item, {
+    albums.map((album) => {
+      const images = album.images ?? [];
+      const url = (images.length > 1 ? images[1]?.url : images[0]?.url) ?? images[0]?.url;
+      return createElement(Grid.Item, {
         key: album.id,
         id: album.id,
         title: album.name,
         subtitle: `${album.artists.map((artist) => artist.name).join(", ")} \xB7 ${album.release_date.slice(0, 4)}`,
         kind: "album",
-        icon: artwork[album.images[0]?.url ?? ""] ? { uri: artwork[album.images[0]?.url ?? ""] } : void 0,
+        icon: url ? { uri: url } : void 0,
         actions: albumActions(album, client, () => {
         }, new AbortController().signal)
-      })
-    )
+      });
+    })
   );
 }
 function warmAlbumSongs(client, albumId) {
@@ -1353,9 +1310,7 @@ function SearchCommand({ query, filterValue, native, signal, preferences }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [artwork, setArtwork] = useState({});
   const [recentVersion, setRecentVersion] = useState(0);
-  const artworkDone = useRef(/* @__PURE__ */ new Set());
   const saveTimer = useRef(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -1424,25 +1379,6 @@ function SearchCommand({ query, filterValue, native, signal, preferences }) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [authState, query]);
-  const artworkKey = collectArtworkUrls(results).join("|");
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      for (const url of artworkKey.split("|")) {
-        if (!url || artworkDone.current.has(url)) continue;
-        artworkDone.current.add(url);
-        try {
-          const uri = await client.fetchImage(url, signal);
-          if (alive) setArtwork((previous) => ({ ...previous, [url]: uri }));
-        } catch {
-          if (alive) artworkDone.current.delete(url);
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [client, signal, artworkKey]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), NOTICE_CLEAR_MS);
@@ -1502,7 +1438,7 @@ function SearchCommand({ query, filterValue, native, signal, preferences }) {
     ] });
   }
   if (GRID_FILTERS.has(filter)) {
-    const items = buildGridItems(results, filter, artwork, client, setNotice, signal);
+    const items = buildGridItems(results, filter, client, setNotice, signal);
     return /* @__PURE__ */ jsxs(Grid, { columns: 5, title: gridTitle(filter), children: [
       error ? /* @__PURE__ */ jsx(Grid.EmptyView, { title: "Search failed", description: error }) : null,
       !error && loading ? /* @__PURE__ */ jsx(Grid.EmptyView, { title: "Searching\u2026" }) : null,
@@ -1510,7 +1446,7 @@ function SearchCommand({ query, filterValue, native, signal, preferences }) {
       items
     ] });
   }
-  const sections = buildListSections(results, filter, artwork, client, setNotice, signal);
+  const sections = buildListSections(results, filter, client, setNotice, signal);
   const searching = loading || results === null;
   return /* @__PURE__ */ jsxs(List, { filter: SEARCH_FILTERS, children: [
     error ? /* @__PURE__ */ jsx(List.EmptyView, { title: "Search failed", description: error }) : null,
@@ -1522,8 +1458,22 @@ function SearchCommand({ query, filterValue, native, signal, preferences }) {
 function gridTitle(filter) {
   return SEARCH_FILTERS.find((option) => option.value === filter)?.label ?? "Results";
 }
-function buildListSections(results, filter, artwork, client, setNotice, signal, options = {}) {
+function withFreshIds(nodes, seen) {
+  return nodes.map((node) => {
+    const id = node?.props?.id;
+    if (typeof id !== "string" || id.length === 0) return node;
+    if (!seen.has(id)) {
+      seen.add(id);
+      return node;
+    }
+    let n = 2;
+    while (seen.has(`${id}~${n}`)) n += 1;
+    return cloneElement(node, { id: `${id}~${n}` });
+  });
+}
+function buildListSections(results, filter, client, setNotice, signal, options = {}) {
   const sections = [];
+  const seenIds = /* @__PURE__ */ new Set();
   const allLimit = (fallback2) => options.sectionLimit ?? fallback2;
   const artists = results?.artists?.items ?? [];
   const tracks = results?.tracks?.items ?? [];
@@ -1536,14 +1486,9 @@ function buildListSections(results, filter, artwork, client, setNotice, signal, 
       createElement(
         List.Section,
         { title: "Artists", key: "artists" },
-        artists.slice(0, filter === "all" ? allLimit(3) : 50).map(
-          (artist) => artistListItem(
-            artist,
-            artwork[artist.images?.[0]?.url ?? ""],
-            client,
-            setNotice,
-            signal
-          )
+        withFreshIds(
+          artists.slice(0, filter === "all" ? allLimit(3) : 50).map((artist) => artistListItem(artist, client, setNotice, signal)),
+          seenIds
         )
       )
     );
@@ -1553,7 +1498,10 @@ function buildListSections(results, filter, artwork, client, setNotice, signal, 
       createElement(
         List.Section,
         { title: options.tracksTitle ?? "Songs", key: "tracks" },
-        tracks.slice(0, filter === "all" ? allLimit(4) : 50).map((track) => trackListItem(track, artwork, client, setNotice, signal))
+        withFreshIds(
+          tracks.slice(0, filter === "all" ? allLimit(4) : 50).map((track) => trackListItem(track, client, setNotice, signal)),
+          seenIds
+        )
       )
     );
   }
@@ -1562,7 +1510,10 @@ function buildListSections(results, filter, artwork, client, setNotice, signal, 
       createElement(
         List.Section,
         { title: "Albums", key: "albums" },
-        albums.slice(0, filter === "all" ? allLimit(6) : 50).map((album) => albumListItem("list", album, artwork, client, setNotice, signal))
+        withFreshIds(
+          albums.slice(0, filter === "all" ? allLimit(6) : 50).map((album) => albumListItem("list", album, client, setNotice, signal)),
+          seenIds
+        )
       )
     );
   }
@@ -1570,7 +1521,10 @@ function buildListSections(results, filter, artwork, client, setNotice, signal, 
     sections.push(
       createElement(List.Section, { title: "Playlists", key: "playlists" }, [
         ...options.likedSongsItem ? [options.likedSongsItem] : [],
-        ...playlists.slice(0, filter === "all" ? allLimit(6) : 50).map((playlist) => playlistListItem(playlist, artwork, client, setNotice, signal))
+        ...withFreshIds(
+          playlists.slice(0, filter === "all" ? allLimit(6) : 50).map((playlist) => playlistListItem(playlist, client, setNotice, signal)),
+          seenIds
+        )
       ])
     );
   }
@@ -1579,7 +1533,10 @@ function buildListSections(results, filter, artwork, client, setNotice, signal, 
       createElement(
         List.Section,
         { title: "Podcasts & Shows", key: "shows" },
-        shows.slice(0, filter === "all" ? allLimit(3) : 50).map((show) => showListItem("list", show, artwork, client, setNotice, signal))
+        withFreshIds(
+          shows.slice(0, filter === "all" ? allLimit(3) : 50).map((show) => showListItem("list", show, client, setNotice, signal)),
+          seenIds
+        )
       )
     );
   }
@@ -1588,78 +1545,96 @@ function buildListSections(results, filter, artwork, client, setNotice, signal, 
       createElement(
         List.Section,
         { title: options.episodesTitle ?? "Episodes", key: "episodes" },
-        episodes.slice(0, filter === "all" ? allLimit(3) : 50).map((episode) => episodeListItem(episode, artwork, client, setNotice, signal))
+        withFreshIds(
+          episodes.slice(0, filter === "all" ? allLimit(3) : 50).map((episode) => episodeListItem(episode, client, setNotice, signal)),
+          seenIds
+        )
       )
     );
   }
   return sections.filter(Boolean);
 }
-function buildGridItems(results, filter, artwork, client, setNotice, signal) {
+function buildGridItems(results, filter, client, setNotice, signal) {
+  const seenIds = /* @__PURE__ */ new Set();
   if (filter === "artists") {
-    return (results?.artists?.items ?? []).map(
-      (artist) => createElement(Grid.Item, {
-        key: artist.id,
-        id: artist.id,
-        title: artist.name,
-        kind: "artist",
-        icon: iconSpec(artwork[artist.images?.[0]?.url ?? ""]),
-        actions: artistActions(artist, client, setNotice, signal)
-      })
+    return withFreshIds(
+      (results?.artists?.items ?? []).map(
+        (artist) => createElement(Grid.Item, {
+          key: artist.id,
+          id: artist.id,
+          title: artist.name,
+          kind: "artist",
+          icon: gridImage(artist.images),
+          actions: artistActions(artist, client, setNotice, signal)
+        })
+      ),
+      seenIds
     );
   }
   if (filter === "albums") {
-    return (results?.albums?.items ?? []).map(
-      (album) => createElement(Grid.Item, {
-        key: album.id,
-        id: album.id,
-        title: album.name,
-        subtitle: `${artistNames(album.artists)} \xB7 ${album.release_date.slice(0, 4)}`,
-        kind: "album",
-        icon: iconSpec(artwork[album.images?.[0]?.url ?? ""]),
-        actions: albumActions(album, client, setNotice, signal)
-      })
+    return withFreshIds(
+      (results?.albums?.items ?? []).map(
+        (album) => createElement(Grid.Item, {
+          key: album.id,
+          id: album.id,
+          title: album.name,
+          subtitle: `${artistNames(album.artists)} \xB7 ${album.release_date.slice(0, 4)}`,
+          kind: "album",
+          icon: gridImage(album.images),
+          actions: albumActions(album, client, setNotice, signal)
+        })
+      ),
+      seenIds
     );
   }
-  return (results?.shows?.items ?? []).map(
-    (show) => createElement(Grid.Item, {
-      key: show.id,
-      id: show.id,
-      title: show.name,
-      subtitle: show.publisher,
-      kind: "show",
-      icon: iconSpec(artwork[show.images?.[0]?.url ?? ""]),
-      actions: showActions(show, client, setNotice, signal)
-    })
+  return withFreshIds(
+    (results?.shows?.items ?? []).map(
+      (show) => createElement(Grid.Item, {
+        key: show.id,
+        id: show.id,
+        title: show.name,
+        subtitle: show.publisher,
+        kind: "show",
+        icon: gridImage(show.images),
+        actions: showActions(show, client, setNotice, signal)
+      })
+    ),
+    seenIds
   );
 }
-function iconSpec(uri) {
-  return uri ? { uri } : void 0;
+function listImage(images) {
+  const url = images?.at(-1)?.url ?? images?.[0]?.url;
+  return url ? { uri: url } : void 0;
+}
+function gridImage(images) {
+  const url = (images?.length ?? 0) > 1 ? images?.[1]?.url : images?.[0]?.url;
+  return url ? { uri: url } : void 0;
 }
 function artistNames(artists) {
   return artists.map((artist) => artist.name).join(", ");
 }
-function artistListItem(artist, iconUri, client, setNotice, signal) {
+function artistListItem(artist, client, setNotice, signal) {
   return createElement(List.Item, {
     key: artist.id,
     id: artist.id,
     title: artist.name,
     kind: "artist",
-    icon: iconSpec(iconUri),
+    icon: listImage(artist.images),
     actions: artistActions(artist, client, setNotice, signal)
   });
 }
-function trackListItem(track, artwork, client, setNotice, signal) {
+function trackListItem(track, client, setNotice, signal) {
   return createElement(List.Item, {
     key: track.id,
     id: track.id,
     title: track.name,
     subtitle: `${artistNames(track.artists)} \xB7 ${formatMs(track.duration_ms)}`,
     kind: "track",
-    icon: iconSpec(artwork[track.album?.images?.at(-1)?.url ?? ""]),
+    icon: listImage(track.album?.images),
     actions: trackActions(track, client, setNotice, signal)
   });
 }
-function albumListItem(mode, album, artwork, client, setNotice, signal) {
+function albumListItem(mode, album, client, setNotice, signal) {
   if (mode === "grid") {
     return createElement(Grid.Item, {
       key: album.id,
@@ -1667,7 +1642,7 @@ function albumListItem(mode, album, artwork, client, setNotice, signal) {
       title: album.name,
       subtitle: `${artistNames(album.artists)} \xB7 ${album.release_date.slice(0, 4)}`,
       kind: "album",
-      icon: iconSpec(artwork[album.images?.[0]?.url ?? ""]),
+      icon: gridImage(album.images),
       actions: albumActions(album, client, setNotice, signal)
     });
   }
@@ -1677,40 +1652,40 @@ function albumListItem(mode, album, artwork, client, setNotice, signal) {
     title: album.name,
     subtitle: `${artistNames(album.artists)} \xB7 ${album.release_date.slice(0, 4)}`,
     kind: "album",
-    icon: iconSpec(artwork[album.images?.[0]?.url ?? ""]),
+    icon: listImage(album.images),
     actions: albumActions(album, client, setNotice, signal)
   });
 }
-function playlistListItem(playlist, artwork, client, setNotice, signal) {
+function playlistListItem(playlist, client, setNotice, signal) {
   return createElement(List.Item, {
     key: playlist.id,
     id: playlist.id,
     title: playlist.name,
     subtitle: playlist.owner?.display_name ?? "",
     kind: "playlist",
-    icon: iconSpec(artwork[playlist.images?.at(-1)?.url ?? ""]),
+    icon: listImage(playlist.images),
     actions: playlistActions(playlist, client, setNotice, signal)
   });
 }
-function showListItem(mode, show, artwork, client, setNotice, signal) {
+function showListItem(mode, show, client, setNotice, signal) {
   return createElement(mode === "grid" ? Grid.Item : List.Item, {
     key: show.id,
     id: show.id,
     title: show.name,
     subtitle: show.publisher,
     kind: "show",
-    icon: iconSpec(artwork[show.images?.[0]?.url ?? ""]),
+    icon: mode === "grid" ? gridImage(show.images) : listImage(show.images),
     actions: showActions(show, client, setNotice, signal)
   });
 }
-function episodeListItem(episode, artwork, client, setNotice, signal) {
+function episodeListItem(episode, client, setNotice, signal) {
   return createElement(List.Item, {
     key: episode.id,
     id: episode.id,
     title: episode.name,
     subtitle: episode.show?.name ?? "",
     kind: "episode",
-    icon: iconSpec(artwork[episode.show?.images?.at(-1)?.url ?? episode.images?.at(-1)?.url ?? ""]),
+    icon: listImage(episode.show?.images ?? episode.images),
     actions: episodeActions(episode, client, setNotice, signal)
   });
 }
@@ -1720,6 +1695,7 @@ function artistActions(artist, client, setNotice, signal) {
       Action,
       {
         title: "Play",
+        icon: { lucide: "play" },
         onAction: async () => {
           try {
             await client.play({ context_uri: `spotify:artist:${artist.id}` }, void 0);
@@ -1733,6 +1709,7 @@ function artistActions(artist, client, setNotice, signal) {
       Action,
       {
         title: "Start Radio",
+        icon: { lucide: "forward" },
         onAction: async () => {
           try {
             await startRadio(client, { artists: [artist.id] }, signal);
@@ -1747,6 +1724,7 @@ function artistActions(artist, client, setNotice, signal) {
       Action,
       {
         title: "Go to Songs",
+        icon: { lucide: "music" },
         push: artistSongsKey(artist.id),
         onAction: () => {
           warmArtistSongs(client, artist.id);
@@ -1757,6 +1735,7 @@ function artistActions(artist, client, setNotice, signal) {
       Action,
       {
         title: "Go to Albums",
+        icon: { lucide: "image" },
         push: artistAlbumsKey(artist.id),
         onAction: () => {
           warmArtistAlbums(client, artist.id);
@@ -1767,6 +1746,7 @@ function artistActions(artist, client, setNotice, signal) {
       Action,
       {
         title: "Copy Artist Link",
+        icon: { lucide: "copy-clipboard" },
         onAction: async () => {
           await copyToClipboard(client, externalUrl("artist", artist.id));
           setNotice("Copied artist link");
@@ -1781,6 +1761,7 @@ function trackActions(track, client, setNotice, signal) {
       Action,
       {
         title: "Play",
+        icon: { lucide: "play" },
         onAction: async () => {
           try {
             await client.play({ uris: [track.uri] });
@@ -1795,6 +1776,7 @@ function trackActions(track, client, setNotice, signal) {
       Action,
       {
         title: "Like / Unlike",
+        icon: { lucide: "star" },
         onAction: async () => {
           try {
             const liked = await client.containsSavedTracks([track.id]);
@@ -1815,6 +1797,7 @@ function trackActions(track, client, setNotice, signal) {
       Action,
       {
         title: "Add to Queue",
+        icon: { lucide: "list" },
         onAction: async () => {
           try {
             await client.addToQueue(track.uri);
@@ -1829,6 +1812,7 @@ function trackActions(track, client, setNotice, signal) {
       Action,
       {
         title: "Start Radio",
+        icon: { lucide: "forward" },
         onAction: async () => {
           try {
             await startRadio(client, { tracks: [track.id] }, signal);
@@ -1843,6 +1827,7 @@ function trackActions(track, client, setNotice, signal) {
       Action,
       {
         title: "Copy Track Link",
+        icon: { lucide: "copy-clipboard" },
         onAction: async () => {
           await copyToClipboard(client, trackUrl(track));
           setNotice("Copied track link");
@@ -1857,6 +1842,7 @@ function albumActions(album, client, setNotice, signal) {
       Action,
       {
         title: "Play",
+        icon: { lucide: "play" },
         onAction: async () => {
           try {
             await client.play({ context_uri: `spotify:album:${album.id}` });
@@ -1870,6 +1856,7 @@ function albumActions(album, client, setNotice, signal) {
       Action,
       {
         title: "Add / Remove from Library",
+        icon: { lucide: "star" },
         onAction: async () => {
           try {
             const saved = await client.containsSavedAlbums([album.id]);
@@ -1890,6 +1877,7 @@ function albumActions(album, client, setNotice, signal) {
       Action,
       {
         title: "Copy Album Link",
+        icon: { lucide: "copy-clipboard" },
         onAction: async () => {
           await copyToClipboard(client, externalUrl("album", album.id));
           setNotice("Copied album link");
@@ -1900,6 +1888,7 @@ function albumActions(album, client, setNotice, signal) {
       Action,
       {
         title: "Go to Songs",
+        icon: { lucide: "music" },
         push: albumSongsKey(album.id),
         onAction: () => {
           warmAlbumSongs(client, album.id);
@@ -1914,6 +1903,7 @@ function playlistActions(playlist, client, setNotice, signal) {
       Action,
       {
         title: "Play",
+        icon: { lucide: "play" },
         onAction: async () => {
           try {
             await client.play({ context_uri: `spotify:playlist:${playlist.id}` });
@@ -1927,6 +1917,7 @@ function playlistActions(playlist, client, setNotice, signal) {
       Action,
       {
         title: "Copy Playlist Link",
+        icon: { lucide: "copy-clipboard" },
         onAction: async () => {
           await copyToClipboard(client, externalUrl("playlist", playlist.id));
           setNotice("Copied playlist link");
@@ -1941,6 +1932,7 @@ function showActions(show, client, setNotice, signal) {
       Action,
       {
         title: "Play",
+        icon: { lucide: "play" },
         onAction: async () => {
           try {
             await client.play({ context_uri: `spotify:show:${show.id}` });
@@ -1954,6 +1946,7 @@ function showActions(show, client, setNotice, signal) {
       Action,
       {
         title: "Copy Show Link",
+        icon: { lucide: "copy-clipboard" },
         onAction: async () => {
           await copyToClipboard(client, externalUrl("show", show.id));
           setNotice("Copied show link");
@@ -1968,6 +1961,7 @@ function episodeActions(episode, client, setNotice, signal) {
       Action,
       {
         title: "Play",
+        icon: { lucide: "play" },
         onAction: async () => {
           try {
             await client.play({ uris: [episode.uri] });
@@ -1982,6 +1976,7 @@ function episodeActions(episode, client, setNotice, signal) {
       Action,
       {
         title: "Add to Queue",
+        icon: { lucide: "list" },
         onAction: async () => {
           try {
             await client.addToQueue(episode.uri);
@@ -2042,6 +2037,7 @@ function ConnectView({
           Action,
           {
             title: "Copy Redirect URI",
+            icon: { lucide: "link" },
             onAction: async () => {
               if (!redirectUri) return;
               await copyToClipboard(client, redirectUri);
@@ -2061,6 +2057,7 @@ function ConnectView({
           Action,
           {
             title: "Connect Spotify",
+            icon: { lucide: "forward" },
             onAction: async () => {
               if (!configuredClientId) {
                 setNotice("Add your Spotify client id in FlowKey Settings \u2192 Spotify (Save), then connect again.");
@@ -2102,7 +2099,6 @@ function LibraryCommand({ query, filterValue, native, signal }) {
   );
   const [data, setData] = useState(() => null);
   const [error, setError] = useState("");
-  const [artwork, setArtwork] = useState({});
   useEffect(() => {
     const controller = new AbortController();
     (async () => {
@@ -2136,22 +2132,6 @@ function LibraryCommand({ query, filterValue, native, signal }) {
       alive = false;
     };
   }, [authState, client]);
-  const artworkKey = collectArtworkUrls(data?.results ?? null).join("|") + "|" + LIKED_SONGS_ICON;
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      for (const url of artworkKey.split("|")) {
-        if (!url) continue;
-        const uri = await loadArtwork(client, url);
-        if (alive && uri) {
-          setArtwork((previous) => ({ ...previous, [url]: uri }));
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [client, artworkKey]);
   if (authState === "checking") {
     return /* @__PURE__ */ jsx(List, { filter: SEARCH_FILTERS, children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Checking Spotify connection\u2026" }) });
   }
@@ -2182,19 +2162,19 @@ function LibraryCommand({ query, filterValue, native, signal }) {
   }
   const results = filterLibrary(data.results, query);
   if (GRID_FILTERS2.has(filter)) {
-    const items = buildGridItems(results, filter, artwork, client, () => {
+    const items = buildGridItems(results, filter, client, () => {
     }, signal);
     if (items.length === 0) {
       return /* @__PURE__ */ jsx(Grid, { columns: 5, children: /* @__PURE__ */ jsx(Grid.EmptyView, { title: "Nothing here", description: emptyDescription(query) }) });
     }
     return /* @__PURE__ */ jsx(Grid, { columns: 5, title: gridTitle2(filter), children: items });
   }
-  const sections = buildListSections(results, filter, artwork, client, () => {
+  const sections = buildListSections(results, filter, client, () => {
   }, signal, {
     tracksTitle: "Liked Songs",
     episodesTitle: "Saved Episodes",
     sectionLimit: 6,
-    likedSongsItem: likedSongsItem(data, artwork, client)
+    likedSongsItem: likedSongsItem(data, client)
   });
   if (sections.length === 0) {
     return /* @__PURE__ */ jsx(List, { filter: SEARCH_FILTERS, children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Nothing here", description: emptyDescription(query) }) });
@@ -2228,14 +2208,14 @@ function LibraryConnectItem({
     )
   });
 }
-function likedSongsItem(data, artwork, client) {
+function likedSongsItem(data, client) {
   const total = data.likedTotal;
   return createElement(List.Item, {
     id: "liked-songs",
     title: "Liked Songs",
     subtitle: `${total} songs`,
     kind: "playlist",
-    icon: artwork[LIKED_SONGS_ICON] ? { uri: artwork[LIKED_SONGS_ICON] } : { lucide: "heart", color: "#1DB954" },
+    icon: { uri: LIKED_SONGS_ICON },
     actions: createElement(
       ActionPanel,
       null,
@@ -2291,6 +2271,7 @@ function nowPlayingActions({
       Action,
       {
         title: state.is_playing ? "Pause" : "Play",
+        icon: { lucide: state.is_playing ? "pause" : "play" },
         primary: true,
         onAction: run(
           "toggle",
@@ -2299,11 +2280,19 @@ function nowPlayingActions({
         )
       }
     ),
-    /* @__PURE__ */ jsx(Action, { title: "Next", onAction: run("next", "Skipped to next track", () => client.next()) }),
+    /* @__PURE__ */ jsx(
+      Action,
+      {
+        title: "Next",
+        icon: { lucide: "forward" },
+        onAction: run("next", "Skipped to next track", () => client.next())
+      }
+    ),
     /* @__PURE__ */ jsx(
       Action,
       {
         title: "Previous",
+        icon: { lucide: "rewind" },
         onAction: run("previous", "Went back to previous track", () => client.previous())
       }
     ),
@@ -2311,6 +2300,7 @@ function nowPlayingActions({
       Action,
       {
         title: liked ? "Unlike" : "Like",
+        icon: { lucide: "star" },
         onAction: run("like", "Updated Liked Songs", async () => {
           if (liked) {
             await client.removeFromSavedTracks([track.id]);
@@ -2326,6 +2316,7 @@ function nowPlayingActions({
       Action,
       {
         title: state.shuffle_state ? "Shuffle Off" : "Shuffle On",
+        icon: { lucide: "switch" },
         onAction: run("shuffle", "Updated shuffle", () => client.setShuffle(!state.shuffle_state))
       }
     ),
@@ -2333,6 +2324,7 @@ function nowPlayingActions({
       Action,
       {
         title: `Repeat: ${state.repeat_state}`,
+        icon: { lucide: "arrow-clockwise" },
         onAction: run("repeat", "Updated repeat", () => {
           const order = ["off", "track", "context"];
           const next = order[(order.indexOf(state.repeat_state) + 1) % order.length];
@@ -2344,6 +2336,7 @@ function nowPlayingActions({
       Action,
       {
         title: "Copy Track Link",
+        icon: { lucide: "copy-clipboard" },
         onAction: async () => {
           await client.copyText(`https://open.spotify.com/track/${track.id}`);
           setNotice("Copied track link");
@@ -2354,6 +2347,7 @@ function nowPlayingActions({
       Action,
       {
         title: "Copy Artist and Title",
+        icon: { lucide: "copy-clipboard" },
         onAction: async () => {
           await client.copyText(
             `${track.artists.map((artist) => artist.name).join(", ")} - ${track.name}`
@@ -2429,18 +2423,6 @@ function NowPlayingCommand({ native, signal }) {
     };
   }, [client, authState, pollVersion]);
   const currentTrack = state && state.item && isTrack(state.item) ? state.item : null;
-  const artworkUrl = currentTrack?.album?.images[0]?.url ?? "";
-  const [imageUri, setImageUri] = useState(null);
-  useEffect(() => {
-    if (!artworkUrl) return;
-    let alive = true;
-    loadArtwork(client, artworkUrl).then((uri) => {
-      if (alive && uri) setImageUri(uri);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [client, artworkUrl]);
   const [liked, setLiked] = useState(null);
   const likedTrackId = currentTrack?.id ?? null;
   useEffect(() => {
@@ -2489,34 +2471,23 @@ function NowPlayingCommand({ native, signal }) {
     ) });
   }
   const artists = track.artists.map((artist) => artist.name).join(", ");
+  const artworkUrl = track.album?.images?.[0]?.url ?? "";
   return /* @__PURE__ */ jsx(
     Detail,
     {
       title: track.name,
       subtitle: `by ${artists}`,
-      imageUri: imageUri ?? void 0,
-      markdown: notice || void 0,
+      imageUri: artworkUrl || void 0,
+      markdown: notice ? notice : `# ${track.name}
+
+by ${artists}`,
       actions: nowPlayingActions({ client, state, track, refresh, setNotice, liked, setLiked }),
       children: /* @__PURE__ */ jsxs(Detail.Metadata, { children: [
         /* @__PURE__ */ jsx(Detail.Metadata.Field, { label: "Track", value: track.name }),
         /* @__PURE__ */ jsx(Detail.Metadata.Field, { label: "Duration", value: formatMs(track.duration_ms) }),
-        /* @__PURE__ */ jsx(
-          Detail.Metadata.Field,
-          {
-            label: "Progress",
-            value: state.progress_ms === null ? formatMs(track.duration_ms) : `${formatMs(state.progress_ms)} / ${formatMs(track.duration_ms)}`
-          }
-        ),
         /* @__PURE__ */ jsx(Detail.Metadata.Field, { label: "Artists", value: artists }),
         /* @__PURE__ */ jsx(Detail.Metadata.Field, { label: "Album", value: track.album?.name ?? "Unknown album" }),
-        /* @__PURE__ */ jsx(Detail.Metadata.Field, { label: "Liked", value: liked === null ? "\u2026" : liked ? "Yes" : "No" }),
-        /* @__PURE__ */ jsx(
-          Detail.Metadata.Field,
-          {
-            label: "Device",
-            value: state.device ? state.device.name : "Unknown"
-          }
-        )
+        /* @__PURE__ */ jsx(Detail.Metadata.Field, { label: "Liked", value: liked === null ? "\u2026" : liked ? "Yes" : "No" })
       ] })
     }
   );
@@ -3010,6 +2981,7 @@ function QueueCommand(props) {
   const client = useMemo(() => new SpotifyClient(props.native.call), [props.native]);
   const [queue, setQueue] = useState(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   useEffect(() => {
     let alive = true;
     client.queue().then((result) => {
@@ -3021,14 +2993,26 @@ function QueueCommand(props) {
       alive = false;
     };
   }, [client]);
+  const current = queue && isTrack2(queue.currently_playing) ? queue.currently_playing : null;
+  const queuedTracks = queue ? queue.queue.filter(isTrack2) : [];
+  const entries2 = queuedTracks.filter(
+    (track, index) => queuedTracks.findIndex((other) => other.id === track.id) === index
+  );
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 4e3);
+    return () => clearTimeout(timer);
+  }, [notice]);
   if (error) {
     return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Could not load queue", description: error }) });
   }
   if (!queue) {
     return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Loading queue\u2026" }) });
   }
-  const entries2 = queue.queue.filter(isTrack2);
-  const current = isTrack2(queue.currently_playing) ? queue.currently_playing : null;
+  const artworkIcon = (track) => {
+    const url = track.album?.images?.at(-1)?.url;
+    return url ? { uri: url } : void 0;
+  };
   return /* @__PURE__ */ jsxs(List, { children: [
     entries2.length === 0 && !current ? /* @__PURE__ */ jsx(List.EmptyView, { title: "Queue is empty" }) : null,
     current ? /* @__PURE__ */ jsx(List.Section, { title: "Now Playing", children: /* @__PURE__ */ jsx(
@@ -3037,7 +3021,9 @@ function QueueCommand(props) {
         id: "current",
         title: current.name,
         subtitle: current.artists.map((artist) => artist.name).join(", "),
-        kind: "track"
+        kind: "track",
+        icon: artworkIcon(current),
+        actions: trackActions(current, client, setNotice, props.signal)
       }
     ) }) : null,
     entries2.length > 0 ? /* @__PURE__ */ jsx(List.Section, { title: "Next Up", children: entries2.map((track) => /* @__PURE__ */ jsx(
@@ -3047,22 +3033,12 @@ function QueueCommand(props) {
         title: track.name,
         subtitle: `${track.artists.map((artist) => artist.name).join(", ")} \xB7 ${formatMs(track.duration_ms)}`,
         kind: "track",
-        actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
-          Action,
-          {
-            title: "Play Now",
-            onAction: async () => {
-              try {
-                await client.play({ uris: [track.uri] });
-              } catch (caught) {
-                if (!isAborted(caught)) setError(describeError(caught));
-              }
-            }
-          }
-        ) })
+        icon: artworkIcon(track),
+        actions: trackActions(track, client, setNotice, props.signal)
       },
       track.id
-    )) }) : null
+    )) }) : null,
+    notice ? /* @__PURE__ */ jsx(List.Section, { title: "Status", children: /* @__PURE__ */ jsx(List.Item, { id: "notice", title: notice, icon: { lucide: "info" } }) }) : null
   ] });
 }
 function DevicesCommand(props) {
@@ -3114,114 +3090,119 @@ function DevicesCommand(props) {
     device.id
   )) });
 }
-function AddToPlaylistCommand(props) {
-  const client = useMemo(() => new SpotifyClient(props.native.call), [props.native]);
-  const result = usePlaybackContext(client);
-  const [playlists, setPlaylists] = useState(null);
-  const [libraryError, setLibraryError] = useState("");
+function playlistTrackCount(playlist) {
+  const tracks = playlist.tracks;
+  if (typeof tracks === "number") return tracks;
+  if (Array.isArray(tracks)) return tracks.length;
+  return tracks?.total ?? 0;
+}
+function playlistArtwork(playlist) {
+  const url = playlist.images?.at(-1)?.url ?? playlist.images?.[0]?.url;
+  return url ? { uri: url } : void 0;
+}
+function useOwnedPlaylists(client, ready) {
+  const [state, setState] = useState({
+    playlists: null,
+    error: ""
+  });
   useEffect(() => {
-    if (result.kind !== "context") return;
+    if (!ready) return;
     let alive = true;
-    loadLibrary(client).then((library) => {
-      if (alive) setPlaylists(library);
+    Promise.all([client.myPlaylists(50), client.me()]).then(([page, me]) => {
+      if (!alive) return;
+      const mine = (page.items ?? []).filter(
+        (playlist) => Boolean(playlist) && playlist.owner?.id === me.id
+      );
+      setState({ playlists: mine, error: "" });
     }).catch((caught) => {
-      if (alive && !isAborted(caught)) setLibraryError(describeError(caught));
+      if (!alive || isAborted(caught)) return;
+      setState({ playlists: null, error: describeError(caught) });
     });
     return () => {
       alive = false;
     };
-  }, [client, result]);
+  }, [client, ready]);
+  return state;
+}
+function PlaylistPicker({
+  title,
+  playlists,
+  actionLabel,
+  onPick
+}) {
+  return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.Section, { title, children: playlists.map((playlist) => /* @__PURE__ */ jsx(
+    List.Item,
+    {
+      id: playlist.id,
+      title: playlist.name,
+      subtitle: `${playlistTrackCount(playlist)} tracks`,
+      kind: "playlist",
+      icon: playlistArtwork(playlist),
+      actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
+        Action,
+        {
+          title: actionLabel,
+          onAction: async () => {
+            await onPick(playlist);
+          }
+        }
+      ) })
+    },
+    playlist.id
+  )) }) });
+}
+function AddToPlaylistCommand(props) {
+  const client = useMemo(() => new SpotifyClient(props.native.call), [props.native]);
+  const result = usePlaybackContext(client);
+  const { playlists, error } = useOwnedPlaylists(client, result.kind === "context");
   return /* @__PURE__ */ jsx(ContextGate, { result, children: ({ track }) => {
-    if (libraryError) {
-      return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Could not load playlists", description: libraryError }) });
+    if (error) {
+      return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Could not load playlists", description: error }) });
     }
     if (!playlists) {
       return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Loading playlists\u2026" }) });
     }
-    const owned = playlists.results.playlists?.items.filter(
-      (playlist) => playlist && playlist.owner?.id === playlists.me.id
-    );
-    if (!owned || owned.length === 0) {
+    if (playlists.length === 0) {
       return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "No editable playlists found" }) });
     }
-    return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.Section, { title: `Add ${track.name} to\u2026`, children: owned.map((playlist) => /* @__PURE__ */ jsx(
-      List.Item,
+    return /* @__PURE__ */ jsx(
+      PlaylistPicker,
       {
-        id: playlist.id,
-        title: playlist.name,
-        subtitle: `${playlist.tracks?.total ?? 0} tracks`,
-        kind: "playlist",
-        actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
-          Action,
-          {
-            title: "Add Track",
-            onAction: async () => {
-              try {
-                await client.addToPlaylist(playlist.id, [track.uri]);
-              } catch (caught) {
-                if (!isAborted(caught)) setLibraryError(describeError(caught));
-              }
-            }
-          }
-        ) })
-      },
-      playlist.id
-    )) }) });
+        title: `Add ${track.name} to\u2026`,
+        playlists,
+        actionLabel: "Add Track",
+        onPick: async (playlist) => {
+          await client.addToPlaylist(playlist.id, [track.uri]);
+        }
+      }
+    );
   } });
 }
 function RemoveFromPlaylistCommand(props) {
   const client = useMemo(() => new SpotifyClient(props.native.call), [props.native]);
   const result = usePlaybackContext(client);
-  const [playlists, setPlaylists] = useState(null);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    if (result.kind !== "context") return;
-    let alive = true;
-    loadLibrary(client).then((library) => {
-      if (alive) setPlaylists(library);
-    }).catch((caught) => {
-      if (alive && !isAborted(caught)) setError(describeError(caught));
-    });
-    return () => {
-      alive = false;
-    };
-  }, [client, result]);
+  const { playlists, error } = useOwnedPlaylists(client, result.kind === "context");
   return /* @__PURE__ */ jsx(ContextGate, { result, children: ({ track }) => {
     if (error) {
-      return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Something went wrong", description: error }) });
+      return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Could not load playlists", description: error }) });
     }
     if (!playlists) {
       return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "Loading playlists\u2026" }) });
     }
-    const owned = playlists.results.playlists?.items.filter(
-      (playlist) => playlist && playlist.owner?.id === playlists.me.id
-    );
-    if (!owned || owned.length === 0) {
+    if (playlists.length === 0) {
       return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.EmptyView, { title: "No editable playlists found" }) });
     }
-    return /* @__PURE__ */ jsx(List, { children: /* @__PURE__ */ jsx(List.Section, { title: `Remove ${track.name} from\u2026`, children: owned.map((playlist) => /* @__PURE__ */ jsx(
-      List.Item,
+    return /* @__PURE__ */ jsx(
+      PlaylistPicker,
       {
-        id: playlist.id,
-        title: playlist.name,
-        subtitle: `${playlist.tracks?.total ?? 0} tracks`,
-        kind: "playlist",
-        actions: /* @__PURE__ */ jsx(ActionPanel, { children: /* @__PURE__ */ jsx(
-          Action,
-          {
-            title: "Remove Track",
-            onAction: async () => {
-              try {
-                await client.removeFromPlaylist(playlist.id, track.uri);
-              } catch (caught) {
-                if (!isAborted(caught)) setError(describeError(caught));
-              }
-            }
-          }
-        ) })
-      },
-      playlist.id
-    )) }) });
+        title: `Remove ${track.name} from\u2026`,
+        playlists,
+        actionLabel: "Remove Track",
+        onPick: async (playlist) => {
+          await client.removeFromPlaylist(playlist.id, track.uri);
+        }
+      }
+    );
   } });
 }
 function lyricsMarkdown(lyrics, media, activeIndex) {
@@ -3229,7 +3210,7 @@ function lyricsMarkdown(lyrics, media, activeIndex) {
   if (media?.artist) header.push("**Artist:** " + media.artist);
   if (media?.album) header.push("**Album:** " + media.album);
   const body = lyrics.synced ? lyrics.lines.map((line, i) => {
-    if (i === activeIndex) return `**\u266A ${line.text}**`;
+    if (i === activeIndex) return `## \u266A ${line.text}`;
     if (activeIndex >= 0 && i < activeIndex) return `~~${line.text}~~`;
     return " " + line.text;
   }).join("\n\n") : lyrics.lines.map((line) => " " + line.text).join("\n\n");
@@ -3331,6 +3312,7 @@ function FindLyricsCommand(props) {
           Action,
           {
             title: "Play / Pause",
+            icon: { lucide: "play" },
             onAction: async () => {
               await props.native.call("media.control", { command: "playPause" });
             }
@@ -3340,6 +3322,7 @@ function FindLyricsCommand(props) {
           Action,
           {
             title: "Next Track",
+            icon: { lucide: "forward" },
             onAction: async () => {
               await props.native.call("media.control", { command: "next" });
             }
@@ -3349,6 +3332,7 @@ function FindLyricsCommand(props) {
           Action,
           {
             title: "Previous Track",
+            icon: { lucide: "rewind" },
             onAction: async () => {
               await props.native.call("media.control", { command: "previous" });
             }

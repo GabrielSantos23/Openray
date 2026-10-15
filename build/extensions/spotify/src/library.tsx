@@ -3,15 +3,11 @@ import type { CommandProps } from '@flowkey-mini/react-ui';
 import { Action, ActionPanel, Grid, List } from '@flowkey-mini/react-ui';
 import { SpotifyApiError, SpotifyClient } from './api/client';
 import { buildGridItems, buildListSections } from './search';
-import {
-  collectArtworkUrls,
-  filterLibrary,
-  SEARCH_FILTERS,
-  type SearchResults,
-} from './search-model';
+import { filterLibrary, SEARCH_FILTERS, type SearchResults } from './search-model';
 import { likedSongsKey } from './subviews';
-import { loadArtwork, loadLibrary, type LibraryData } from './store';
+import { loadLibrary, type LibraryData } from './store';
 
+// The renderer loads this CDN image directly (like every other artwork in the extension).
 const LIKED_SONGS_ICON = 'https://misc.scdn.co/liked-songs-64.png';
 const GRID_FILTERS = new Set(['artists', 'albums', 'shows']);
 
@@ -23,7 +19,6 @@ export function LibraryCommand({ query, filterValue, native, signal }: CommandPr
   );
   const [data, setData] = useState<LibraryData | null>(() => null);
   const [error, setError] = useState('');
-  const [artwork, setArtwork] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -59,23 +54,6 @@ export function LibraryCommand({ query, filterValue, native, signal }: CommandPr
       alive = false;
     };
   }, [authState, client]);
-
-  const artworkKey = collectArtworkUrls(data?.results ?? null).join('|') + '|' + LIKED_SONGS_ICON;
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      for (const url of artworkKey.split('|')) {
-        if (!url) continue;
-        const uri = await loadArtwork(client, url);
-        if (alive && uri) {
-          setArtwork((previous) => ({ ...previous, [url]: uri }));
-        }
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [client, artworkKey]);
 
   if (authState === 'checking') {
     return (
@@ -119,7 +97,7 @@ export function LibraryCommand({ query, filterValue, native, signal }: CommandPr
 
   const results = filterLibrary(data.results, query);
   if (GRID_FILTERS.has(filter)) {
-    const items = buildGridItems(results, filter, artwork, client, () => {}, signal);
+    const items = buildGridItems(results, filter, client, () => {}, signal);
     if (items.length === 0) {
       return (
         <Grid columns={5}>
@@ -134,11 +112,11 @@ export function LibraryCommand({ query, filterValue, native, signal }: CommandPr
     );
   }
 
-  const sections = buildListSections(results, filter, artwork, client, () => {}, signal, {
+  const sections = buildListSections(results, filter, client, () => {}, signal, {
     tracksTitle: 'Liked Songs',
     episodesTitle: 'Saved Episodes',
     sectionLimit: 6,
-    likedSongsItem: likedSongsItem(data, artwork, client),
+    likedSongsItem: likedSongsItem(data, client),
   });
   if (sections.length === 0) {
     return (
@@ -181,20 +159,14 @@ function LibraryConnectItem({
   });
 }
 
-function likedSongsItem(
-  data: LibraryData,
-  artwork: Record<string, string>,
-  client: SpotifyClient,
-): ReactNode {
+function likedSongsItem(data: LibraryData, client: SpotifyClient): ReactNode {
   const total = data.likedTotal;
   return createElement(List.Item, {
     id: 'liked-songs',
     title: 'Liked Songs',
     subtitle: `${total} songs`,
     kind: 'playlist',
-    icon: artwork[LIKED_SONGS_ICON]
-      ? { uri: artwork[LIKED_SONGS_ICON] }
-      : { lucide: 'heart', color: '#1DB954' },
+    icon: { uri: LIKED_SONGS_ICON },
     actions: createElement(
       ActionPanel,
       null,

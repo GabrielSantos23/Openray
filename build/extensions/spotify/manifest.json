@@ -3,7 +3,7 @@
   "name": "Spotify",
   "version": "0.1.0",
   "description": "Search Spotify, browse your library, and control playback.",
-  "icon": "🎧",
+  "icon": "assets/extension-icon.png",
   "commands": [
     {
       "id": "search",

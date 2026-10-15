@@ -176,8 +176,7 @@ export function ActionPanel({ open, groups, onClose, onRun, title }: ActionPanel
                       }}
                     >
                       <span className={`action-panel__icon action-panel__icon--${iconKind(action)}`} aria-hidden>
-                        {/* Lucide icon matching the Raycast icon key the model carries. */}
-                        <RaycastIcon name={iconKeyFor(action.title)} size={15} />
+                        {action.icon ? <ActionModelIcon icon={action.icon} fallbackTitle={action.title} /> : <RaycastIcon name={iconKeyFor(action.title)} size={15} />}
                       </span>
                       <span className="action-panel__label">{action.title}</span>
                       {action.shortcut ? (
@@ -198,6 +197,25 @@ export function ActionPanel({ open, groups, onClose, onRun, title }: ActionPanel
 function iconKind(action: ViewAction): string {
   if (action.style === "Destructive") return "destructive";
   return "default";
+}
+
+/**
+ * The icon the extension put on its Action (`icon` in the render model — data/file URLs, lucide
+ * names via `icon://`, emoji via `emoji://`). Falls back to the title heuristic when the model
+ * carries none.
+ */
+export function ActionModelIcon({ icon, fallbackTitle }: { icon: unknown; fallbackTitle: string }) {
+  const source = (icon as { source?: { light?: string } } | undefined)?.source?.light;
+  if (typeof source === "string" && source.startsWith("emoji://")) {
+    return <span style={{ fontSize: 13, lineHeight: 1 }}>{decodeURIComponent(source.slice("emoji://".length))}</span>;
+  }
+  if (typeof source === "string" && source.startsWith("icon://")) {
+    return <RaycastIcon name={source.slice("icon://".length).replace(/\.png$/, "")} size={15} />;
+  }
+  if (typeof source === "string" && (/^(https?:|data:|file:)/.test(source) || /\.(png|jpe?g|gif|svg|webp|ico)$/i.test(source))) {
+    return <img src={source} width={15} height={15} alt="" style={{ objectFit: "contain", borderRadius: 3 }} />;
+  }
+  return <RaycastIcon name={iconKeyFor(fallbackTitle)} size={15} />;
 }
 
 /**

@@ -28,6 +28,13 @@ import type {
 
 function Icon({ icon, fallback = "AppWindow" }: { icon?: unknown; fallback?: string }) {
   const source = (icon as { source?: { light?: string; dark?: string } })?.source?.light;
+  if (typeof source === "string" && source.startsWith("emoji://")) {
+    return (
+      <span className="icon icon--emoji" aria-hidden>
+        {decodeURIComponent(source.slice("emoji://".length))}
+      </span>
+    );
+  }
   if (typeof source === "string" && /^https?:/.test(source)) {
     return (
       <span className="icon" aria-hidden>
@@ -465,36 +472,112 @@ export function RenderedView({
   );
 }
 
+/**
+ * The command's filter dropdown, styled like the Settings dropdown (Raycast's
+ * `dropdown-button` + blurred `select__popover` classes) instead of a native select.
+ * Value changes flow to the worker through `onValueChange` (the extension re-renders with the
+ * new `filterValue`); an extension-declared `onChange` callback still fires when present.
+ */
 export function SearchBarDropdown({
   accessory,
   createCallback,
+  value,
+  onValueChange,
 }: {
   accessory: NonNullable<ViewBody["searchBarAccessory"]>;
   createCallback: (callbackId: string) => (data: unknown) => Promise<void>;
+  value: string;
+  onValueChange: (next: string) => void;
 }) {
-  if (!("sections" in accessory) || !accessory.sections) return null;
-  const options = accessory.sections.flatMap((section) => section.items);
-  const [value, setValue] = useState(accessory.defaultValue ?? accessory.value ?? options[0]?.id ?? "");
+  const [open, setOpen] = useState(false);
+  // The header clips overflowing children (`overflow: hidden` for the loader bar), so the menu
+  // can't open with plain absolute positioning — it's pinned to the viewport right under the
+  // button instead, measured at open time. With `position: fixed` the class's `min-width: 100%`
+  // would resolve against the viewport, so the button's own width is carried as the minimum.
+  const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number; minWidth: number } | null>(null);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const options = useMemo(
+    () => ("sections" in accessory ? (accessory.sections ?? []).flatMap((section) => section.items) : []),
+    [accessory],
+  );
+  const current = options.find((option) => option.id === value) ?? options[0];
+  const onChangeId = "onChange" in accessory ? accessory.onChange : undefined;
+  const tooltip = "tooltip" in accessory ? accessory.tooltip : undefined;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocumentMouseDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocumentMouseDown);
+    return () => document.removeEventListener("mousedown", onDocumentMouseDown);
+  }, [open]);
+
+  if (options.length === 0) return null;
+  const toggle = () => {
+    if (!open) {
+      const rect = rootRef.current?.getBoundingClientRect();
+      if (rect) {
+        setMenuAnchor({
+          top: rect.bottom + 4,
+          right: Math.max(8, window.innerWidth - rect.right),
+          minWidth: rect.width,
+        });
+      }
+    }
+    setOpen((current) => !current);
+  };
   return (
-    <select
-      className="command-view__dropdown"
-      value={value}
-      title={accessory.tooltip}
-      onChange={(event) => {
-        setValue(event.target.value);
-        if (accessory.onChange) void createCallback(accessory.onChange)(event.target.value);
-      }}
-    >
-      {accessory.sections.map((section, sectionIndex) => (
-        <optgroup key={section.title ?? sectionIndex} label={section.title ?? ""}>
-          {section.items.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.title ?? item.id}
-            </option>
+    <span className="settings-dropdown command-view__dropdown" ref={rootRef}>
+      <button
+        type="button"
+        className="settings-dropdownButton"
+        data-state={open ? "open" : "closed"}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={tooltip}
+        onClick={toggle}
+      >
+        <span className="settings-dropdownButton__text">{current?.title ?? current?.id ?? ""}</span>
+        <span className="settings-dropdownButton__indicator">
+          <RaycastIcon name="Forward" size={12} />
+        </span>
+      </button>
+      {open ? (
+        <div
+          className="settings-menu"
+          role="listbox"
+          aria-label={tooltip ?? "Filter"}
+          style={{
+            position: "fixed",
+            top: menuAnchor?.top,
+            right: menuAnchor?.right,
+            minWidth: menuAnchor?.minWidth,
+            maxWidth: 320,
+            maxHeight: 320,
+            zIndex: 60,
+          }}
+        >
+          {options.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="option"
+              aria-selected={option.id === current?.id}
+              className="settings-menu__item"
+              data-selected={option.id === current?.id}
+              onClick={() => {
+                onValueChange(option.id);
+                if (onChangeId) void createCallback(onChangeId)(option.id);
+                setOpen(false);
+              }}
+            >
+              {option.title ?? option.id}
+            </button>
           ))}
-        </optgroup>
-      ))}
-    </select>
+        </div>
+      ) : null}
+    </span>
   );
 }
 
@@ -726,12 +809,18 @@ function DetailBody({
   createCallback: (callbackId: string) => (data: unknown) => Promise<void>;
 }) {
   const title = useMemo(() => (body.markdown ? markdownTitle(body.markdown) : null), [body.markdown]);
-  if (!body.markdown && !body.metadata) return null;
+  // The first `# ` heading doubles as the large detail title, so it is not rendered twice.
+  const bodyMarkdown = useMemo(() => {
+    if (!body.markdown) return null;
+    return title !== null ? body.markdown.replace(/^\s*#\s+.+?(?:\n|$)/, "") : body.markdown;
+  }, [body.markdown, title]);
+  if (!body.markdown && !body.metadata && !body.image) return null;
   return (
     <div className={`detail${body.metadata?.length ? " detail--metadata" : ""}`}>
       <div className="detail__content">
         {title ? <div className="detail__title">{title}</div> : null}
-        {body.markdown ? <div className="markdown">{renderMarkdown(body.markdown)}</div> : null}
+        {bodyMarkdown ? <div className="markdown">{renderMarkdown(bodyMarkdown)}</div> : null}
+        {body.image ? <img className="detail__image" src={body.image} alt="" /> : null}
       </div>
       {body.metadata?.length ? (
         <aside className="detail__aside">

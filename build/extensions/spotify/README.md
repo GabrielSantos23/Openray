@@ -13,11 +13,12 @@ Changes from the source:
   surface; the upstream web bundle (`src/web/`) is not ported;
 - OAuth runs through RaycastMini's vault (`build/backend/src/flowkey-vault.js`): bring-your-own
   client id via `%LOCALAPPDATA%\RaycastMini\oauth\spotify-auth.json` (`{"clientId":"..."}`, optional
-  `"redirectPort"`) or the `FLOWKEY_SPOTIFY_CLIENT_ID` environment variable; the loopback PKCE
-  redirect lands on `http://127.0.0.1:<port>/oauth/callback` and the tokens stay in the backend;
-- `media.current` / `media.control` are declared but the SMTC host bridge (M5b) is pending —
-  playback commands surface the typed "not implemented yet" error until then;
-- `window.launchCommand` subviews (`album-songs:<id>`, …) need the backend launch route (pending).
+  `"redirectUri"`) or the `FLOWKEY_SPOTIFY_CLIENT_ID` environment variable; the loopback PKCE
+  redirect defaults to `http://127.0.0.1:8888/callback` (override the whole URL with `"redirectUri"`
+  or `FLOWKEY_SPOTIFY_REDIRECT_URI` — it must match the dashboard registration exactly) and the
+  tokens stay in the backend;
+- `media.current` / `media.control` run through the SMTC host bridge (M5b);
+- `window.launchCommand` subviews navigate through the worker's command stack (push/localPop).
 
 Everything works offline of Raycast's services: search/library/playback talk straight to
 `api.spotify.com` with the vault-injected token; lyrics via `lrclib.net`; artwork cached from

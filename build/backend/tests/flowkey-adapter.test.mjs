@@ -335,9 +335,9 @@ test("documented adapter gaps: unexpressible FlowKey features survive adaptation
   };
   const model = uiTreeToRenderModel(tree, { firstRender: true });
   const item = model.navigationStack.body.sections[0].items[0];
-  // iconSvg maps to a data URI (the frontend does not <img> data URIs yet — adapter header note).
+  // iconSvg maps to a data URI (the frontend <img>s data URIs).
   assert.match(item.icon.source.light, /^data:image\/svg\+xml;base64,/);
-  // Emoji + iconColor + pane previewImageUri are dropped, everything else still renders.
+  // iconColor + pane previewImageUri are dropped, everything else still renders.
   assert.equal(item.title, "T");
   assert.equal(item.detail.markdown, "md");
 
@@ -349,14 +349,25 @@ test("documented adapter gaps: unexpressible FlowKey features survive adaptation
   const urled = uiTreeToRenderModel({ type: "list", sections: [{ items: [{ id: "u", title: "U", iconUri: "https://example.com/a.png" }] }] }, { firstRender: true });
   assert.equal(urled.navigationStack.body.sections[0].items[0].icon.source.light, "https://example.com/a.png");
 
-  // An emoji-only icon renders with no icon at all (generic fallback), never a broken payload.
+  // An emoji icon maps to an emoji:// URL the renderer draws as text.
   const emoji = uiTreeToRenderModel({ type: "list", sections: [{ items: [{ id: "e", title: "E", icon: "🚀" }] }] }, { firstRender: true });
-  assert.equal(emoji.navigationStack.body.sections[0].items[0].icon, undefined);
+  assert.equal(emoji.navigationStack.body.sections[0].items[0].icon.source.light, `emoji://${encodeURIComponent("🚀")}`);
 
-  // Detail media fields are dropped.
-  const detail = uiTreeToRenderModel({ type: "detail", title: "D", fields: [], mediaKeys: true, subtitle: "sub" }, { firstRender: true });
+  // Actions carry their extension-declared icons through the same mapping.
+  const acted = uiTreeToRenderModel(
+    { type: "list", sections: [], actions: [{ id: "a", title: "A", iconUri: "https://example.com/a.png" }] },
+    { firstRender: true },
+  );
+  assert.equal(acted.navigationStack.body.actions[0].icon.source.light, "https://example.com/a.png");
+
+  // Detail media fields are dropped; the artwork imageUri maps to body.image.
+  const detail = uiTreeToRenderModel({ type: "detail", title: "D", fields: [], mediaKeys: true, subtitle: "sub", imageUri: "data:image/png;base64,AAA" }, { firstRender: true });
   assert.equal(detail.navigationStack.body.kind, "Detail");
   assert.equal("mediaKeys" in detail.navigationStack.body, false);
+  assert.equal(detail.navigationStack.body.image, "data:image/png;base64,AAA");
+
+  // Command pages filter server-side: the renderer must not filter the rows again.
+  assert.equal(model.navigationStack.body.filtering, false);
 
   // Shapes the JSX surface cannot set but the tree type allows (native-sdk types.ts).
   const handBuilt = uiTreeToRenderModel(

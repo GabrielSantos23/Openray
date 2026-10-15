@@ -22,6 +22,7 @@ import {
   startStoreSync,
   type StoreDetail,
   type StoreEntry,
+  type StoreIconResult,
   type StoreStatus,
 } from "./storeApi";
 import "./store.css";
@@ -83,9 +84,9 @@ function InstalledBadge({ installed }: { installed: boolean }) {
   );
 }
 
-/** Extension icon with the store's per-session cache; falls back to the extension glyph. */
+/** Extension icon with the store's per-session cache; falls back to the declared emoji, then the glyph. */
 function StoreIcon({ name, source, size }: { name: string; source: "github" | "uploaded"; size: number }) {
-  const [icon, setIcon] = useState<string | null>(null);
+  const [icon, setIcon] = useState<StoreIconResult | null>(null);
   useEffect(() => {
     let alive = true;
     void cachedStoreIcon(name, source).then((value) => {
@@ -95,8 +96,15 @@ function StoreIcon({ name, source, size }: { name: string; source: "github" | "u
       alive = false;
     };
   }, [name, source]);
-  if (icon) {
-    return <img className="store-icon" src={icon} width={size} height={size} alt="" />;
+  if (icon?.icon) {
+    return <img className="store-icon" src={icon.icon} width={size} height={size} alt="" />;
+  }
+  if (icon?.emoji) {
+    return (
+      <span className="store-icon store-icon--emoji" style={{ width: size, height: size, fontSize: Math.round(size * 0.6) }} aria-hidden>
+        {icon.emoji}
+      </span>
+    );
   }
   return (
     <span className="store-icon store-icon--fallback" style={{ width: size, height: size }} aria-hidden>
@@ -147,13 +155,16 @@ export function StoreView({
   const [listIndex, setListIndex] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Default browse list: what can actually run here (uploads + installed). The unported
+  // Raycast-only catalog (~3.4k entries) is opt-in so it doesn't drown out the working store.
+  const [showAll, setShowAll] = useState(false);
   const pageRef = useRef(page);
   pageRef.current = page;
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const refreshList = useCallback(async (query: string) => {
+  const refreshList = useCallback(async (query: string, all = showAll) => {
     try {
-      const payload = await fetchStoreList(query, 0);
+      const payload = await fetchStoreList(query, 0, null, all);
       setEntries(payload.extensions);
       setHasMore(payload.hasMore);
       setListIndex(0);
@@ -161,7 +172,7 @@ export function StoreView({
       setEntries([]);
       setHasMore(false);
     }
-  }, []);
+  }, [showAll]);
 
   // Scroll sentinel: the catalog is ~3.4k entries — render page by page as the user scrolls so
   // neither the DOM nor the icon fetches explode.
@@ -169,7 +180,7 @@ export function StoreView({
     if (loadingMore || !hasMore || pageRef.current.kind !== "list") return;
     setLoadingMore(true);
     try {
-      const payload = await fetchStoreList(searchText, entries.length);
+      const payload = await fetchStoreList(searchText, entries.length, null, showAll);
       setEntries((current) => [...current, ...payload.extensions]);
       setHasMore(payload.hasMore);
     } catch {
@@ -177,7 +188,7 @@ export function StoreView({
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, searchText, entries.length]);
+  }, [loadingMore, hasMore, searchText, entries.length, showAll]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -231,7 +242,7 @@ export function StoreView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-query as the user types (the input is the session search bar).
+  // Re-query as the user types (the input is the session search bar) and when the scope toggles.
   useEffect(() => {
     if (status?.running) return;
     const handle = window.setTimeout(() => void refreshList(searchText), 150);
@@ -350,11 +361,12 @@ export function StoreView({
         name: "store",
         actions: [
           { id: "store:sync", title: "Sync Catalog from GitHub" },
+          { id: "store:showall", title: showAll ? "Show Installable Extensions Only" : "Show the Full Raycast Catalog" },
           { id: "store:import", title: "Publish Extension Folder…" },
         ],
       },
     ],
-    [],
+    [showAll],
   );
 
   const detailActionGroups = useMemo<ActionGroup[]>(() => {
@@ -389,7 +401,11 @@ export function StoreView({
           <div className="state">
             <div className="state__title">No extensions match</div>
             <div className="state__message">
-              {searchText ? "Try a different search." : "Sync the catalog from GitHub (Ctrl K → Sync Catalog)."}
+              {searchText
+                ? "Try a different search."
+                : showAll
+                  ? "Sync the catalog from GitHub (Ctrl K → Sync Catalog)."
+                  : "Publish a FlowKey extension folder (Ctrl K → Publish…) or browse the full Raycast catalog (Ctrl K → Show the Full Raycast Catalog)."}
             </div>
           </div>
         ) : (
@@ -606,6 +622,11 @@ export function StoreView({
         onRun={async (action) => {
           setPanelOpen(false);
           if (action.id === "store:sync") void runSync();
+          else if (action.id === "store:showall") {
+            const next = !showAll;
+            setShowAll(next);
+            void refreshList(searchText, next);
+          }
           else if (action.id === "store:import") void runImport();
           else if (action.id === "store:install" && detail) void install({ name: detail.name, source: detail.source });
           else if (action.id === "store:commands" && detail) setPage({ kind: "commands", detail });

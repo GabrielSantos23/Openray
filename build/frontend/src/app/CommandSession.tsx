@@ -14,11 +14,11 @@ import {
   updateTop,
   type CommandPagesState,
 } from "../commandPages";
-import { onNotification, openSettings } from "../ipc";
+import { ipc, onNotification, openSettings } from "../ipc";
 import { isDevExtensionsEnabled, overrideTestHooks } from "../testHooks";
 import { readFlowkeyPreferences } from "../features/extensions/preferences";
 import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
-import { ActionPanel, type ActionGroup } from "../ActionPanel";
+import { ActionPanel, ActionModelIcon, type ActionGroup } from "../ActionPanel";
 import { RaycastIcon } from "../icons";
 import { ClipboardHistoryView } from "../features/clipboard/ClipboardHistoryView";
 import { QuicklinksView, type QuicklinksCommandName } from "../features/quicklinks/QuicklinksView";
@@ -98,6 +98,9 @@ export function CommandSession({
   const setSearchText = useCallback((value: string) => {
     setPages((previous) => updateTop(previous, { searchText: value }));
   }, []);
+  // The command's filter dropdown value (seeded from the body's accessory; flows back to the
+  // worker together with the search text so the extension re-renders with new props).
+  const [filterValue, setFilterValue] = useState<string | null>(null);
 
   const selectedItemId = topPage(pages)?.selectedItemId ?? null;
   const setSelectedItemId = useCallback((itemId: string | null) => {
@@ -164,6 +167,30 @@ export function CommandSession({
     [bodyItems, effectiveSelectedId],
   );
   const primaryAction = selectedItem?.actions?.[0] ?? body?.actions?.[0] ?? null;
+
+  // Seed the filter value from the body's accessory once it arrives.
+  useEffect(() => {
+    const accessory = body?.searchBarAccessory;
+    if (!accessory || !("sections" in accessory) || filterValue !== null) return;
+    const options = (accessory.sections ?? []).flatMap((section) => section.items);
+    const fallback = accessory.defaultValue ?? accessory.value ?? options[0]?.id;
+    if (fallback !== undefined) setFilterValue(fallback);
+  }, [body, filterValue]);
+  // Search-bar push: the running command re-renders with the new query/filterValue (Raycast's
+  // launchProps.searchText). The signature guard keeps the worker's re-render from re-triggering.
+  const pushedSearchRef = useRef("");
+  useEffect(() => {
+    if (entry.kind !== "extension" || !command.sessionId || !body) return;
+    const signature = JSON.stringify([searchText, filterValue]);
+    if (pushedSearchRef.current === signature) return;
+    const timer = setTimeout(() => {
+      pushedSearchRef.current = signature;
+      void ipc
+        .backend("extensionHost.setSearchState", { sessionId: command.sessionId, query: searchText, filterValue })
+        .catch(() => undefined);
+    }, 160);
+    return () => clearTimeout(timer);
+  }, [entry.kind, command.sessionId, body, searchText, filterValue]);
 
   const groups: ActionGroup[] = useMemo(() => {
     if (entry.kind !== "extension" || !body) return [];
@@ -423,7 +450,12 @@ export function CommandSession({
             }}
           />
           {body?.searchBarAccessory && "sections" in body.searchBarAccessory ? (
-            <SearchBarDropdown accessory={body.searchBarAccessory} createCallback={command.createCallback} />
+            <SearchBarDropdown
+              accessory={body.searchBarAccessory}
+              createCallback={command.createCallback}
+              value={filterValue ?? ""}
+              onValueChange={setFilterValue}
+            />
           ) : null}
         </div>
         <button
@@ -500,9 +532,12 @@ export function CommandSession({
                 className="footer-action footer-action--kbd footer-primary"
                 onClick={() => void command.createCallback(primaryAction.id)({ itemId: primaryAction.itemId })}
               >
+                {primaryAction.icon ? (
+                  <ActionModelIcon icon={primaryAction.icon} fallbackTitle={primaryAction.title} />
+                ) : null}
                 {primaryAction.title}
                 <span className="kbd footer-primary__return" aria-hidden>
-                  ⏎
+                  ↵
                 </span>
               </button>
             ) : null}

@@ -184,6 +184,8 @@ export interface FormDescriptionProps {
 
 export interface ActionProps {
   title: string;
+  /** Action-menu icon (same vocabulary as item icons: string path/emoji, or an IconSpec). */
+  icon?: string | IconSpec;
   primary?: boolean;
   push?: string;
   onAction: () => void | Promise<void>;

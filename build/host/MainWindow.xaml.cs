@@ -165,6 +165,17 @@ public partial class MainWindow : Window
         _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             "raycast.mini", frontend, CoreWebView2HostResourceAccessKind.Allow);
 
+        // The backend's image.fetch keeps artwork bytes in the shared cache folder; mapping it
+        // onto a second virtual host lets extensions hand the renderer plain URLs instead of
+        // shipping every image through the render tree as a data: URI (which OOMs the worker on
+        // library-sized artwork sets).
+        var imageCacheDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RaycastMini", "oauth", "image-cache");
+        Directory.CreateDirectory(imageCacheDir);
+        _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            "raycastmini-img", imageCacheDir, CoreWebView2HostResourceAccessKind.Allow);
+
         _webView.CoreWebView2.Navigate(
             File.Exists(html) ? $"https://raycast.mini/dist/main-window.html?v={DateTime.UtcNow.Ticks}" : $"file:///{html}");
 
