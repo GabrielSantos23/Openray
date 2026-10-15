@@ -120,7 +120,7 @@ export const PAGES: readonly PageDefinition[] = [
         rows: [
           { id: "open-at-login", title: "Open at Login", control: "switch" },
           { id: "show-in-menu-bar", title: "Show in System Tray", control: "switch" },
-          { id: "automatically-show-taskbar", title: "Automatically Show the Taskbar", control: "switch" },
+          { id: "automatically-show-taskbar", title: "Automatically Show the Taskbar", description: "Automatically show a hidden taskbar while Raycast is open.", control: "switch", unavailable: true },
           { id: "raycast-hotkey", title: "Raycast Hotkey", control: "hotkey", value: RAYCASTMINI_DEFAULT_HOTKEY },
         ],
       },
@@ -420,6 +420,7 @@ export const PAGES: readonly PageDefinition[] = [
             description: "Select the provider used to fetch favicons or None to disable favicon fetching.",
             control: "select",
             options: ["None", "Raycast", "DuckDuckGo", "Google"],
+            unavailable: true,
           },
         ],
       },
@@ -477,6 +478,7 @@ export const PAGES: readonly PageDefinition[] = [
             title: "Use System Proxy Settings",
             description: "Automatically use your computer's proxy configuration for network connections.",
             control: "switch",
+            unavailable: true,
           },
           {
             id: "additional-certificate-authorities",
@@ -484,6 +486,7 @@ export const PAGES: readonly PageDefinition[] = [
             description: "Choose a certificate file (.crt, .cer, .pem) to trust connections that would otherwise show security warnings or fail.",
             control: "action",
             action: "+ Add File",
+            unavailable: true,
           },
         ],
       },
@@ -1170,6 +1173,7 @@ export const PAGES: readonly PageDefinition[] = [
             control: "select",
             options: ["Toggle Visibility", "Always Show"],
             value: "Toggle Visibility",
+            unavailable: true,
           },
           {
             id: "applications-deep-search",

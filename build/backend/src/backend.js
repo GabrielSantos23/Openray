@@ -911,6 +911,8 @@ function createBackend(options) {
 
   let socket = null;
   let nextId = 1;
+  // Failed reconnect attempts since the last successful connection (25 -> exit).
+  let reconnectAttempts = 0;
   const waiters = new Map();
   const connectedCallbacks = [];
   // Overridable transport: defaults to the named pipe, replaced in tests.
@@ -928,11 +930,19 @@ function createBackend(options) {
       : options.pipeName;
     const client = net.createConnection(pipeAddress, () => {
       socket = client;
+      reconnectAttempts = 0;
       console.log(`[backend] connected to launcher pipe "${options.pipeName}"`);
       connectedCallbacks.splice(0).forEach((resolve) => resolve(client));
     });
     client.on("error", (error) => {
-      console.error("[backend] pipe error:", error.message);
+      reconnectAttempts += 1;
+      console.error(`[backend] pipe error: ${error.message} (attempt ${reconnectAttempts})`);
+      // The host is gone for good when it stopped answering; a zombie backend would otherwise
+      // reconnect forever (it holds no parent handle), so give up after a grace period.
+      if (reconnectAttempts >= 150) {
+        console.error("[backend] host unreachable after 150 attempts - exiting");
+        process.exit(1);
+      }
       setTimeout(connect, 400);
     });
     client.on("close", () => {

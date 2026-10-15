@@ -134,6 +134,9 @@ public sealed class NamedPipeBridge : IAsyncDisposable
                 {
                     if (!_disposed) _listening = CreateServer();
                 }
+                // A reconnecting zombie retries instantly; slow the accept loop so the log and
+                // the CPU do not spin while it churns.
+                await Task.Delay(500, cancellationToken).ContinueWith(_ => { });
                 continue;
             }
             bool isPrimary;

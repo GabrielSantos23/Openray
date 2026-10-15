@@ -276,6 +276,24 @@ public partial class MainWindow : Window
         {
             return System.Text.Json.JsonSerializer.SerializeToElement(new { color = GetSystemAccentHex() });
         }
+        // Compact window mode: the renderer reports whether the launcher should show the search
+        // bar only (Raycast's compact window shrinks to the search bar while the list is empty).
+        if (method == "window.setLauncherHeight")
+        {
+            var compact = false;
+            var visible = true;
+            if (data is { ValueKind: System.Text.Json.JsonValueKind.Object } heightPayload)
+            {
+                if (heightPayload.TryGetProperty("compact", out var compactValue)) compact = compactValue.GetBoolean();
+                if (heightPayload.TryGetProperty("visible", out var visibleValue)) visible = visibleValue.GetBoolean();
+            }
+            _webView.Dispatcher.Invoke(() =>
+            {
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                Height = compact && !visible ? CompactLauncherHeight : ExpandedLauncherHeight;
+            });
+            return null;
+        }
         if (method == "settings.setGlobalHotkey")
         {
             var hotkey = data is { ValueKind: System.Text.Json.JsonValueKind.Object } hotkeyPayload
@@ -795,7 +813,7 @@ public partial class MainWindow : Window
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         if (!IsVisible)
         {
-            CenterOnScreen();
+            PositionOnStoredScreen();
             Show();
         }
         Activate();
@@ -803,6 +821,75 @@ public partial class MainWindow : Window
         PostVisibility(true);
         _webView.Focus();
     }
+
+    // Launcher sizes for the Window Mode setting (compact = search bar only until typing).
+    internal const double CompactLauncherHeight = 84;
+    internal const double ExpandedLauncherHeight = 480;
+
+    /// <summary>
+    /// "Show Raycast On" (General page): place the launcher on the screen containing the mouse,
+    /// the screen with the active window, or the primary screen.
+    /// </summary>
+    private void PositionOnStoredScreen()
+    {
+        var choice = ReadStoredSetting("show-raycast-on") as string ?? "Screen containing mouse";
+        try
+        {
+            var point = choice switch
+            {
+                "Screen with active window" => CenterOf(WindowManagementNative.CapturedTargetHandle()),
+                "Primary screen" => new NativePoint(0, 0),
+                _ => GetCursorPos(out var cursor) ? new NativePoint(cursor.X, cursor.Y) : new NativePoint(0, 0),
+            };
+            var monitor = MonitorFromPoint(point, 2); // MONITOR_DEFAULTTONEAREST
+            if (monitor == IntPtr.Zero)
+            {
+                CenterOnScreen();
+                return;
+            }
+            var info = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
+            if (!GetMonitorInfo(monitor, ref info)) { CenterOnScreen(); return; }
+            Left = info.rcWork.Left + Math.Max(0, (info.rcWork.Width - Width) / 2);
+            Top = info.rcWork.Top + Math.Max(0, (int)((info.rcWork.Height - Height) / 3.0));
+        }
+        catch
+        {
+            CenterOnScreen();
+        }
+    }
+
+    private static NativePoint CenterOf(IntPtr window)
+    {
+        if (window == IntPtr.Zero || !GetWindowRect(window, out var rect)) return new NativePoint(0, 0);
+        return new NativePoint((rect.Left + rect.Right) / 2, (rect.Top + rect.Bottom) / 2);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public NativePoint(int x, int y) { X = x; Y = y; } public int X; public int Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; public int Width => Right - Left; public int Height => Bottom - Top; }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MonitorInfo
+    {
+        public int cbSize;
+        public NativeRect rcMonitor;
+        public NativeRect rcWork;
+        public int dwFlags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(NativePoint point, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect rect);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out NativePoint point);
 
     /// <summary>Tells the renderer the window was hidden/shown so it can run pop-to-root timers.</summary>
     private void PostVisibility(bool visible)

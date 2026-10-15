@@ -68,7 +68,7 @@ import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
 import { ExtensionPreferences } from "./ExtensionPreferences";
 import { applyPreset, readStoredHotkeys } from "../windowManagement";
 import { WM_COMMANDS } from "../wm-commands";
-import { getSettings, installSettingsPush, syncFromBackend, updateSettings, useSettings } from "./store";
+import { getSettings, installSettingsPush, syncFromBackend, updateSettings, useSetting, useSettings } from "./store";
 
 /** The launcher default; Raycast's own default (Win key) is not interceptable here. */
 const RAYCASTMINI_DEFAULT_HOTKEY = "Alt + Space";
@@ -89,6 +89,28 @@ export function Settings() {
     installSystemAccent();
     return installSettingsPush();
   }, []);
+
+  // Interface Size zooms the Settings window too (Raycast scales the whole app).
+  const interfaceSize = String(useSetting("interface-size") ?? "1");
+  useEffect(() => {
+    const zoom = Number(interfaceSize);
+    document.documentElement.style.zoom = zoom > 1 && zoom <= 1.2 ? String(zoom) : "";
+  }, [interfaceSize]);
+
+  // Escape Key Closes Window (Keyboard page): Escape dismisses the Settings window.
+  const escapeClosesWindow = useSetting("escape-key-closes-window") !== false;
+  useEffect(() => {
+    if (!escapeClosesWindow) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      void ipcRequest("window.closeSettings", {}, { module: "frontend" }).catch(() => undefined);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [escapeClosesWindow]);
 
   // Keep the legacy mirror in sync with the settings store for the ids it owns.
   useEffect(() => {

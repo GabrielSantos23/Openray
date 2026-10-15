@@ -15,6 +15,7 @@ import {
   type CommandPagesState,
 } from "../commandPages";
 import { ipc, onNotification, openSettings } from "../ipc";
+import { useSetting } from "../settings/store";
 import { isDevExtensionsEnabled, overrideTestHooks } from "../testHooks";
 import { readFlowkeyPreferences } from "../features/extensions/preferences";
 import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
@@ -636,6 +637,7 @@ function CommandViewKeyboard({
   const ids = useMemo(() => selectableIds(body.sections, flatItems(body)), [body]);
   const rowWidths = useMemo(() => (body.kind === "Grid" ? gridRowWidths(body) : null), [body]);
   const items = useMemo(() => flatItems(body), [body]);
+  const pageNavigationKeys = String(useSetting("page-navigation-keys") ?? "Square Brackets");
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -646,7 +648,10 @@ function CommandViewKeyboard({
         onPopToRoot();
         return;
       }
-      if (event.key === "[" && (event.ctrlKey || event.metaKey)) {
+      if (
+        (event.key === "[" && (event.ctrlKey || event.metaKey)) ||
+        (pageNavigationKeys === "Arrow Keys" && event.key === "ArrowLeft" && event.ctrlKey && event.altKey)
+      ) {
         event.preventDefault();
         onPopOne();
         return;
@@ -679,7 +684,7 @@ function CommandViewKeyboard({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [ids, rowWidths, items, selectedItemId, onSelectionChange, onPopOne, onPopToRoot, onRunPrimary]);
+  }, [ids, rowWidths, items, selectedItemId, onSelectionChange, onPopOne, onPopToRoot, onRunPrimary, pageNavigationKeys]);
 
   return <>{children}</>;
 }

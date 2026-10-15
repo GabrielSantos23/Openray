@@ -22,6 +22,8 @@ import AlertHost from "../AlertHost";
 import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "../testHooks";
 import { registerAllCommandHotkeys } from "../commandConfig";
 import { installSystemAccent } from "./systemAccent";
+import { installSettingsPush, syncFromBackend, useSetting } from "../settings/store";
+import { POP_TO_ROOT_BY_LABEL } from "../settings/persistence";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
 import {
   hudStore,
@@ -158,7 +160,18 @@ export function MainWindow() {
   );
   const [hostError, setHostError] = useState<string | null>(null);
   const [extensionsLoading, setExtensionsLoading] = useState(true);
-  const [sensitivity, setSensitivity] = useState<Sensitivity>("medium");
+  // Settings-store consumers (Raycast's `subscribeUpdate<Key>`): every window re-renders on push.
+  syncFromBackend();
+  const sensitivityLabel = String(useSetting("root-search-sensitivity") ?? "High");
+  const sensitivity: Sensitivity =
+    sensitivityLabel.toLowerCase() === "low" ? "low" : sensitivityLabel.toLowerCase() === "medium" ? "medium" : "high";
+  const popToRootLabel = String(useSetting("pop-to-root-search") ?? "After 90 seconds");
+  const popToRootSeconds = POP_TO_ROOT_BY_LABEL[popToRootLabel] ?? 90;
+  const escapeBehavior = String(useSetting("escape-key-behavior") ?? "Navigate back or close window");
+  const navigationBindings = String(useSetting("navigation-bindings") ?? "Emacs (Alt+B, Alt+F, Alt+P, Alt+N)");
+  const interfaceSize = String(useSetting("interface-size") ?? "1");
+  const windowMode = String(useSetting("window-mode") ?? "expanded");
+  const showFavoritesCompact = useSetting("show-favorites-in-compact-mode") !== false;
   const [usageScores, setUsageScores] = useState<Map<string, number>>(new Map());
   const [fallbackCommands, setFallbackCommands] = useState<FallbackCommand[]>([]);
   // File Search: settings and index state live in the backend; the results cache is per query.
@@ -198,16 +211,9 @@ export function MainWindow() {
       return [];
     }
   });
-  // Pop to root timeout state
+  // Pop to root timeout state ("Immediately" = 0 resets on hide; "After N seconds" = N * 1000).
   const [popToRootTimer, setPopToRootTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const [popToRootTimeout, setPopToRootTimeout] = useState(() => {
-    try {
-      const stored = localStorage.getItem("raycast-mini:pop-to-root-timeout");
-      return stored ? Number(stored) : 30000; // Default 30 seconds
-    } catch {
-      return 30000;
-    }
-  });
+  const popToRootTimeout = popToRootSeconds <= 0 ? 0 : popToRootSeconds * 1000;
   const listRef = useRef<HTMLUListElement>(null);
   const bodyRef = useRef<HTMLElement>(null);
   // Mirrors "is an action panel open" for the window-level key handlers. React state inside a
@@ -266,19 +272,20 @@ export function MainWindow() {
     loadUsage();
   }, []);
 
-  // Load sensitivity from localStorage and listen for changes from Settings window
-  useEffect(() => {
-    const stored = localStorage.getItem("raycast-mini:root-search-sensitivity");
-    if (stored === "low" || stored === "medium" || stored === "high") {
-      setSensitivity(stored);
-    }
+  // Search sensitivity follows the settings store (live via `settings.changed`).
 
-    const handleSensitivityChange = (event: CustomEvent<Sensitivity>) => {
-      setSensitivity(event.detail);
-    };
-    window.addEventListener("raycast-mini:root-search-sensitivity-changed", handleSensitivityChange as EventListener);
-    return () => window.removeEventListener("raycast-mini:root-search-sensitivity-changed", handleSensitivityChange as EventListener);
-  }, []);
+  // Interface Size zooms the whole window like Raycast's `--spx` (1 / 1.1 / 1.2).
+  useEffect(() => {
+    const zoom = Number(interfaceSize);
+    document.documentElement.style.zoom = zoom > 1 && zoom <= 1.2 ? String(zoom) : "";
+  }, [interfaceSize]);
+
+  // Compact window mode: the host shrinks to the search bar while the list is empty and grows
+  // back when results appear; "expanded" always uses the full height.
+  const compactListVisible = windowMode !== "compact" || searchText.trim().length > 0;
+  useEffect(() => {
+    void ipcRequest("window.setLauncherHeight", { compact: windowMode === "compact", visible: compactListVisible }, { module: "frontend" }).catch(() => undefined);
+  }, [windowMode, compactListVisible]);
 
   // Load fallback commands from localStorage and listen for changes from Settings window
   useEffect(() => {
@@ -526,15 +533,22 @@ export function MainWindow() {
         setPopToRootTimer(null);
         return;
       }
-      if (popToRootTimeout <= 0) return;
-      if (popToRootTimerRef.current) return;
-      const timer = setTimeout(() => {
-        popToRootTimerRef.current = null;
-        setPopToRootTimer(null);
+      const resetToRoot = () => {
         setSelected(null);
         setOpenApplication(null);
         setCommandPanelEntry(null);
         setArgumentEntry(null);
+      };
+      if (popToRootTimeout <= 0) {
+        // "Immediately": the next show starts at the root search.
+        resetToRoot();
+        return;
+      }
+      if (popToRootTimerRef.current) return;
+      const timer = setTimeout(() => {
+        popToRootTimerRef.current = null;
+        setPopToRootTimer(null);
+        resetToRoot();
       }, popToRootTimeout);
       popToRootTimerRef.current = timer;
       setPopToRootTimer(timer);
@@ -559,6 +573,7 @@ export function MainWindow() {
     marks.marks.push("effects:installed-host-message-listener");
     installHostMessageListener();
     installSystemAccent();
+    const offSettingsPush = installSettingsPush();
     const refreshExtensions = async () => {
       const payload = (await ipc.backend("extensionHost.getInstalledNodeExtensionSummaries")) as {
         extensions?: ExtensionSummary[];
@@ -600,6 +615,7 @@ export function MainWindow() {
     return () => {
       offDev();
       offTestScript();
+      offSettingsPush();
     };
   }, []);
 
@@ -1480,6 +1496,41 @@ export function MainWindow() {
         }
         event.preventDefault();
         setSelectedIndex((index) => Math.max(index - 1, 0));
+      } else if (event.altKey && !event.ctrlKey && !event.metaKey && key.length === 1) {
+        // Navigation bindings (Keyboard page): emacs Alt+P/Alt+N + Alt+B/Alt-F caret moves, or
+        // vim Alt+K/Alt+J + Alt+H/Alt+L — Raycast's `navigationBindings`.
+        const vim = navigationBindings.startsWith("Vim");
+        const lower = key.toLowerCase();
+        const downKey = vim ? "j" : "n";
+        const upKey = vim ? "k" : "p";
+        if (lower === downKey) {
+          event.preventDefault();
+          setSelectedIndex((index) => Math.min(index + 1, entries.length - 1));
+        } else if (lower === upKey) {
+          event.preventDefault();
+          setSelectedIndex((index) => Math.max(index - 1, 0));
+        } else if (lower === (vim ? "h" : "b") || lower === (vim ? "l" : "f")) {
+          event.preventDefault();
+          searchRef.current?.focus();
+          const input = searchRef.current;
+          if (input) {
+            const position = lower === (vim ? "h" : "b")
+              ? Math.max(0, input.selectionStart ?? input.value.length) - 1
+              : Math.min(input.value.length, (input.selectionStart ?? 0) + 1);
+            input.setSelectionRange(position, position);
+          }
+        }
+      } else if (key === "Enter") {
+        // Up arrow in empty search bar shows search history
+        if (searchText.trim() === "" && searchHistory.length > 0) {
+          event.preventDefault();
+          const lastQuery = searchHistory[searchHistory.length - 1];
+          setSearchText(lastQuery);
+          setSearchHistory((prev) => prev.slice(0, -1)); // Remove last item as it's now active
+          return;
+        }
+        event.preventDefault();
+        setSelectedIndex((index) => Math.max(index - 1, 0));
       } else if (key === "Enter") {
         if (panelOpenRef.current) return;
         const entry = entries[selectedIndex];
@@ -1546,11 +1597,11 @@ export function MainWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry, showToast, closeMainWindow, refreshFocus, openGameEntry]);
+  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry, showToast, closeMainWindow, refreshFocus, openGameEntry, navigationBindings]);
 
-  // Escape closes the launcher, matching Raycast: the window hides and the global hotkey brings it
-  // back. While the action panel is open it owns Escape (capture handler + stopPropagation), and a
-  // running command handles its own Escape to pop back.
+  // Escape per the Escape Key Behavior setting: "Navigate back or close window" closes at the root
+  // (command views pop back on their own); "Close window and pop to root" intercepts every Escape
+  // in capture, resets to the root and closes the window — Raycast's two modes.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -1561,6 +1612,22 @@ export function MainWindow() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [openApplication, commandPanelEntry, selected]);
+
+  useEffect(() => {
+    if (escapeBehavior !== "Close window and pop to root") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setSelected(null);
+      setOpenApplication(null);
+      setCommandPanelEntry(null);
+      setArgumentEntry(null);
+      closeMainWindow();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [escapeBehavior]);
 
 
   useEffect(() => {
@@ -1650,7 +1717,13 @@ export function MainWindow() {
   }
 
   return (
-    <div className="window" onMouseDown={keepSearchFocus}>
+    <div
+      className="window"
+      onMouseDown={keepSearchFocus}
+      data-window-mode={windowMode}
+      data-compact-hidden={windowMode === "compact" && searchText.trim().length === 0 ? "true" : undefined}
+      data-favorites-compact={showFavoritesCompact ? undefined : "hidden"}
+    >
       <header className="window__header">
         <span className="raycast-mark" aria-hidden>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -1829,7 +1902,8 @@ export function MainWindow() {
         ) : (
           <ul className="list" ref={listRef}>
             {sections.map((section) =>
-              section.entries.length === 0 ? null : (
+              section.entries.length === 0 ||
+              (windowMode === "compact" && !showFavoritesCompact && section.id === "favorites") ? null : (
                 <li key={section.id} className="list__section">
                   <div className="list__sectionHeader">
                     <span className="list__sectionTitle">{section.title}</span>

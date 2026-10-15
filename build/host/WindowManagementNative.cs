@@ -206,6 +206,9 @@ public static class WindowManagementNative
         return IntPtr.Zero;
     }
 
+    /// <summary>The last real (non-own) foreground window, for screen placement decisions.</summary>
+    public static IntPtr CapturedTargetHandle() => CurrentTargetHandle();
+
     private static bool IsOwnWindow(IntPtr hwnd)
     {
         GetWindowThreadProcessId(hwnd, out var pid);
