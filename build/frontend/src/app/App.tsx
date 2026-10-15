@@ -21,6 +21,7 @@ import { alertStore, type ExtensionAlertPayload } from "../alertStore";
 import AlertHost from "../AlertHost";
 import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "../testHooks";
 import { registerAllCommandHotkeys } from "../commandConfig";
+import { installSystemAccent } from "./systemAccent";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
 import {
   hudStore,
@@ -557,6 +558,7 @@ export function MainWindow() {
   useEffect(() => {
     marks.marks.push("effects:installed-host-message-listener");
     installHostMessageListener();
+    installSystemAccent();
     const refreshExtensions = async () => {
       const payload = (await ipc.backend("extensionHost.getInstalledNodeExtensionSummaries")) as {
         extensions?: ExtensionSummary[];

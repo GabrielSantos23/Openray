@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from "react-dom";
 import { RaycastIcon } from "../icons";
 import { ipc, ipcRequest } from "../ipc";
+import { installSystemAccent } from "../app/systemAccent";
 import { type Sensitivity } from "../matching";
 import type { FileSearchSettings } from "../fileSearch";
 import {
@@ -85,6 +86,7 @@ export function Settings() {
 
   useEffect(() => {
     syncFromBackend();
+    installSystemAccent();
     return installSettingsPush();
   }, []);
 

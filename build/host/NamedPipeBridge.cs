@@ -11,6 +11,10 @@
 //
 //   module "frontend" == deliver to the WebView2 renderer (Raycast's `z.frontend.*`)
 //   module "backend"  == ask the Node host to do something  (Raycast's `dispatchRequest("backend", …)`)
+//
+// The first connected client is the backend ("primary"): only its responses resolve host-side
+// `RequestAsync` waiters, and its disconnect fails them. Additional clients (session drivers) may
+// send requests and get answers on their own connection without ever touching backend traffic.
 
 using System.IO;
 using System.IO.Pipes;
@@ -45,21 +49,25 @@ internal static class PipeJson
 
 public sealed class NamedPipeBridge : IAsyncDisposable
 {
+    private sealed class PipeClient
+    {
+        public required NamedPipeServerStream Pipe;
+        public StreamReader? Reader;
+    }
+
     private readonly string _pipeName;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
-    private readonly object _pipeGate = new();
+    private readonly object _stateGate = new();
     private readonly Dictionary<long, TaskCompletionSource<JsonElement?>> _waiters = new();
-
-    private NamedPipeServerStream _pipe;
-    private StreamReader? _reader;
+    private readonly List<PipeClient> _clients = new();
+    private NamedPipeServerStream? _listening;
     private long _nextId = 1;
-    private volatile bool _connected;
     private bool _disposed;
 
     private readonly TaskCompletionSource _firstConnection =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    /// <summary>Raised for every <c>type:"request"</c> arriving from the Node backend.</summary>
+    /// <summary>Raised for every <c>type:"request"</c> arriving from any connected client.</summary>
     public event Func<PipeMessage, Task<object?>>? RequestReceived;
 
     public NamedPipeBridge(string pipeName)
@@ -67,10 +75,13 @@ public sealed class NamedPipeBridge : IAsyncDisposable
         _pipeName = pipeName;
         // The reader/writer are created only after a client is connected: a StreamWriter backed by
         // an unconnected pipe flushes in its constructor and throws.
-        _pipe = CreateServer();
+        _listening = CreateServer();
     }
 
-    public bool IsConnected => _connected;
+    public bool IsConnected
+    {
+        get { lock (_stateGate) return _clients.Count > 0; }
+    }
 
     private NamedPipeServerStream CreateServer() => new(
         _pipeName,
@@ -80,21 +91,22 @@ public sealed class NamedPipeBridge : IAsyncDisposable
         PipeOptions.Asynchronous);
 
     /// <summary>
-    /// Accept loop that runs for the lifetime of the bridge. The backend connects, is served until it
-    /// disconnects, and then the server is recreated so a restarted backend can dial back in — the
-    /// same survival property Raycast's `Raycast.IPC` host has. Without this, a backend restart (or a
-    /// second launcher stealing the pipe) left the UI permanently empty.
+    /// Accept loop that runs for the lifetime of the bridge. The backend connects and is served
+    /// until it disconnects; every accepted client gets a fresh listening instance behind it so a
+    /// restarted backend (or a session driver) can dial in — the same survival property Raycast's
+    /// `Raycast.IPC` host has. Without this, a backend restart (or a second launcher stealing the
+    /// pipe) left the UI permanently empty.
     /// </summary>
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
         while (!cancellationToken.IsCancellationRequested && !_disposed)
         {
+            NamedPipeServerStream? server;
+            lock (_stateGate) server = _listening;
+            if (server is null) break;
             try
             {
-                await _pipe.WaitForConnectionAsync(cancellationToken);
-                _reader = new StreamReader(_pipe, new UTF8Encoding(false), false, 1024, leaveOpen: true);
-                _connected = true;
-                _firstConnection.TrySetResult();
+                await server.WaitForConnectionAsync(cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -103,26 +115,43 @@ public sealed class NamedPipeBridge : IAsyncDisposable
             catch (Exception error)
             {
                 App.Log.Write($"[pipe] accept failed: {error.Message}");
+                if (!cancellationToken.IsCancellationRequested) await Task.Delay(200, cancellationToken);
+                continue;
             }
 
-            await ReadLoopAsync(cancellationToken);
-
-            _connected = false;
-            FailPendingWaiters("backend disconnected");
-            _reader = null;
-
-            try { _pipe.Dispose(); } catch { /* already gone */ }
-
-            await _writeLock.WaitAsync();
-            try
+            var client = new PipeClient
             {
-                if (!_disposed) _pipe = CreateServer();
-            }
-            finally
+                Pipe = server,
+                Reader = new StreamReader(server, new UTF8Encoding(false), false, 1024, leaveOpen: true),
+            };
+            // A crashed backend (or leftover zombie from a killed host) reconnects in a loop; cap
+            // the parked non-primary clients so the list cannot grow without bound.
+            if (CountClients() >= 8)
             {
-                _writeLock.Release();
+                App.Log.Write("[pipe] rejecting extra client (cap reached)");
+                try { client.Pipe.Dispose(); } catch { /* already gone */ }
+                lock (_stateGate)
+                {
+                    if (!_disposed) _listening = CreateServer();
+                }
+                continue;
             }
+            bool isPrimary;
+            lock (_stateGate)
+            {
+                isPrimary = _clients.Count == 0;
+                _clients.Add(client);
+                if (!_disposed) _listening = CreateServer();
+            }
+            App.Log.Write($"[pipe] client connected (primary={isPrimary}, total={CountClients()})");
+            if (isPrimary) _firstConnection.TrySetResult();
+            _ = Task.Run(() => ReadClientAsync(client, isPrimary, cancellationToken));
         }
+    }
+
+    private int CountClients()
+    {
+        lock (_stateGate) return _clients.Count;
     }
 
     /// <summary>Completes once the first backend has connected (used to show the window in order).</summary>
@@ -142,13 +171,13 @@ public sealed class NamedPipeBridge : IAsyncDisposable
         }
     }
 
-    private async Task ReadLoopAsync(CancellationToken cancellationToken)
+    private async Task ReadClientAsync(PipeClient client, bool isPrimary, CancellationToken cancellationToken)
     {
         try
         {
-            while (!cancellationToken.IsCancellationRequested && _pipe.IsConnected)
+            while (!cancellationToken.IsCancellationRequested && client.Pipe.IsConnected)
             {
-                var line = await _reader!.ReadLineAsync();
+                var line = await client.Reader!.ReadLineAsync();
                 if (line is null) break;
                 if (line.Length == 0) continue;
                 if (line[0] == '\uFEFF') line = line.Substring(1);
@@ -168,6 +197,8 @@ public sealed class NamedPipeBridge : IAsyncDisposable
 
                 if (message.Type == "response")
                 {
+                    // Only the primary client (the Node backend) answers host-side requests.
+                    if (!isPrimary) continue;
                     lock (_waiters)
                     {
                         if (_waiters.TryGetValue(message.Id, out var waiter))
@@ -180,12 +211,12 @@ public sealed class NamedPipeBridge : IAsyncDisposable
                     continue;
                 }
 
-                // A request from the backend.
+                // A request from the backend or a session driver.
                 if (RequestReceived is null) continue;
                 try
                 {
                     var result = await RequestReceived.Invoke(message);
-                    await WriteAsync(new PipeMessage
+                    await WriteToClientAsync(client, new PipeMessage
                     {
                         Type = "response",
                         Id = message.Id,
@@ -195,13 +226,20 @@ public sealed class NamedPipeBridge : IAsyncDisposable
                 }
                 catch (Exception error)
                 {
-                    await WriteAsync(new PipeMessage { Type = "response", Id = message.Id, Ok = false, Error = error.Message });
+                    await WriteToClientAsync(client, new PipeMessage { Type = "response", Id = message.Id, Ok = false, Error = error.Message });
                 }
             }
         }
         catch (Exception error)
         {
             App.Log.Write($"[pipe] read loop ended: {error.Message}");
+        }
+        finally
+        {
+            lock (_stateGate) _clients.Remove(client);
+            if (isPrimary) FailPendingWaiters("backend disconnected");
+            try { client.Pipe.Dispose(); } catch { /* already gone */ }
+            App.Log.Write($"[pipe] client disconnected (primary={isPrimary}, total={CountClients()})");
         }
     }
 
@@ -215,17 +253,17 @@ public sealed class NamedPipeBridge : IAsyncDisposable
         // A restarting backend needs a moment; wait briefly for it to dial back in instead of failing
         // the caller (and leaving a blank UI) the instant the pipe is down.
         var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!_connected && !_disposed && DateTime.UtcNow < deadline)
+        while (!IsConnected && !_disposed && DateTime.UtcNow < deadline)
         {
             await Task.Delay(50, cancellationToken);
         }
-        if (!_connected) throw new InvalidOperationException($"pipe \"{_pipeName}\" is not connected");
+        if (!IsConnected) throw new InvalidOperationException($"pipe \"{_pipeName}\" is not connected");
 
         var id = Interlocked.Increment(ref _nextId);
         var completion = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_waiters) _waiters[id] = completion;
 
-        await WriteAsync(new PipeMessage
+        await WriteToPrimaryAsync(new PipeMessage
         {
             Type = "request",
             Id = id,
@@ -241,9 +279,20 @@ public sealed class NamedPipeBridge : IAsyncDisposable
     public Task<JsonElement?> PushToRendererAsync(string method, object? data, CancellationToken cancellationToken = default)
         => RequestAsync("frontend", method, data, cancellationToken);
 
-    private async Task WriteAsync(PipeMessage message)
+    private PipeClient? PrimaryClient
     {
-        if (!_connected) return;
+        get { lock (_stateGate) return _clients.Count > 0 ? _clients[0] : null; }
+    }
+
+    private async Task WriteToPrimaryAsync(PipeMessage message)
+    {
+        var primary = PrimaryClient;
+        if (primary is null) return;
+        await WriteToClientAsync(primary, message);
+    }
+
+    private async Task WriteToClientAsync(PipeClient client, PipeMessage message)
+    {
         // Raw bytes on purpose: `StreamWriter` prefixes a UTF-8 preamble (BOM) that corrupts the
         // first line, and its buffered `WriteAsync('\n')` never reached the pipe.
         var line = JsonSerializer.Serialize(message, PipeJson.Options);
@@ -251,9 +300,9 @@ public sealed class NamedPipeBridge : IAsyncDisposable
         await _writeLock.WaitAsync();
         try
         {
-            if (!_connected) return;
-            await _pipe.WriteAsync(bytes);
-            await _pipe.FlushAsync();
+            if (!client.Pipe.IsConnected) return;
+            await client.Pipe.WriteAsync(bytes);
+            await client.Pipe.FlushAsync();
         }
         catch (Exception error) when (error is IOException or ObjectDisposedException or InvalidOperationException)
         {
@@ -268,9 +317,22 @@ public sealed class NamedPipeBridge : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
-        _connected = false;
         FailPendingWaiters("pipe disposed");
         _writeLock.Dispose();
-        try { if (_pipe.IsConnected) await _pipe.DisposeAsync(); } catch { /* already gone */ }
+        List<PipeClient> clients;
+        NamedPipeServerStream? listening;
+        lock (_stateGate)
+        {
+            clients = _clients.ToList();
+            _clients.Clear();
+            listening = _listening;
+            _listening = null;
+        }
+        foreach (var client in clients)
+        {
+            try { client.Pipe.Dispose(); } catch { /* already gone */ }
+        }
+        try { listening?.Dispose(); } catch { /* already gone */ }
+        await Task.CompletedTask;
     }
 }

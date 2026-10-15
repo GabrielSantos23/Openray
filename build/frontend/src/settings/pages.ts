@@ -35,6 +35,8 @@ export interface RowDefinition {
   value?: string;
   /** Rendered but inert — the real Raycast feature has no equivalent here. */
   unavailable?: boolean;
+  /** Text inputs render as password fields with an eye accessory. */
+  secret?: boolean;
   pro?: boolean;
   /** Hidden until the predicate passes (e.g. the Injection Delay row needs the Immediately mode). */
   visibleWhen?: (values: SettingsMap) => boolean;
@@ -407,18 +409,11 @@ export const PAGES: readonly PageDefinition[] = [
     title: "Advanced",
     description: "Tune advanced behavior, exporting, and connectivity.",
     icon: "advanced",
-    keywords: ["backup", "certificate", "connection", "export", "favicon", "proxy", "scheduled backup", "window activation behavior", "tidy menu bar"],
+    keywords: ["backup", "certificate", "connection", "export", "favicon", "proxy", "scheduled export"],
     sections: [
       {
         id: "advanced",
         rows: [
-          {
-            id: "window-activation-behavior",
-            title: "Window Activation Behavior",
-            description: "Choose whether Raycast brings windows to your current Space or switches to the Space where they are open.",
-            control: "select",
-            options: ["Current Space", "Window's Space"],
-          },
           {
             id: "favicon-provider",
             title: "Favicon Provider",
@@ -426,11 +421,32 @@ export const PAGES: readonly PageDefinition[] = [
             control: "select",
             options: ["None", "Raycast", "DuckDuckGo", "Google"],
           },
+        ],
+      },
+      {
+        id: "file-explorer",
+        title: "File Explorer",
+        rows: [
           {
             id: "open-folders-in-tabs",
             title: "Open Folders in Tabs",
             description: "Open folders as new tabs in an existing File Explorer window instead of opening new windows.",
             control: "switch",
+            unavailable: true,
+          },
+        ],
+      },
+      {
+        id: "accessibility",
+        title: "Accessibility",
+        rows: [
+          {
+            id: "run-accessibility-helper-elevated",
+            title: "Run the Accessibility Helper Elevated",
+            description:
+              "Turn this on if global shortcuts, snippet expansion, or copying selected text aren't working on your PC. Raycast then launches its input helper with administrator rights via the Raycast System Service. Requires an administrator account — on standard Windows accounts this has no effect, since Windows can't grant elevation without a password prompt. Takes effect after you restart Raycast.",
+            control: "switch",
+            unavailable: true,
           },
         ],
       },
@@ -438,17 +454,18 @@ export const PAGES: readonly PageDefinition[] = [
         id: "export",
         title: "Export",
         rows: [
-          { id: "export-passphrase", title: "Export Passphrase", control: "action", action: "Set Passphrase", unavailable: true },
+          { id: "export-passphrase", title: "Export Passphrase", description: "A passphrase to encrypt your exported settings and data.", control: "text", secret: true },
           {
-            id: "backup-frequency",
-            title: "Scheduled Backup",
-            description: "Automatically export your Raycast settings and data on a schedule.",
-            control: "select",
-            options: ["Never", "Daily", "Weekly"],
+            id: "scheduled-export",
+            title: "Scheduled Export",
+            description: "Automatically back up your settings and data with Raycast Pro",
+            control: "action",
+            action: "Upgrade to Pro",
             pro: true,
             unavailable: true,
           },
-          { id: "backup-location", title: "Backup Location", control: "action", action: "Choose Folder", pro: true, unavailable: true },
+          { id: "export-settings", title: "Export Settings", control: "action", action: "Export Settings" },
+          { id: "import-settings", title: "Import Settings", control: "action", action: "Import Settings" },
         ],
       },
       {
@@ -466,8 +483,7 @@ export const PAGES: readonly PageDefinition[] = [
             title: "Additional Certificate Authority",
             description: "Choose a certificate file (.crt, .cer, .pem) to trust connections that would otherwise show security warnings or fail.",
             control: "action",
-            action: "Choose File",
-            unavailable: true,
+            action: "+ Add File",
           },
         ],
       },

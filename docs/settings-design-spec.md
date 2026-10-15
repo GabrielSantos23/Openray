@@ -8,11 +8,11 @@ in SQLCipher-encrypted `settings_v2.db`; keys/values/defaults were recovered fro
 chunks instead).
 
 **Screenshot coverage note.** The task promised one image per page/state (general, extensions,
-advanced, dropdowns open, hotkey recording, a selected extension). Five screenshots arrived —
-General (two takes), Launcher, Shortcuts, Keyboard — and the message text was truncated. The
-Extensions-detail, Advanced, dropdown-open and recorder states below are **reconstructed from the
-frontend code, not from screenshots**; they are marked `(reconstructed)` and are listed as
-accepted deviations until screenshots arrive.
+advanced, dropdowns open, hotkey recording, a selected extension). Seven screenshots arrived —
+General (two takes), Launcher, Shortcuts, Keyboard, **Extensions with a selected extension
+(Spotify Player), and Advanced**. The dropdown-open and hotkey-recorder states are still
+**reconstructed from the frontend code, not from screenshots**; they are marked `(reconstructed)`
+and remain accepted deviations.
 
 ## 0. Platform facts
 
@@ -325,32 +325,49 @@ Section "Keyboard":
 - `hyper-key-display-shortcut` — "Replace occurrences of Ctrl+Alt+Shift+Win with ✦" (label
   dynamic: without Shift it reads Ctrl+Alt+Win), default true. Same visibility rule.
 
-### 4.5 Advanced (`/advanced`)
+### 4.5 Advanced (`/advanced`) — confirmed by screenshot 6 + chunk `advanced-settings-view-BmQYrfuX.js`
 
-Description: "Tune advanced behavior, exporting, and connectivity."
+Description: "Tune advanced behavior, exporting, and connectivity." Sections in render order:
 
-- "Window Activation Behavior" — "Choose whether Raycast brings windows to your current Space or
-  switches to the Space where they are open." Options: `move-to-active-space` "Move to Active
-  Space" / `switch-space` "Switch Space". Default `move-to-active-space`. **Not available in
-  RaycastMini** (Spaces concept absent) — disabled + hint.
-- "Favicon Provider" — "Select the provider used to fetch favicons or None to disable favicon
-  fetching." Options: none "None", duckduckgo "DuckDuckGo", google "Google", raycast "Raycast"
-  (with "Default" accessory). Default `raycast`. RaycastMini: wired to the real favicon fetcher
-  (link-rel favicon; "Raycast" behaves as the default provider).
-- "Open Folders in Tabs" — "Open folders as new tabs in an existing File Explorer window instead
-  of opening new windows." Default false. Real (host `explorer.exe /existing` handling).
-- Section "Export" (Pro rows in Raycast): "Export Passphrase" (Set Passphrase), "Scheduled
-  Backup" (Never/Daily/Weekly + description "Automatically export your Raycast settings and data
-  on a schedule."), "Backup Location" (Choose Folder), "Auto-Delete Exports". All **Not available
-  in RaycastMini** except a real **Export Settings / Import Settings pair** Raycast ships as
-  commands: RaycastMini puts two working rows here — "Export Settings" writes a versioned JSON
-  (settings store + aliases/hotkeys + extension settings) through a Save dialog; "Import
-  Settings" reads it back, validates, applies live and toasts success/failure. (Raycast's
-  import/export is a command, not a settings row — accepted deviation, listed per task item 4.)
+- Untitled section: "Favicon Provider" — "Select the provider used to fetch favicons or None to
+  disable favicon fetching." Options: none "None", duckduckgo "DuckDuckGo", google "Google",
+  raycast "Raycast" (with "Default" accessory). Default `raycast`. (The chunk also defines
+  "Window Activation Behavior" and "Tidy Menu Bar" rows, but both are macOS-gated / not rendered
+  by the Windows view — RaycastMini renders neither.) RaycastMini: stored value wired to the
+  favicon fetcher if one exists; otherwise disabled + hint.
+- Section "File Explorer" (Windows): "Open Folders in Tabs" — "Open folders as new tabs in an
+  existing File Explorer window instead of opening new windows." Default false. Switch also
+  calls host `openFoldersInTabs({enabled})`. **RaycastMini: disabled + hint** (opening a folder
+  as a tab of an existing Explorer window needs COM IShellWindows automation RaycastMini's host
+  does not have; there is no explorer.exe CLI flag for tabs — the earlier `/existing` note was
+  wrong).
+- Section "Accessibility" (Windows): "Run the Accessibility Helper Elevated" — "Turn this on if
+  global shortcuts, snippet expansion, or copying selected text aren't working on your PC.
+  Raycast then launches its input helper with administrator rights via the Raycast System
+  Service. Requires an administrator account — on standard Windows accounts this has no effect,
+  since Windows can't grant elevation without a password prompt. Takes effect after you restart
+  Raycast." (error-state descriptions exist for service-down / standard-account). **RaycastMini:
+  disabled + hint** (no System Service).
+- Section "Export" (non-Pro view; pro view swaps the second row for Scheduled Backup/Location/
+  Auto-Delete): "Export Passphrase" — small password input (max-width 180) with eye/eye-disabled
+  accessory; default description "A passphrase to encrypt your exported settings and data.";
+  validation: empty or ≥8 chars, else description becomes red "Passphrase must be at least 8
+  characters long."; persisted on blur (Raycast: userDefaults `ExportSettingsDataPassphrase`).
+  Then "Scheduled Export" — "Automatically back up your settings and data with Raycast Pro" with
+  a standout "Upgrade to Pro" button. **RaycastMini**: passphrase is real (used to AES-encrypt
+  the Export Settings file); "Scheduled Export" keeps the layout with the standout button
+  disabled + "Not available in RaycastMini" hint (no Pro tier). The real **Export Settings /
+  Import Settings pair** Raycast ships as commands: RaycastMini puts two working rows here —
+  "Export Settings" writes a versioned JSON (settings store + aliases/hotkeys + extension
+  settings, encrypted when a passphrase is set) through a Save dialog; "Import Settings" reads it
+  back, validates, applies live and toasts success/failure. (Raycast's import/export is a
+  command, not a settings row — accepted deviation, listed per task item 4.)
 - Section "Connection": "Use System Proxy Settings" switch ("Automatically use your computer's
-  proxy configuration for network connections.") — default false, real (honored by http.fetch);
-  "Additional Certificate Authority" — real file picker (.crt/.cer/.pem) that adds the CA to the
-  Node https agent. `(reconstructed rows)`
+  proxy configuration for network connections.") — default false, real (honored by the backend
+  http layer via a system-proxy dispatcher); "Additional Certificate Authority" — description
+  "Choose a certificate file (.crt, .cer, .pem) to trust connections that would otherwise show
+  security warnings or fail." with a small secondary "+ Add File" button (plus icon) opening a
+  multi-select picker for .pem/.crt/.cer/.der, width 180.
 
 ### 4.6 About (`/about`)
 
@@ -366,13 +383,19 @@ disabled + "Not available in RaycastMini". Organizations: empty-state text. Acco
 sidebar-top account block (avatar/name/"Account") — non-navigating in RaycastMini (signed-out
 state), row content omitted (Raycast's account page is auth-bound). `(reconstructed)`
 
-### 4.8 Extension pages (group 2 of the sidebar)
+### 4.8 Extension pages (group 2 of the sidebar) — layout confirmed by screenshot 5 (Spotify Player)
 
-Rendering rules for every page: intro block (54px icon, title, description, max-width 500px)
-+ "Documentation" link button + enable-extension switch in the header + preference rows in
-section cards + static command rows ("Commands") + dynamic command rows (virtualized table like
-Shortcuts with alias/hotkey/enabled). Extension disabled → whole content 50% opacity,
-pointer-events none.
+Rendering rules for every page: titlebar right shows an "…" icon button + the extension's enable
+switch (accent when on); intro block — 56px icon (radius ~14), 22px semibold title, 13px
+secondary description centered with max-width ~500 clamped to 2 lines and a "Show More" /
+"Show Less" chevron expander when the description is long; then preference rows in section cards
+(auth rows like "Logged into Spotify" with a secondary "Logout" button appear here, as do
+per-extension preferences such as "Close window on action"); then a "Commands" section header
+(13px semibold) with one row per command — 22px command icon, 13px name, a 16px tertiary chevron
+after the name for commands that have argument sub-pages, ghost "Add Alias" (~100px) and "Record
+Hotkey" (~140px) placeholder cells, and a 16px enable checkbox at the far right; rows ~50px with
+1px separators. Alias and hotkey cells behave like the Shortcuts table (recorder popover, inline
+alias input). Extension disabled → whole content 50% opacity, pointer-events none.
 
 - **Applications** (description "Quickly launch your installed applications."): rows "Auto Quit"
   (navigates to sub-page; description "Automatically quit apps shortly after you stop using
@@ -417,14 +440,15 @@ VisualShortcut keycaps, inline AliasInput, HotkeyCell button + clear + conflict 
 Checkbox, small icon buttons, secondary/standout buttons, Filter dropdown (multi-select with
 sections), command-picker popover with search, confirm dialog (existing alert host), toast
 (existing), searchable sidebar + account block, collapsible category groups, virtualized table,
-detail pane for a selected extension (`(reconstructed)`: intro + preferences + commands tabs —
-matches Raycast's extension detail).
+extension detail view (confirmed by screenshot: intro + Show More expander + enable switch +
+"…" header button + preference/auth rows + Commands section with alias/hotkey/checkbox cells).
 
 ## 7. Accepted deviations (each with reason)
 
-1. **Missing screenshots** for: Extensions detail pane, Advanced page, dropdowns open, hotkey
-   recorder states, selected-extension state, Pro pages. Marked `(reconstructed)` from code;
-   layout follows the same row/section system so only those states can drift.
+1. **Missing screenshots** for: dropdown-open state and hotkey-recorder states. Marked
+   `(reconstructed)` from code; layout follows the same row/section system so only those states
+   can drift. (Extensions detail, Advanced and the selected-extension state were confirmed by
+   screenshots 5 and 6; markers removed.)
 2. **Raycast Hotkey default**: Raycast default is the Win key; RaycastMini keeps `Alt+Space`
    (Win-key interception needs a low-level keyboard hook that RaycastMini's host does not have).
    Recorder, conflict flow, reset button and Replace-Start-Menu-style row are otherwise real

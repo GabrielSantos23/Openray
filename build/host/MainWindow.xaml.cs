@@ -272,6 +272,10 @@ public partial class MainWindow : Window
             });
             return null;
         }
+        if (method == "settings.systemAccent")
+        {
+            return System.Text.Json.JsonSerializer.SerializeToElement(new { color = GetSystemAccentHex() });
+        }
         if (method == "settings.setGlobalHotkey")
         {
             var hotkey = data is { ValueKind: System.Text.Json.JsonValueKind.Object } hotkeyPayload
@@ -434,6 +438,39 @@ public partial class MainWindow : Window
         if (ReadStoredSetting("show-in-menu-bar") is false) RemoveTrayIcon();
         else InitTrayIcon();
         if (ReadStoredSetting("open-at-login") is true) SetOpenAtLogin(true);
+
+        // The Windows accent drives every toggle/link color; re-push when the user changes it.
+        try
+        {
+            var uiSettings = new Windows.UI.ViewManagement.UISettings();
+            uiSettings.ColorValuesChanged += (_, _) => Dispatcher.BeginInvoke(() =>
+                PostAccent(GetSystemAccentHex(), "settings.systemAccentChanged"));
+            PostAccent(GetSystemAccentHex(), "settings.systemAccentChanged");
+        }
+        catch (Exception error)
+        {
+            App.Log.Write($"[accent] unavailable: {error.Message}");
+        }
+    }
+
+    internal static string GetSystemAccentHex()
+    {
+        try
+        {
+            var uiSettings = new Windows.UI.ViewManagement.UISettings();
+            var color = uiSettings.GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent);
+            return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        }
+        catch
+        {
+            return "#0078D4";
+        }
+    }
+
+    private void PostAccent(string hex, string method)
+    {
+        PostToRenderer(method, System.Text.Json.JsonSerializer.SerializeToElement(new { color = hex }));
+        PostToSettingsRenderer(method, System.Text.Json.JsonSerializer.SerializeToElement(new { color = hex }));
     }
 
     /// <summary>Reads one value from the settings store JSON (`store/settings.json`).</summary>
@@ -441,9 +478,12 @@ public partial class MainWindow : Window
     {
         try
         {
-            var path = System.IO.Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
-                "RaycastMini", "store", "settings.json");
+            var dataDir = System.Environment.GetEnvironmentVariable("RAYCAST_MINI_DATA_DIR");
+            var path = string.IsNullOrEmpty(dataDir)
+                ? System.IO.Path.Combine(
+                    System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+                    "RaycastMini", "store", "settings.json")
+                : System.IO.Path.Combine(dataDir, "store", "settings.json");
             if (!System.IO.File.Exists(path)) return null;
             using var document = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path));
             if (!document.RootElement.TryGetProperty(key, out var value)) return null;
@@ -465,14 +505,14 @@ public partial class MainWindow : Window
     /// <summary>Open at Login: a Run-key entry pointing at this executable, like Raycast's login item.</summary>
     private static void SetOpenAtLogin(bool enabled)
     {
-        const string runKey = "Software\Microsoft\Windows\CurrentVersion\Run";
+        const string runKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         const string valueName = "RaycastMini";
         using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(runKey, writable: true)
             ?? Microsoft.Win32.Registry.CurrentUser.CreateSubKey(runKey);
         if (enabled)
         {
-            var exe = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            if (string.IsNullOrEmpty(exe)) exe = System.Environment.ProcessPath ?? "";
+            var exe = System.Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe)) exe = System.Reflection.Assembly.GetExecutingAssembly().Location;
             key.SetValue(valueName, '"' + exe + '"');
         }
         else if (key.GetValue(valueName) is not null)
@@ -489,8 +529,9 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Applies the settings store's Raycast Hotkey: unregisters the current launcher combination
-    /// and registers the new one. Throws when Windows rejects the combination so the caller can
-    /// roll the setting back (Raycast's hotkey failure flow).
+    /// and registers the new one. Throws when the combination is taken by one of this app's other
+    /// registrations or Windows rejects it, so the caller can roll the setting back (Raycast's
+    /// hotkey conflict flow).
     /// </summary>
     internal void ApplyGlobalHotkey(string hotkey)
     {
@@ -499,6 +540,13 @@ public partial class MainWindow : Window
         var handle = new WindowInteropHelper(this).Handle;
         if (!TryParseHotkey(hotkey, out var modifiers, out var key))
             throw new InvalidOperationException($"The hotkey {hotkey} could not be registered");
+        if ((modifiers, key) == ((uint)(ModControl | ModShift), VkSpace) ||
+            (_clipboardHotkeyRegistered && _clipboardHotkeyText is not null &&
+             TryParseHotkey(_clipboardHotkeyText, out var clipMods, out var clipKey) &&
+             (modifiers, key) == (clipMods, clipKey)))
+        {
+            throw new InvalidOperationException($"The hotkey {hotkey} is already used by Raycast");
+        }
         var previous = _globalHotkeyText;
         UnregisterHotKey(handle, HotkeyId);
         if (!RegisterHotKey(handle, HotkeyId, modifiers, key))
@@ -803,7 +851,8 @@ public partial class MainWindow : Window
         }
         _settingsWindow = new SettingsWindow(
             _backend.FrontendRoot,
-            (method, data) => ((App)System.Windows.Application.Current).RequestBackendAsync(method, data));
+            (method, data) => ((App)System.Windows.Application.Current).RequestBackendAsync(method, data),
+            (method, data) => DispatchIpcAsync(method, string.Empty, data, isBackend: false));
         _settingsWindow.Show();
     }
 
@@ -903,6 +952,7 @@ public partial class MainWindow : Window
         };
         Shell_NotifyIcon(NIM_DELETE, ref data);
         _trayAdded = false;
+        App.Log.Write("[tray] launcher tray icon removed");
     }
 
     private void OpenTrayContextMenu()

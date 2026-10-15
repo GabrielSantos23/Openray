@@ -35,7 +35,10 @@ public sealed class SettingsWindow : Window
 
     private Rect? _restoreBounds;
 
-    public SettingsWindow(string frontendRoot, Func<string, System.Text.Json.JsonElement?, Task<System.Text.Json.JsonElement?>>? backendDispatch = null)
+    public SettingsWindow(
+        string frontendRoot,
+        Func<string, System.Text.Json.JsonElement?, Task<System.Text.Json.JsonElement?>>? backendDispatch = null,
+        Func<string, System.Text.Json.JsonElement?, Task<System.Text.Json.JsonElement?>>? frontendDispatch = null)
     {
         _frontendRoot = frontendRoot;
 
@@ -51,7 +54,8 @@ public sealed class SettingsWindow : Window
 
         // The settings page talks to the backend through the same IPC bridge the launcher uses;
         // without it the page's `ipc.backend(...)` calls all fail and e.g. the extensions page
-        // would stay empty forever.
+        // would stay empty forever. Frontend-module requests (settings.*, the caption buttons)
+        // reach the launcher's dispatch so the host-side General rows actually apply.
         _bridge = new WebViewBridge(_webView);
         _bridge.Install((method, _jsonParams, data, isBackend) =>
         {
@@ -67,7 +71,7 @@ public sealed class SettingsWindow : Window
                 Dispatcher.Invoke(Close);
                 return Task.FromResult<System.Text.Json.JsonElement?>(null);
             }
-            return Task.FromResult<System.Text.Json.JsonElement?>(null);
+            return frontendDispatch?.Invoke(method, data) ?? Task.FromResult<System.Text.Json.JsonElement?>(null);
         });
 
         // Opaque: the settings page paints its own surfaces on top of this colour, matching
