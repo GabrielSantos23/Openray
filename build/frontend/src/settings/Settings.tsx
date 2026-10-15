@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { RaycastIcon } from "../icons";
-import { ipc, ipcRequest } from "../ipc";
+import { ipc, ipcRequest, onNotification } from "../ipc";
 import { installSystemAccent } from "../app/systemAccent";
 import { type Sensitivity } from "../matching";
 import type { FileSearchSettings } from "../fileSearch";
@@ -87,7 +87,14 @@ export function Settings() {
   useEffect(() => {
     syncFromBackend();
     installSystemAccent();
-    return installSettingsPush();
+    const offNavigate = onNotification("settings.navigate", (route) => {
+      if (typeof route === "string" && route) window.location.hash = `#/${route.replace(/^\/+/, "")}`;
+    });
+    const offPush = installSettingsPush();
+    return () => {
+      offNavigate();
+      offPush();
+    };
   }, []);
 
   // Interface Size zooms the Settings window too (Raycast scales the whole app).
@@ -191,12 +198,14 @@ export function Settings() {
         "escape-key-closes-window",
       ]);
       if (generalKeys.has(id)) {
+        const previous = values[id] ?? DEFAULTS[id] ?? next;
         updateSettings({ [id]: next });
         mergeValues({ [id]: next });
         applyGeneralSetting(id, next).catch((error: unknown) => {
-          // Registration failures roll the switch back and surface Raycast's error toast.
-          updateSettings({ [id]: !next });
-          mergeValues({ [id]: !next });
+          // Registration failures restore the previous value (not a blind `!next`, which would
+          // corrupt non-boolean rows like the hotkey) and surface Raycast's error toast.
+          updateSettings({ [id]: previous });
+          mergeValues({ [id]: previous });
           window.dispatchEvent(
             new CustomEvent("raycast-mini:settings-toast", {
               detail: {
@@ -346,12 +355,20 @@ function Titlebar({ page, onNavigate }: { page: PageDefinition; onNavigate: (pag
   }, []);
 
   return createPortal(
-    <div className="settings-titlebar">
+    <div
+      className="settings-titlebar"
+      onMouseDown={(event) => {
+        if (event.button !== 0) return;
+        void ipcRequest("window.dragSettings", {}, { module: "frontend" }).catch(() => undefined);
+      }}
+      onDoubleClick={() => void ipcRequest("window.maximizeSettings", {}, { module: "frontend" }).catch(() => undefined)}
+    >
       <span className="settings-titlebar__sidebarLabel">Settings</span>
       <div className="settings-titlebar__nav" data-raycast-window-draggable-region="true">
         <button
           type="button"
           className="settings-titlebar__chevron"
+          onMouseDown={(event) => event.stopPropagation()}
           disabled={!canGoBack}
           aria-label="Back"
           onClick={() => window.history.back()}
@@ -361,6 +378,7 @@ function Titlebar({ page, onNavigate }: { page: PageDefinition; onNavigate: (pag
         <button
           type="button"
           className="settings-titlebar__chevron"
+          onMouseDown={(event) => event.stopPropagation()}
           disabled={!canGoForward}
           aria-label="Forward"
           onClick={() => window.history.forward()}
@@ -374,6 +392,7 @@ function Titlebar({ page, onNavigate }: { page: PageDefinition; onNavigate: (pag
           type="button"
           className="settings-caption-button"
           aria-label="Minimize"
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={() => void ipcRequest("window.minimize")}
         >
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
@@ -384,6 +403,7 @@ function Titlebar({ page, onNavigate }: { page: PageDefinition; onNavigate: (pag
           type="button"
           className="settings-caption-button settings-caption-button--close"
           aria-label="Close"
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={() => void ipcRequest("window.closeSettings")}
         >
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">

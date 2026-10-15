@@ -51,6 +51,19 @@ public sealed class SettingsWindow : Window
         ResizeMode = ResizeMode.CanResize;
         ShowInTaskbar = true;
         UseLayoutRounding = true;
+        // Raycast draws its own titlebar inside the page (the native one would stack above it).
+        // WindowChrome keeps the resize borders and snap; dragging comes from the renderer via
+        // `window.dragSettings` (the WebView child HWND swallows caption hits otherwise).
+        WindowStyle = WindowStyle.None;
+        var chrome = new System.Windows.Shell.WindowChrome
+        {
+            ResizeBorderThickness = new Thickness(6),
+            CaptionHeight = 0,
+            GlassFrameThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(0),
+            UseAeroCaptionButtons = false,
+        };
+        System.Windows.Shell.WindowChrome.SetWindowChrome(this, chrome);
 
         // The settings page talks to the backend through the same IPC bridge the launcher uses;
         // without it the page's `ipc.backend(...)` calls all fail and e.g. the extensions page
@@ -69,6 +82,31 @@ public sealed class SettingsWindow : Window
             if (method == "window.closeSettings")
             {
                 Dispatcher.Invoke(Close);
+                return Task.FromResult<System.Text.Json.JsonElement?>(null);
+            }
+            if (method == "window.dragSettings")
+            {
+                Dispatcher.Invoke(() => { try { DragMove(); } catch { /* mouse released mid-drag */ } });
+                return Task.FromResult<System.Text.Json.JsonElement?>(null);
+            }
+            if (method == "window.maximizeSettings")
+            {
+                Dispatcher.Invoke(() =>
+                    WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized);
+                return Task.FromResult<System.Text.Json.JsonElement?>(null);
+            }
+            // Deep link (action-panel Configure commands, session drivers): navigate the settings
+            // page to `#/{route}` so it lands on a page or row directly.
+            if (method == "window.openSettingsPage")
+            {
+                var route = data is { ValueKind: System.Text.Json.JsonValueKind.Object } routePayload
+                    && routePayload.TryGetProperty("route", out var routeValue)
+                    ? routeValue.GetString()
+                    : null;
+                if (!string.IsNullOrWhiteSpace(route))
+                {
+                    Dispatcher.Invoke(() => OpenPage(route));
+                }
                 return Task.FromResult<System.Text.Json.JsonElement?>(null);
             }
             return frontendDispatch?.Invoke(method, data) ?? Task.FromResult<System.Text.Json.JsonElement?>(null);
@@ -122,6 +160,14 @@ public sealed class SettingsWindow : Window
         // Second instance semantics: closing the window hides it; opening Settings brings it back
         // (the same contract the launcher window uses).
         SaveBounds();
+    }
+
+    /// <summary>Navigates the settings page to `#/{route}` (deep link to a page or `page?row=id`).</summary>
+    public void OpenPage(string route)
+    {
+        var html = Path.Combine(_frontendRoot, "dist", "settings.html");
+        var baseUri = File.Exists(html) ? "https://raycast.mini/dist/settings.html" : $"file:///{html}";
+        _webView.CoreWebView2?.Navigate($"{baseUri}#/{route.TrimStart('/')}");
     }
 
     /// <summary>Deliver a host-originated message to this window's renderer (`z.frontend.*`).</summary>
