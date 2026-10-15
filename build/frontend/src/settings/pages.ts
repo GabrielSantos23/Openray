@@ -16,9 +16,13 @@ export type ControlKind =
   | "textarea"
   | "textarea-commit"
   | "text"
+  | "interfaceSize"
+  | "windowMode"
   | "none";/** The version the launcher reports everywhere else, kept in one place. */
 export const VERSION = "2.4.0.0";
 export const HOST_NAME = "This Computer";
+/** Raycast's default hotkey is the Win key; the clone keeps its registrable default. */
+export const RAYCASTMINI_DEFAULT_HOTKEY = "Alt + Space";
 export interface RowDefinition {
   id: string;
   title: string;
@@ -69,6 +73,8 @@ export interface PageDefinition {
   icon: string;
   sections: SectionDefinition[];
   keywords: string[];
+  /** Pro-gated page in Raycast (badge in the sidebar); rows render disabled here. */
+  pro?: boolean;
   /** Shown when the page has no renderable sections at all. */
   empty?: string;
 }
@@ -113,7 +119,7 @@ export const PAGES: readonly PageDefinition[] = [
           { id: "open-at-login", title: "Open at Login", control: "switch" },
           { id: "show-in-menu-bar", title: "Show in System Tray", control: "switch" },
           { id: "automatically-show-taskbar", title: "Automatically Show the Taskbar", control: "switch" },
-          { id: "raycast-hotkey", title: "Raycast Hotkey", control: "hotkey", value: "Ctrl + Alt + Space" },
+          { id: "raycast-hotkey", title: "Raycast Hotkey", control: "hotkey", value: RAYCASTMINI_DEFAULT_HOTKEY },
         ],
       },
       {
@@ -135,22 +141,21 @@ export const PAGES: readonly PageDefinition[] = [
             id: "interface-size",
             title: "Interface Size",
             description: "Adjust the size of the Raycast interface",
-            control: "radio",
-            options: INTERFACE_SIZES,
+            control: "interfaceSize",
+            options: ["1", "1.1", "1.2"],
           },
           {
             id: "window-mode",
             title: "Window Mode",
             description: "Choose your preferred mode when opening Raycast",
-            control: "radio",
-            options: WINDOW_MODES,
+            control: "windowMode",
+            options: ["compact", "expanded"],
           },
           {
             id: "show-favorites-in-compact-mode",
             title: "Show Favorites in Compact Mode",
             description: "Show your favorites as icons in the compact window",
             control: "switch",
-            unavailable: true,
           },
         ],
       },
@@ -171,14 +176,23 @@ export const PAGES: readonly PageDefinition[] = [
             id: "show-raycast-on",
             title: "Show Raycast on",
             control: "select",
-            options: ["Primary display", "Display with mouse", "Active display"],
+            options: ["Screen containing mouse", "Screen with active window", "Primary screen"],
           },
           {
             id: "pop-to-root-search",
             title: "Pop to Root Search",
             description: "Timeout after which Raycast will reset to root search after closing the window.",
             control: "select",
-            options: ["Immediately", "After 1 minute", "After 5 minutes", "Never"],
+            options: [
+              "Immediately",
+              "After 5 seconds",
+              "After 15 seconds",
+              "After 30 seconds",
+              "After 60 seconds",
+              "After 90 seconds",
+              "After 120 seconds",
+              "After 180 seconds",
+            ],
           },
           {
             id: "root-search-sensitivity",
@@ -186,21 +200,14 @@ export const PAGES: readonly PageDefinition[] = [
             description:
               "Search sensitivity controls the number of matching results presented in Root Search. Low sensitivity produces many results for a search term, while high sensitivity displays fewer results.",
             control: "select",
-            options: ["Low", "Balanced", "High"],
+            options: ["Low", "Medium", "High"],
           },
           {
             id: "reset-search-history",
             title: "Search History",
             description: "Clear recent searches restored when pressing the up arrow in Root Search.",
             control: "action",
-            action: "Clear Search History",
-          },
-          {
-            id: "reset-all-rankings",
-            title: "Reset All Rankings",
-            description: "Clear all learned usage data for apps, files, and commands.",
-            control: "action",
-            action: "Reset All Rankings",
+            action: "Reset",
           },
         ],
       },
@@ -271,10 +278,11 @@ export const PAGES: readonly PageDefinition[] = [
           {
             id: "escape-key-behavior",
             title: "Escape Key Behavior",
-            description: "Choose what happens when pressing Escape in the Main window.",
+            description:
+              "Preferred behavior for the Main window when the Escape key is pressed. The default behavior is to clear the search → navigate back → close the window in the Main window.\n\nThis setting applies only to the Main window.\n\nChange to \"Close window and pop to root\" to immediately close the window on Escape.",
             control: "select",
-            options: ["Pop to Root Search", "Close Window"],
-            value: "Pop to Root Search",
+            options: ["Navigate back or close window", "Close window and pop to root"],
+            value: "Navigate back or close window",
           },
           {
             id: "escape-key-closes-window",
@@ -287,7 +295,8 @@ export const PAGES: readonly PageDefinition[] = [
             title: "Auto-switch Input Source",
             description:
               "Automatically switch to the selected keyboard input source when opening Raycast. The previous input source will be restored when closing.",
-            control: "switch",
+            control: "select",
+            options: ["None"],
             unavailable: true,
           },
           {
@@ -295,23 +304,62 @@ export const PAGES: readonly PageDefinition[] = [
             title: "Navigation Bindings",
             description: "Key bindings for quick navigation in supported controls.",
             control: "select",
-            options: ["Default", "Vim"],
+            options: ["Emacs (Alt+B, Alt+F, Alt+P, Alt+N)", "Vim Motions (Alt+H, Alt+L, Alt+K, Alt+J)"],
+            value: "Emacs (Alt+B, Alt+F, Alt+P, Alt+N)",
           },
           {
             id: "page-navigation-keys",
             title: "Page Navigation Keys",
             description: "Key equivalent for navigating back and forward in paginated context.",
-            control: "hotkey",
+            control: "select",
+            options: ["Square Brackets", "Arrow Keys"],
+            value: "Square Brackets",
+          },
+          {
+            id: "hyper-key",
+            title: "Hyper Key",
+            description:
+              "Select a physical key to remap to the Ctrl+Alt+Shift+Win modifier keys simultaneously.",
+            control: "select",
+            options: [
+              "None",
+              "Caps Lock (⇪)",
+              "Left Ctrl",
+              "Left Shift",
+              "Left Alt",
+              "Left Win",
+              "Right Ctrl",
+              "Right Shift",
+              "Right Alt",
+              "Right Win",
+              "F1",
+              "F2",
+              "F3",
+              "F4",
+              "F5",
+              "F6",
+              "F7",
+              "F8",
+              "F9",
+              "F10",
+              "F11",
+              "F12",
+              "Copilot",
+            ],
             unavailable: true,
           },
           {
-            id: "builtin-hotkeys-preset",
-            title: "Built-in Hotkeys Preset",
-            control: "select",
-            options: ["Restore Defaults"],
+            id: "hyper-key-include-shift",
+            title: "Include Shift (⇧)",
+            control: "switch",
             unavailable: true,
           },
-          { id: "hyper-key", title: "Hyper Key", control: "switch", unavailable: true },
+          {
+            id: "hyper-key-display-shortcut",
+            title: "Replace occurrences of Ctrl+Alt+Shift+Win with ✦",
+            control: "switch",
+            unavailable: true,
+          },
         ],
       },
     ],
@@ -321,6 +369,7 @@ export const PAGES: readonly PageDefinition[] = [
     title: "Cloud Sync",
     description: "Enable cloud sync for settings and content across devices.",
     icon: "cloud-sync",
+    pro: true,
     keywords: ["backup", "cloud", "raycast pro", "sync"],
     sections: [
       {
@@ -735,7 +784,7 @@ export const PAGES: readonly PageDefinition[] = [
     ],
   },
   {
-    id: "focus",
+    id: "raycast-focus",
     title: "Raycast Focus",
     description: "Manage focus sessions and categories.",
     icon: "clock",
@@ -1070,6 +1119,108 @@ export const PAGES: readonly PageDefinition[] = [
       },
     ],
   },
+  {
+    id: "ai",
+    title: "AI",
+    description: "AI commands, models, and defaults.",
+    icon: "Bolt",
+    pro: true,
+    keywords: ["ai", "artificial intelligence", "chat", "models"],
+    empty: "AI features are not available in RaycastMini.",
+    sections: [],
+  },
+  {
+    id: "applications",
+    title: "Applications",
+    description: "Quickly launch your installed applications.",
+    icon: "app-window-list",
+    keywords: ["applications", "directories", "folders", "hotkey action", "search scope", "apps"],
+    sections: [
+      {
+        id: "applications",
+        rows: [
+          {
+            id: "applications-auto-quit",
+            title: "Auto Quit",
+            description: "Automatically quit apps shortly after you stop using them.",
+            control: "action",
+            action: "Configure",
+            unavailable: true,
+          },
+          {
+            id: "applications-hotkey-action",
+            title: "Hotkey Action",
+            description: "Behavior when triggering an application hotkey.",
+            control: "select",
+            options: ["Toggle Visibility", "Always Show"],
+            value: "Toggle Visibility",
+          },
+          {
+            id: "applications-deep-search",
+            title: "Deep Search",
+            description: "Search up to 3 levels deep inside added directories",
+            control: "switch",
+            unavailable: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "browser",
+    title: "Browser",
+    description: "Control your browser with Raycast.",
+    icon: "globe",
+    keywords: ["browser", "chrome", "firefox", "tabs"],
+    empty: "Browser integration is not available in RaycastMini.",
+    sections: [],
+  },
+  {
+    id: "developer",
+    title: "Developer",
+    description: "Search and run scripts and develop extensions.",
+    icon: "code",
+    keywords: ["developer", "extensions", "scripts", "debug"],
+    empty: "Developer tools are not available in RaycastMini.",
+    sections: [],
+  },
+  {
+    id: "dictation",
+    title: "Dictation",
+    description: "Convert your speech into text with AI-powered dictation.",
+    icon: "info",
+    pro: true,
+    keywords: ["dictation", "speech", "transcription", "voice"],
+    empty: "Dictation is not available in RaycastMini.",
+    sections: [],
+  },
+  {
+    id: "emoji-symbols",
+    title: "Emoji & Symbols",
+    description: "Search emojis and symbols and copy them to your clipboard.",
+    icon: "at-symbol",
+    keywords: ["emoji", "emoticon", "kaomoji", "symbol", "unicode"],
+    empty: "Emoji search is not available in RaycastMini.",
+    sections: [],
+  },
+  {
+    id: "screenshots",
+    title: "Screenshots",
+    description: "Capture, annotate, and organize screenshots.",
+    icon: "image",
+    keywords: ["screenshot", "capture", "screen", "recording"],
+    empty: "Screenshots are not available in RaycastMini.",
+    sections: [],
+  },
+  {
+    id: "windows-run",
+    title: "Windows Run",
+    description: "Run commands, files, and URLs with the Windows Run dialog.",
+    icon: "app-window",
+    keywords: ["run", "commands", "shell", "windows"],
+    empty: "Windows Run is not available in RaycastMini.",
+    sections: [],
+  },
 ];
 
 
@@ -1078,25 +1229,35 @@ export const SIDEBAR_PAGE_IDS = [
   "general",
   "launcher",
   "shortcuts",
-  "extensions",
   "keyboard",
-  "quicklinks",
-  "snippets",
-  "calculator",
-  "translator",
-  "file-search",
-  "window-management",
-  "focus",
-  "games",
-  "taskbar",
-  "notes",
-  "clipboard-history",
   "cloud-sync",
   "advanced",
   "organizations",
-  "internal",
-  "remote",
   "about",
+];
+
+/** The extension-pages group under the root pages, alphabetical like Raycast's sidebar. */
+export const EXTENSION_PAGE_IDS = [
+  "ai",
+  "applications",
+  "browser",
+  "calculator",
+  "clipboard-history",
+  "developer",
+  "dictation",
+  "emoji-symbols",
+  "file-search",
+  "games",
+  "notes",
+  "quicklinks",
+  "raycast-focus",
+  "remote",
+  "screenshots",
+  "snippets",
+  "taskbar",
+  "translator",
+  "window-management",
+  "windows-run",
 ];
 
 // ---------------------------------------------------------------------------------------------

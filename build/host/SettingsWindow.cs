@@ -52,16 +52,23 @@ public sealed class SettingsWindow : Window
         // The settings page talks to the backend through the same IPC bridge the launcher uses;
         // without it the page's `ipc.backend(...)` calls all fail and e.g. the extensions page
         // would stay empty forever.
-        if (backendDispatch != null)
+        _bridge = new WebViewBridge(_webView);
+        _bridge.Install((method, _jsonParams, data, isBackend) =>
         {
-            _bridge = new WebViewBridge(_webView);
-            _bridge.Install((method, _jsonParams, data, isBackend) =>
-                isBackend ? backendDispatch(method, data) : Task.FromResult<System.Text.Json.JsonElement?>(null));
-        }
-        else
-        {
-            _bridge = new WebViewBridge(_webView);
-        }
+            if (isBackend) return backendDispatch?.Invoke(method, data) ?? Task.FromResult<System.Text.Json.JsonElement?>(null);
+            // The in-page caption buttons (the window draws its own titlebar like Raycast's).
+            if (method == "window.minimize")
+            {
+                Dispatcher.Invoke(() => WindowState = WindowState.Minimized);
+                return Task.FromResult<System.Text.Json.JsonElement?>(null);
+            }
+            if (method == "window.closeSettings")
+            {
+                Dispatcher.Invoke(Close);
+                return Task.FromResult<System.Text.Json.JsonElement?>(null);
+            }
+            return Task.FromResult<System.Text.Json.JsonElement?>(null);
+        });
 
         // Opaque: the settings page paints its own surfaces on top of this colour, matching
         // Raycast's #1f1f1f window background.
@@ -111,6 +118,13 @@ public sealed class SettingsWindow : Window
         // Second instance semantics: closing the window hides it; opening Settings brings it back
         // (the same contract the launcher window uses).
         SaveBounds();
+    }
+
+    /// <summary>Deliver a host-originated message to this window's renderer (`z.frontend.*`).</summary>
+    public void PostToRenderer(string method, System.Text.Json.JsonElement? data)
+    {
+        var payload = System.Text.Json.JsonSerializer.Serialize(new { module = "frontend", method, data });
+        Dispatcher.Invoke(() => _webView.CoreWebView2?.PostWebMessageAsJson(payload));
     }
 
     /// <summary>Actually close on shutdown, so the process is never kept alive by this window.</summary>

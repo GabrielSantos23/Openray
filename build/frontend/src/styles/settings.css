@@ -1,36 +1,169 @@
 /* ==========================================================================================
-   Settings window — a rebuild of Raycast's `settings-window-view` + `settings-ui` layout.
+   Settings window — pixel-faithful rebuild of Raycast for Windows 2.4.0's settings UI.
 
-   Sidebar:  title bar ("Settings"), search field, account link, then one nav section holding
-             the root pages in Raycast's exact order.
-   Content:  navigation header with breadcrumbs, then page title/description followed by
-             Sections whose rows live in a translucent card, split by hairlines.
+   Sources: docs/settings-design-spec.md (tokens measured from the shipped frontend CSS and
+   rendered screenshots). Rendered dark values: window #1f1f1f, card #242424 (fg 2.5%),
+   control/selection #353535 (fg 10%), hover/titlebar #2a2a2a (fg 5%), toggle-off #505050
+   (fg 20%), separators fg 5%/10%.
    ========================================================================================== */
 
 .settings-window {
+  /* The ramp tokens below mirror Raycast's fg/N overlays on the opaque window surface. */
+  --settings-fg: 255 255 255;
+  --settings-bg: #1f1f1f;
+  --settings-fg-2_5: #242424;
+  --settings-fg-5: #2a2a2a;
+  --settings-fg-10: #353535;
+  --settings-fg-20: #505050;
+  --settings-fg-40: #7c7c7c;
+  --settings-fg-60: #a7a7a7;
+  --settings-text-primary: #ffffff;
+  --settings-text-secondary: var(--settings-fg-60);
+  --settings-text-tertiary: var(--settings-fg-40);
+  --settings-text-quaternary: var(--settings-fg-20);
+  --settings-separator: #303030;
+  --settings-separator-strong: #373737;
+  --settings-accent: var(--accent, #0078d4);
+  --settings-blue: #56c2ff;
+  --settings-red: #ff6363;
+  --settings-green: #59d499;
+  --settings-focus-ring: 1px solid rgba(255, 255, 255, 0.5);
+  --settings-shadow-panel:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
+    0 20px 25px -5px rgba(0, 0, 0, 0.2);
+  --settings-popover: #3a3a3a;
+
   display: flex;
   height: 100%;
   min-height: 0;
-  /* Opaque: Raycast's settings window is a solid surface, unlike the launcher's translucent
-     panel, so the frosted `.window` treatment is deliberately not used here. */
-  background: var(--color-settings-window);
-  color: var(--color-settings-text);
+  background: var(--settings-bg);
+  color: var(--settings-text-primary);
   font-size: var(--font-size-13);
   overflow: hidden;
+  user-select: none;
 }
 
-/* ---- sidebar ---------------------------------------------------------------------------- */
+/* ---- window chrome ----------------------------------------------------------------------- */
+
+.settings-chrome {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-width: 0;
+}
+
+.settings-titlebar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--window-header-height);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-8) 0 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.settings-titlebar > * {
+  pointer-events: auto;
+}
+
+/* The window drags from the header rows; interactive elements opt out. */
+.settings-titlebar button,
+.settings-titlebar input {
+  pointer-events: auto;
+}
+
+.settings-titlebar__sidebarLabel {
+  width: var(--settings-sidebar-width);
+  flex: none;
+  padding-left: var(--space-16);
+  color: var(--settings-text-secondary);
+  font-family: "Segoe UI Variable", "Segoe UI", InterVariable, sans-serif;
+  transform: translateY(-1px);
+}
+
+.settings-titlebar__nav {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 100%;
+  padding: 0 var(--space-16);
+}
+
+.settings-titlebar__chevron {
+  width: var(--space-16);
+  height: var(--space-16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--settings-text-tertiary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.settings-titlebar__chevron:hover:not(:disabled) {
+  color: var(--settings-text-primary);
+}
+
+.settings-titlebar__chevron:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-titlebar__page {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--settings-text-primary);
+  font-family: "Segoe UI Variable", "Segoe UI", InterVariable, sans-serif;
+}
+
+.settings-titlebar__caption {
+  margin-left: auto;
+  display: flex;
+  align-items: stretch;
+  flex: none;
+}
+
+.settings-caption-button {
+  width: 46px;
+  height: var(--window-header-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--settings-text-secondary);
+  cursor: pointer;
+}
+
+.settings-caption-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--settings-text-primary);
+}
+
+.settings-caption-button--close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+/* ---- sidebar ----------------------------------------------------------------------------- */
 
 .settings-sidebar {
-  --sidebar-width: 240px;
-  width: var(--sidebar-width);
+  --settings-sidebar-width: 232px;
+  width: var(--settings-sidebar-width);
   flex: none;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  border-right: 1px solid var(--color-settings-sidebar-separator);
-  background: var(--color-settings-window);
+  border-right: 1px solid var(--settings-separator-strong);
+  background: var(--settings-bg);
 }
 
 .settings-sidebar__titlebar {
@@ -39,66 +172,103 @@
   height: var(--window-header-height);
   min-height: var(--window-header-height);
   flex: none;
-  padding: 0 var(--space-12);
-  border-bottom: 1px solid var(--color-settings-sidebar-separator);
+  padding-left: var(--space-16);
+  background: var(--settings-fg-5);
 }
 
-.settings-sidebar__titletext {
-  color: var(--color-settings-text-secondary);
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-500);
+.settings-sidebar__titlebar::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--window-header-height) - 1px);
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--settings-separator-strong);
+}
+
+/* The sidebar's titlebar strip is drawn by the chrome overlay; this spacer keeps the search
+   below the 40px header. */
+.settings-sidebar__spacer {
+  height: var(--window-header-height);
+  flex: none;
+  background: var(--settings-fg-5);
+  border-bottom: 1px solid var(--settings-separator-strong);
 }
 
 .settings-sidebar__search {
-  position: relative;
   flex: none;
-  padding: var(--space-12) var(--space-8) var(--space-4);
+  padding: var(--space-12) var(--space-12) var(--space-4) var(--space-10);
 }
 
-.settings-sidebar__searchIcon {
-  position: absolute;
-  left: calc(var(--space-8) + var(--space-8));
-  top: 50%;
-  transform: translateY(-50%);
+.settings-searchField {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--space-32);
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-8);
+  background: var(--settings-fg-10);
+  color: var(--settings-text-primary);
+}
+
+.settings-searchField:focus-within {
+  box-shadow: inset 0 0 0 1px var(--settings-fg-20);
+}
+
+.settings-searchField__icon {
+  flex: none;
   display: inline-flex;
-  color: var(--color-settings-text-secondary);
-  pointer-events: none;
+  color: var(--settings-text-tertiary);
 }
 
-.settings-sidebar__searchInput {
-  width: 100%;
-  height: var(--space-24);
-  padding: 0 var(--space-8) 0 calc(var(--space-8) + var(--space-16) + var(--space-4));
+.settings-searchField__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   border: 0;
-  border-radius: var(--radius-6);
-  background: var(--color-settings-sidebar-separator);
-  color: var(--color-settings-text);
+  background: none;
+  color: inherit;
   font: inherit;
-  font-size: var(--font-size-11);
   outline: none;
 }
 
-.settings-sidebar__searchInput::placeholder {
-  color: var(--color-settings-text-secondary);
+.settings-searchField__input::placeholder {
+  color: var(--settings-text-tertiary);
+}
+
+.settings-searchField__clear {
+  flex: none;
+  width: var(--space-16);
+  height: var(--space-16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--settings-text-secondary);
+  cursor: pointer;
+  padding: 0;
 }
 
 .settings-sidebar__scroll {
   flex: 1;
   min-height: 0;
   overflow: hidden auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--settings-fg-20) transparent;
 }
 
 .settings-sidebar__content {
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
-  padding: var(--space-4) var(--space-8) var(--space-12);
+  padding: var(--space-8) var(--space-10) var(--space-10);
 }
 
-.settings-sidebar__section {
+.settings-sidebar__group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 1px;
 }
 
 .settings-navlink {
@@ -107,40 +277,39 @@
   gap: var(--space-8);
   width: 100%;
   height: var(--space-32);
+  flex: none;
   padding: 0 var(--space-6);
   border: 0;
-  border-radius: var(--radius-6);
+  border-radius: var(--radius-8);
   background: none;
-  color: var(--color-text-primary);
+  color: var(--settings-text-primary);
   font: inherit;
-  font-size: var(--font-size-13);
   text-align: left;
-  text-decoration: none;
   cursor: pointer;
   user-select: none;
-  -webkit-user-drag: none;
 }
 
 .settings-navlink:hover {
-  background: #2a2a2a;
+  background: var(--settings-fg-5);
 }
 
 .settings-navlink[data-active="true"] {
-  background: #2a2a2a;
+  background: var(--settings-fg-10);
+}
+
+.settings-navlink:focus-visible {
+  outline: var(--settings-focus-ring);
+  outline-offset: -1px;
 }
 
 .settings-navlink__icon {
-  width: var(--space-16);
-  height: var(--space-16);
+  width: var(--icon-22, 22px);
+  height: var(--icon-22, 22px);
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-settings-text-secondary);
-}
-
-.settings-navlink[data-active="true"] .settings-navlink__icon {
-  color: var(--color-settings-text);
+  color: var(--settings-text-primary);
 }
 
 .settings-navlink__label {
@@ -151,7 +320,19 @@
   white-space: nowrap;
 }
 
-.settings-navlink__text {
+.settings-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: var(--space-16);
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-full);
+  background: rgba(86, 194, 255, 0.1);
+  color: var(--settings-blue);
+  font-size: var(--font-size-11);
+}
+
+.settings-navlink__resultText {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -159,8 +340,8 @@
 }
 
 .settings-navlink__group {
-  color: var(--color-settings-text-secondary);
-  font-size: var(--font-size-8);
+  color: var(--settings-text-tertiary);
+  font-size: var(--font-size-11);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -172,7 +353,49 @@
   padding: var(--space-4) var(--space-6);
 }
 
-/* ---- main ------------------------------------------------------------------------------- */
+/* Account block */
+.settings-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  width: 100%;
+  padding: var(--space-6);
+  border: 0;
+  border-radius: var(--radius-8);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.settings-account__avatar {
+  width: var(--space-40);
+  height: var(--space-40);
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--settings-fg-10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--settings-text-tertiary);
+}
+
+.settings-account__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-account__subtitle {
+  display: block;
+  color: var(--settings-text-secondary);
+  font-size: var(--font-size-11);
+}
+
+/* ---- main + page ------------------------------------------------------------------------- */
 
 .settings-main {
   flex: 1;
@@ -181,36 +404,32 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  position: relative;
 }
 
-.settings-navigationHeader {
+.settings-header {
   display: flex;
   align-items: center;
+  gap: var(--space-8);
   height: var(--window-header-height);
   min-height: var(--window-header-height);
   flex: none;
   padding: 0 var(--space-16);
-  /* The host draws the minimise / maximise / close buttons over this corner; Raycast reserves
-     the same ~96px for them in its own header (`--settings-window-caption-buttons-width`). */
-  padding-right: 96px;
-  border-bottom: 1px solid var(--color-settings-sidebar-separator);
 }
 
-.settings-navigationHeader__breadcrumbs {
+.settings-header__controls {
+  margin-left: auto;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  color: var(--color-settings-text-secondary);
-}
-
-.settings-navigationHeader__crumb--current {
-  color: var(--color-settings-text);
+  gap: var(--space-8);
 }
 
 .settings-page__scroll {
   flex: 1;
   min-height: 0;
   overflow: hidden auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--settings-fg-20) transparent;
 }
 
 .settings-page {
@@ -218,38 +437,38 @@
   flex-direction: column;
   gap: var(--space-16);
   padding: var(--space-16);
-  max-width: 720px;
 }
 
-.settings-page__heading {
+/* Extension pages: centered intro block (54px icon, title, description ≤500px). */
+.settings-page__intro {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 186px;
+  padding: var(--space-16) 0 var(--space-32);
+  text-align: center;
 }
 
-.settings-page__title {
-  margin: 0;
-  font-size: var(--font-size-20);
-  font-weight: var(--font-weight-600);
+.settings-page__introIcon {
+  width: 54px;
+  height: 54px;
+  margin-bottom: var(--space-8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.settings-page__description {
-  margin: 0;
-  color: var(--color-settings-text-secondary);
-  font-size: var(--font-size-11);
+.settings-page__introText {
+  max-width: 500px;
 }
 
-.settings-page__empty,
-.settings-section__empty {
-  color: var(--color-settings-text-secondary);
-  font-size: var(--font-size-11);
+.settings-page__introDescription {
+  color: var(--settings-text-secondary);
+  text-wrap: pretty;
 }
 
-.settings-page__empty {
-  padding: var(--space-16) 0;
-}
-
-/* ---- sections + rows (Raycast's `settings-ui__*`) --------------------------------------- */
+/* ---- sections + rows --------------------------------------------------------------------- */
 
 .settings-section {
   display: flex;
@@ -263,17 +482,15 @@
   justify-content: space-between;
   min-height: var(--space-32);
   margin: 0;
-  padding-left: var(--space-12);
   font-size: var(--font-size-13);
   font-weight: var(--font-weight-500);
 }
 
-.settings-section__description {
-  margin: 0;
-  padding: 0 var(--space-12) var(--space-8);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-11);
-  line-height: 1.45;
+.settings-section__titleInner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-left: var(--space-12);
 }
 
 .settings-section__content {
@@ -281,14 +498,15 @@
   flex-direction: column;
   align-items: stretch;
   min-height: 28px;
-  border-radius: var(--radius-8);
-  /* Raycast's row card: #242424 over the #1f1f1f window surface. */
-  background: var(--color-settings-card);
+  border-radius: var(--radius-6);
+  background: var(--settings-fg-2_5);
   overflow: hidden;
 }
 
 .settings-section__empty {
   padding: var(--space-4) var(--space-12) var(--space-8);
+  color: var(--settings-text-secondary);
+  font-size: var(--font-size-11);
 }
 
 .settings-row {
@@ -298,52 +516,80 @@
   min-height: 46px;
   padding: var(--space-12);
   border-radius: var(--radius-8);
+  position: relative;
 }
 
-.settings-row + .settings-row {
-  border-top: 1px solid var(--color-settings-separator);
-}
-
-/* Raycast centres rows that have no description (`data-align=center`). */
 .settings-row[data-align="center"] {
   align-items: center;
 }
 
-.settings-row__column {
+.settings-row + .settings-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--settings-separator);
+}
+
+.settings-row[data-highlight="true"] {
+  animation: settings-row-highlight 2s ease-out;
+}
+
+@keyframes settings-row-highlight {
+  0% { background: transparent; }
+  20% { background: rgba(255, 255, 255, 0.05); }
+  80% { background: rgba(255, 255, 255, 0.05); }
+  100% { background: transparent; }
+}
+
+.settings-row__left {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row__text {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-4);
   flex: 1;
   min-width: 0;
 }
 
 .settings-row__title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
   font-size: var(--font-size-13);
+  color: var(--settings-text-primary);
+  align-self: start;
 }
 
-.settings-row__pro {
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-4);
-  background: rgb(from var(--accent) r g b / 20%);
-  color: var(--accent);
-  font-size: var(--font-size-8);
-  font-weight: var(--font-weight-600);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.settings-row__description,
-.settings-row__unavailable {
-  color: var(--color-settings-text-secondary);
+.settings-row__description {
+  color: var(--settings-text-secondary);
   font-size: var(--font-size-11);
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.settings-row__description[data-clamped="true"] {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.settings-row__showMore {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--settings-text-primary);
+  font-size: var(--font-size-11);
+  cursor: pointer;
+  align-self: start;
 }
 
 .settings-row__unavailable {
-  color: var(--color-settings-text-secondary);
-  font-style: italic;
+  color: var(--settings-text-tertiary);
+  font-size: var(--font-size-11);
 }
 
 .settings-row__right {
@@ -354,199 +600,385 @@
   gap: var(--space-8);
 }
 
-.settings-row__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-}
-
 .settings-row__value {
-  color: var(--color-settings-text-secondary);
+  color: var(--settings-text-secondary);
   font-size: var(--font-size-11);
   white-space: nowrap;
 }
 
-/* ---- controls ---------------------------------------------------------------------------
-   Rebuilt from Raycast's shipped primitives: `input-field-primitive__*`, `dropdown-button__*`
-   and `keyboard-shortcut-recorder__*` (plus `visual-shortcut__*` for the key chips).
-   -------------------------------------------------------------------------------------- */
-
-/* --- switch ----------------------------------------------------------------------------- */
+/* ---- controls: switch -------------------------------------------------------------------- */
 
 .settings-switch {
   position: relative;
-  width: 32px;
-  height: 18px;
+  width: 28px;
+  height: 16px;
   flex: none;
   padding: 0;
   border: 0;
   border-radius: var(--radius-full);
-  background: #3f3f3f;
+  background: var(--settings-fg-20);
   cursor: pointer;
-  transition: background-color 120ms ease-out;
+  transition: background-color 0.1s ease;
 }
 
 .settings-switch[data-state="on"] {
-  background: #4a9eff;
+  background: var(--settings-accent);
 }
 
-.settings-switch__knob {
+.settings-switch__thumb {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
+  top: 3px;
+  left: 3px;
+  width: 10px;
+  height: 10px;
   border-radius: var(--radius-full);
-  background: #ebebeb;
-  transition: transform 120ms ease-out;
+  background: rgba(255, 255, 255, 0.9);
+  transition: transform 0.1s ease;
 }
 
-.settings-switch[data-state="on"] .settings-switch__knob {
-  transform: translateX(14px);
-  background: #ffffff;
+.settings-switch[data-state="on"] .settings-switch__thumb {
+  transform: translateX(12px);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .settings-switch:disabled {
+  opacity: 0.4;
   cursor: default;
-  opacity: 0.5;
 }
 
-/* --- input field primitive ------------------------------------------------------------- */
+.settings-switch:focus-visible {
+  outline: var(--settings-focus-ring);
+  outline-offset: 2px;
+}
 
-.settings-input {
+/* ---- controls: ghost select + menu popup -------------------------------------------------- */
+
+.settings-select {
   position: relative;
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  display: inline-flex;
+}
+
+.settings-select__trigger {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-8);
-  height: var(--space-32);
-  padding: 0 var(--space-12);
-  border-radius: var(--radius-6);
-  background: var(--color-settings-sidebar-separator);
-  box-shadow: 0 0 0 1px var(--color-settings-separator);
-  cursor: text;
-}
-
-.settings-input[data-state="focus"] {
-  box-shadow: 0 0 0 1px transparent;
-  outline: var(--focus-ring-width, 2px) solid #6b9cff;
-}
-
-.settings-input__icon {
-  display: inline-flex;
-  color: var(--color-settings-text);
-  grid-row: 1;
-}
-
-.settings-input__input {
-  width: 100%;
-  height: 100%;
+  height: var(--space-24);
+  min-height: var(--space-24);
+  padding: 0 var(--space-6) 0 var(--space-8);
   border: 0;
+  border-radius: var(--radius-4);
   background: none;
-  color: var(--color-settings-text);
+  color: var(--settings-text-primary);
   font: inherit;
-  font-size: var(--font-size-13);
-  outline: none;
-  grid-column: 2;
-}
-
-.settings-input__input::placeholder {
-  color: #7a7a7a;
-}
-
-/* --- dropdown button ------------------------------------------------------------------- */
-
-.settings-dropdown {
-  position: relative;
-  display: inline-flex;
-}
-
-.settings-dropdownButton {
-  align-items: center;
-  gap: var(--space-8);
-  height: var(--space-32);
-  min-height: var(--space-32);
-  padding: 0 var(--space-8) 0 var(--space-12);
-  border: 0;
-  border-radius: var(--radius-6);
-  background: var(--color-settings-dropdown);
-  box-shadow: 0 0 0 1px var(--color-settings-dropdown-border);
-  color: var(--color-settings-text);
-  font: inherit;
-  font-size: var(--font-size-13);
   cursor: pointer;
 }
 
-.settings-dropdownButton:where(:hover),
-.settings-dropdownButton[data-state="open"] {
-  background: #2e2e2e;
+.settings-select__trigger:hover {
+  background: var(--settings-fg-5);
 }
 
-.settings-dropdownButton:focus-visible,
-.settings-dropdownButton[data-state="open"] {
-  box-shadow: 0 0 0 1px transparent;
-  outline: var(--focus-ring-width, 2px) solid #6b9cff;
+.settings-select__trigger[data-state="open"] {
+  background: var(--settings-fg-10);
 }
 
-.settings-dropdownButton__text {
+.settings-select__trigger:focus-visible {
+  outline: var(--settings-focus-ring);
+}
+
+.settings-select__trigger:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-select__label {
   flex: 1;
   text-align: left;
   white-space: nowrap;
 }
 
-.settings-dropdownButton__indicator {
+.settings-select__indicator {
   flex: none;
-  margin-left: auto;
-  color: var(--color-settings-text-secondary);
+  display: inline-flex;
+  color: var(--settings-text-secondary);
   transition: transform 0.25s;
+}
+
+.settings-select__trigger[data-state="open"] .settings-select__indicator {
+  transform: rotate(180deg);
+  color: var(--settings-text-primary);
+}
+
+.settings-select__leadingIcon {
+  flex: none;
   display: inline-flex;
 }
 
-.settings-dropdownButton[data-state="open"] .settings-dropdownButton__indicator {
-  transform: rotate(180deg);
-  color: var(--color-settings-text);
-}
-
-.settings-dropdownButton:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* Raycast's menu popover: blurred panel, 6px radius, panel shadow, open animation. */
+/* Popup menu: opaque panel approximation of the blurred popover, radius 6, panel shadow. */
 .settings-menu {
-  position: absolute;
-  top: calc(100% + var(--space-4));
-  right: 0;
-  z-index: 40;
-  min-width: 100%;
-  max-height: 280px;
+  position: fixed;
+  z-index: 80;
+  min-width: 140px;
+  max-height: 320px;
   overflow: hidden auto;
   display: flex;
   flex-direction: column;
   padding: var(--space-4);
   border-radius: var(--radius-6);
-  background-color: var(--color-settings-popover);
-  background-image: linear-gradient(var(--color-settings-popover-overlay), var(--color-settings-popover-overlay)),
-    linear-gradient(var(--color-settings-popover), var(--color-settings-popover));
-  box-shadow: var(--shadow-panel), 0 0 0 1px #ffffff14;
-  backdrop-filter: blur(120px);
-  -webkit-backdrop-filter: blur(120px);
-  animation: settings-menu-in 0.2s cubic-bezier(0.3, 0.7, 0, 1.26) both;
+  background: var(--settings-popover);
+  box-shadow: var(--settings-shadow-panel);
+  animation: settings-popover-in 0.2s cubic-bezier(0.3, 0.7, 0, 1.26) both;
+  scrollbar-width: thin;
+  scrollbar-color: var(--settings-fg-20) transparent;
 }
 
-@keyframes settings-menu-in {
-  from {
-    opacity: 0.6;
-    transform: scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+@keyframes settings-popover-in {
+  from { opacity: 0.6; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.settings-menu__section {
+  padding: var(--space-4) var(--space-8) var(--space-2);
+  color: var(--settings-text-tertiary);
+  font-size: var(--font-size-11);
+  text-transform: none;
 }
 
 .settings-menu__item {
   display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 28px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-4);
+  background: none;
+  color: var(--settings-text-primary);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.settings-menu__item:hover,
+.settings-menu__item[data-focused="true"] {
+  background: var(--settings-fg-5);
+}
+
+.settings-menu__item[data-selected="true"] .settings-menu__check {
+  visibility: visible;
+}
+
+.settings-menu__check {
+  visibility: hidden;
+  flex: none;
+  display: inline-flex;
+  color: var(--settings-text-primary);
+}
+
+.settings-menu__accessory {
+  margin-left: auto;
+  color: var(--settings-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+.settings-menu__empty {
+  padding: var(--space-16);
+  color: var(--settings-text-quaternary);
+  font-size: var(--font-size-11);
+  text-align: center;
+}
+
+/* ---- controls: buttons ------------------------------------------------------------------- */
+
+.settings-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: var(--space-24);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-4);
+  background: var(--settings-fg-10);
+  box-shadow: inset 0 0 0 1px var(--settings-fg-20);
+  color: var(--settings-text-primary);
+  font: inherit;
+  font-size: var(--font-size-11);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.settings-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.settings-button[data-variant="standout"] {
+  background: var(--settings-fg-20);
+  box-shadow: none;
+}
+
+.settings-button[data-variant="destructive"] {
+  color: var(--settings-red);
+}
+
+.settings-button:focus-visible {
+  outline: var(--settings-focus-ring);
+}
+
+.settings-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-iconButton {
+  width: var(--space-24);
+  height: var(--space-24);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-4);
+  background: none;
+  color: var(--settings-text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.settings-iconButton:hover:not(:disabled) {
+  background: var(--settings-fg-5);
+  color: var(--settings-text-primary);
+}
+
+.settings-iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-iconButton:focus-visible {
+  outline: var(--settings-focus-ring);
+}
+
+/* ---- controls: Aa radio group + window mode ---------------------------------------------- */
+
+.settings-radioGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.settings-radioGroup__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--space-24);
+  min-width: var(--space-32);
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-4);
+  background: none;
+  color: var(--settings-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-radioGroup__item:hover {
+  background: var(--settings-fg-5);
+}
+
+.settings-radioGroup__item[data-active="true"] {
+  background: var(--settings-fg-20);
+  color: var(--settings-text-primary);
+}
+
+.settings-radioGroup__item:focus-visible {
+  outline: var(--settings-focus-ring);
+}
+
+.settings-windowMode {
+  display: flex;
+  gap: var(--space-16);
+}
+
+.settings-windowMode__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-8);
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-windowMode__visual {
+  width: 148px;
+  height: 88px;
+  border-radius: var(--radius-4);
+  overflow: hidden;
+  position: relative;
+  background: var(--settings-fg-10);
+}
+
+.settings-windowMode__item[data-active="false"] .settings-windowMode__visual {
+  filter: grayscale(1);
+}
+
+.settings-windowMode__item[data-active="false"]:hover .settings-windowMode__visual {
+  filter: grayscale(0.5);
+}
+
+.settings-windowMode__item:focus-visible .settings-windowMode__visual {
+  outline: var(--settings-focus-ring);
+  outline-offset: 2px;
+}
+
+.settings-windowMode__label {
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-4);
+  color: var(--settings-text-secondary);
+  transition: color 0.1s, background-color 0.1s;
+}
+
+.settings-windowMode__item[data-active="true"] .settings-windowMode__label {
+  color: var(--settings-text-primary);
+  background: var(--settings-fg-20);
+}
+
+/* ---- controls: keycaps + hotkey recorder -------------------------------------------------- */
+
+.settings-keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-4);
+  box-shadow: inset 0 0 0 1px var(--settings-fg-20);
+  color: var(--settings-text-secondary);
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: slashed-zero;
+  white-space: nowrap;
+}
+
+.settings-keycap--mono {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  text-transform: uppercase;
+}
+
+.settings-keycaps {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-hotkeyTrigger {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-8);
   height: var(--space-24);
@@ -554,106 +986,55 @@
   border: 0;
   border-radius: var(--radius-4);
   background: none;
-  color: var(--color-settings-text);
+  color: var(--settings-text-primary);
   font: inherit;
-  font-size: var(--font-size-13);
-  text-align: left;
-  white-space: nowrap;
+  font-size: var(--font-size-11);
   cursor: pointer;
 }
 
-.settings-menu__item[data-selected="true"] {
-  background: #ffffff14;
+.settings-hotkeyTrigger:hover {
+  background: var(--settings-fg-5);
 }
 
-.settings-menu__item:hover {
-  background: #ffffff14;
+.settings-hotkeyTrigger[data-empty="true"] {
+  color: var(--settings-text-tertiary);
 }
 
-/* --- keyboard shortcut recorder -------------------------------------------------------- */
-
-.settings-hotkeyButton {
-  align-items: center;
-  gap: var(--space-8);
-  height: var(--space-32);
-  min-height: var(--space-32);
-  padding: 0 var(--space-8) 0 var(--space-12);
-  border: 0;
-  border-radius: var(--radius-6);
-  background: var(--color-settings-dropdown);
-  box-shadow: 0 0 0 1px var(--color-settings-dropdown-border);
-  color: var(--color-settings-text);
-  font: inherit;
-  font-size: var(--font-size-13);
-  cursor: pointer;
-}
-
-.settings-hotkeyButton:hover {
-  background: #2e2e2e;
-}
-
-/* The popover Raycast shows while recording: 320px wide, ≤170px tall, arrow, above the
-   trigger, with a command-panel footer. */
 .settings-recorder {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + var(--space-8));
-  z-index: 60;
+  position: fixed;
+  z-index: 90;
   width: 320px;
   max-width: calc(100vw - 48px);
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-8);
-  background-color: var(--color-settings-popover);
-  background-image: linear-gradient(var(--color-settings-popover-overlay), var(--color-settings-popover-overlay)),
-    linear-gradient(var(--color-settings-popover), var(--color-settings-popover));
-  box-shadow: var(--shadow-panel), 0 0 0 1px #ffffff14;
-  backdrop-filter: blur(120px);
-  -webkit-backdrop-filter: blur(120px);
+  background: var(--settings-popover);
+  box-shadow: var(--settings-shadow-panel);
   overflow: hidden;
-  animation: settings-menu-in 0.2s cubic-bezier(0.3, 0.7, 0, 1.26) both;
-}
-
-/* Arrow: Raycast's popover arrow is a rotated square of the same blurred panel. */
-.settings-recorder::after,
-.settings-menu::after {
-  content: "";
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  background: var(--color-settings-popover);
-  transform: rotate(45deg);
-}
-
-.settings-recorder::after {
-  bottom: -6px;
-  right: 24px;
-}
-
-.settings-menu::after {
-  top: -6px;
-  right: 24px;
-}
-
-.settings-recorder[data-variant="conflict"] {
-  background-image: linear-gradient(to bottom, #ff636326, #ff636314, #ff636300);
-  background-color: #ff63631f;
-}
-
-.settings-recorder[data-variant="saved"] {
-  background-image: linear-gradient(to bottom, #59d49926, #59d49914, #59d49900);
-  background-color: #59d4991f;
+  animation: settings-popover-in 0.2s cubic-bezier(0.3, 0.7, 0, 1.26) both;
 }
 
 .settings-recorder__content {
-  flex: 1;
+  height: 122px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: var(--space-12);
-  min-height: 108px;
-  padding: var(--space-12) var(--space-16);
+  gap: var(--space-8);
+  padding: var(--space-12);
+  background-image: linear-gradient(to bottom, var(--recorder-c1, transparent), var(--recorder-c2, transparent), var(--recorder-c3, transparent));
+}
+
+.settings-recorder[data-variant="conflict"] .settings-recorder__content {
+  --recorder-c1: rgba(255, 99, 99, 0.15);
+  --recorder-c2: rgba(255, 99, 99, 0.08);
+  --recorder-c3: transparent;
+}
+
+.settings-recorder[data-variant="saved"] .settings-recorder__content {
+  --recorder-c1: rgba(89, 212, 153, 0.15);
+  --recorder-c2: rgba(89, 212, 153, 0.08);
+  --recorder-c3: transparent;
 }
 
 .settings-recorder__message {
@@ -662,12 +1043,12 @@
   gap: var(--space-4);
   max-width: 100%;
   text-align: center;
-  color: var(--color-settings-text-secondary);
-  font-size: var(--font-size-13);
+  color: var(--settings-text-secondary);
+  font-size: var(--font-size-11);
 }
 
 .settings-recorder__message[data-color="red"] {
-  color: #ff6363;
+  color: var(--settings-red);
 }
 
 .settings-recorder__keys {
@@ -676,64 +1057,55 @@
   align-items: center;
   gap: var(--space-4);
   width: 100%;
-  flex-direction: row;
 }
 
-/* Raycast's `keyButton`: 24px tall interactive key cap with inset top/bottom highlights. */
-.settings-keyChip {
+.settings-keyButton {
   height: var(--space-24);
   min-width: var(--space-24);
-  min-height: var(--space-24);
   padding: 0 var(--space-6);
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: var(--radius-4);
-  background: #ffffff1a;
-  box-shadow: inset 0 -0.5px 0 0 #000c, inset 0 0.5px 0 0 #ffffff4d;
-  color: var(--color-settings-text);
+  background: var(--settings-fg-10);
+  box-shadow: inset 0 -0.5px 0 0 rgba(0, 0, 0, 0.8), inset 0 0.5px 0 0 rgba(255, 255, 255, 0.3);
+  color: var(--settings-text-primary);
   font: inherit;
   font-size: var(--font-size-11);
-  line-height: 1;
-  font-variant-numeric: slashed-zero;
   font-family: "JetBrains Mono", ui-monospace, monospace;
+  line-height: 1;
+  cursor: pointer;
 }
 
-.settings-keyChip[data-variant="hint"] {
+.settings-keyButton[data-variant="hint"] {
   opacity: 0.5;
 }
 
-.settings-keyChip[data-variant="conflict"] {
-  background: #ff63631a;
-}
-
-.settings-keyChip[data-uppercase="true"] {
-  text-transform: uppercase;
+.settings-keyButton[data-variant="conflict"] {
+  background: rgba(255, 99, 99, 0.1);
 }
 
 .settings-recorder__footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-12);
   height: var(--space-40);
-  width: 100%;
   flex: none;
   padding: 0 var(--space-8) 0 var(--space-16);
-  margin-top: auto;
-  border-top: 0.5px solid var(--color-settings-separator);
+  border-top: 1px solid var(--settings-separator);
 }
 
 .settings-recorder__info {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--color-settings-text);
-  font-size: var(--font-size-13);
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--settings-text-secondary);
+  font-size: var(--font-size-11);
 }
 
 .settings-recorder__actions {
@@ -751,81 +1123,389 @@
   border: 0;
   border-radius: var(--radius-4);
   background: none;
-  color: var(--color-settings-text-secondary);
+  color: var(--settings-text-secondary);
   font: inherit;
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-11);
   cursor: pointer;
 }
 
 .settings-recorder__action:hover:not(:disabled) {
-  background: var(--fg-5);
-  color: var(--color-settings-text);
+  background: var(--settings-fg-5);
+  color: var(--settings-text-primary);
 }
 
-.settings-radio {
+/* ---- controls: checkbox ------------------------------------------------------------------- */
+
+.settings-checkbox {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin: 0;
+  border: 0;
+  border-radius: var(--radius-2);
+  box-shadow: 0 0 0 1px var(--settings-fg-20);
+  background: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.settings-checkbox:checked,
+.settings-checkbox:indeterminate {
+  background: none;
+}
+
+.settings-checkbox:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-checkbox:focus-visible {
+  outline: var(--settings-focus-ring);
+}
+
+.settings-checkbox__mark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* ---- text field --------------------------------------------------------------------------- */
+
+.settings-textfield {
+  height: var(--space-24);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-4);
+  background: none;
+  color: var(--settings-text-primary);
+  font: inherit;
+  outline: none;
+}
+
+.settings-textfield::placeholder {
+  color: var(--settings-text-tertiary);
+}
+
+.settings-textfield:hover:not(:disabled):not(:focus) {
+  box-shadow: inset 0 0 0 1px var(--settings-fg-20);
+}
+
+.settings-textfield:focus {
+  outline: var(--settings-focus-ring);
+}
+
+.settings-textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-6) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-4);
+  background: var(--settings-fg-5);
+  color: var(--settings-text-primary);
+  font: inherit;
+  font-size: var(--font-size-11);
+  line-height: 1.5;
+  outline: none;
+  resize: vertical;
+  user-select: text;
+}
+
+.settings-textarea:focus {
+  outline: var(--settings-focus-ring);
+}
+
+/* ---- Shortcuts table ---------------------------------------------------------------------- */
+
+.shortcuts-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.shortcuts-search {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: 2px;
-  border-radius: var(--radius-8);
-  background: #363636;
-}
-
-.settings-radio__item {
-  padding: var(--space-4) var(--space-12);
-  border: 0;
-  border-radius: var(--radius-6);
-  background: none;
-  color: var(--color-settings-text-secondary);
-  font: inherit;
-  font-size: var(--font-size-13);
-  cursor: pointer;
-}
-
-.settings-radio__item[data-active="true"] {
-  background: #4a4a4a;
-  color: var(--color-settings-text);
-}
-
-.settings-radio__item:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.settings-dropdown__chevron {
-  position: absolute;
-  right: var(--space-8);
-  transform: rotate(90deg);
-  color: var(--color-settings-text-secondary);
-  pointer-events: none;
-}
-
-.settings-hotkey,
-.settings-button {
   height: var(--space-24);
-  padding: 0 var(--space-12);
+  width: 190px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-4);
+  box-shadow: inset 0 0 0 1px var(--settings-fg-20);
+  color: var(--settings-text-primary);
+}
+
+.shortcuts-search:focus-within {
+  box-shadow: inset 0 0 0 1px var(--settings-text-primary);
+}
+
+.shortcuts-search input {
+  flex: 1;
+  min-width: 0;
   border: 0;
-  border-radius: var(--radius-6);
-  background: #363636;
-  color: var(--color-settings-text);
+  background: none;
+  color: inherit;
   font: inherit;
   font-size: var(--font-size-11);
+  outline: none;
+}
+
+.shortcuts-search input::placeholder {
+  color: var(--settings-text-tertiary);
+}
+
+.shortcuts-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 28px;
+  border-radius: var(--radius-6);
+  background: var(--settings-fg-2_5);
+  overflow: hidden auto;
+}
+
+.shortcuts-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px 140px 14px;
+  gap: var(--space-8);
+  align-items: center;
+  min-height: 46px;
+  padding: 0 var(--space-12);
+  position: relative;
+}
+
+.shortcuts-row:hover {
+  background: var(--settings-fg-5);
+}
+
+.shortcuts-row[data-nested="true"] {
+  padding-left: var(--space-24);
+}
+
+.shortcuts-row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--settings-separator);
+}
+
+.shortcuts-row:last-child::after {
+  display: none;
+}
+
+.shortcuts-row__header {
+  min-height: var(--space-24);
+  color: var(--settings-text-secondary);
+  font-size: var(--font-size-11);
+}
+
+.shortcuts-row__category {
+  cursor: pointer;
+  user-select: none;
+}
+
+.shortcuts-row__category:hover {
+  background: var(--settings-fg-5);
+}
+
+.shortcuts-row__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.shortcuts-row__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.shortcuts-row__alias {
+  width: 100%;
+  height: var(--space-24);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-4);
+  background: none;
+  color: var(--settings-text-primary);
+  font: inherit;
+  font-size: var(--font-size-11);
+  outline: none;
+}
+
+.shortcuts-row__alias::placeholder {
+  color: var(--settings-text-tertiary);
+}
+
+.shortcuts-row__alias:hover:not(:focus) {
+  box-shadow: inset 0 0 0 1px var(--settings-fg-20);
+}
+
+.shortcuts-row__alias:focus {
+  outline: var(--settings-focus-ring);
+}
+
+.shortcuts-hotkeyCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  max-width: 145px;
+  height: var(--space-24);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-4);
+  background: none;
+  color: var(--settings-text-tertiary);
+  font: inherit;
+  font-size: var(--font-size-11);
+  cursor: pointer;
+  position: relative;
+}
+
+.shortcuts-hotkeyCell:hover {
+  box-shadow: inset 0 0 0 1px var(--settings-fg-20);
+}
+
+.shortcuts-hotkeyCell:focus-visible,
+.shortcuts-hotkeyCell[data-open="true"] {
+  outline: var(--settings-focus-ring);
+}
+
+.shortcuts-hotkeyCell__clear {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--settings-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+}
+
+.shortcuts-hotkeyCell:hover .settings-hotkeyCell__clear {
+  opacity: 1;
+}
+
+.shortcuts-conflictDot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--settings-red);
+}
+
+.shortcuts-row__chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--settings-text-tertiary);
+  transition: transform 0.15s;
+}
+
+.shortcuts-row__chevron[data-collapsed="true"] {
+  transform: rotate(-90deg);
+}
+
+/* Fallback commands list */
+.fallback-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.fallback-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 46px;
+  padding: var(--space-8) var(--space-12);
+  position: relative;
+}
+
+.fallback-row + .fallback-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--space-12);
+  right: 0;
+  height: 1px;
+  background: var(--settings-separator);
+}
+
+.fallback-row[data-dragging="true"] {
+  background: rgba(255, 255, 255, 0.05);
+  z-index: 1;
+}
+
+.fallback-row__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallback-row__extension {
+  color: var(--settings-text-secondary);
+  font-size: var(--font-size-11);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallback-row__handle {
+  cursor: grab;
+  color: var(--settings-text-tertiary);
+  display: inline-flex;
+  opacity: 0;
+}
+
+.fallback-row:hover .fallback-row__handle,
+.fallback-row:focus-within .fallback-row__handle {
+  opacity: 1;
+}
+
+.fallback-add {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  min-height: 46px;
+  padding: var(--space-12);
+  border: 0;
+  background: none;
+  color: var(--settings-text-primary);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.settings-hotkey {
-  min-width: 132px;
+.fallback-add:hover {
+  background: var(--settings-fg-5);
+}
+
+.fallback-empty {
+  padding: var(--space-16);
+  color: var(--settings-text-quaternary);
+  font-size: var(--font-size-11);
   text-align: center;
 }
 
-.settings-hotkey[data-recording="true"] {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.settings-hotkey:disabled,
-.settings-button:disabled {
-  cursor: default;
-  opacity: 0.5;
+/* Toast (settings window reuses the launcher's toast styles via the shared store). */
+.settings-toastHost {
+  position: fixed;
+  bottom: var(--space-16);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
 }

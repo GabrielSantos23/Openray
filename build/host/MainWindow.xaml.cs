@@ -252,6 +252,35 @@ public partial class MainWindow : Window
             return null;
         }
 
+        // Settings window rows that reach the host directly (General page). Failures throw so the
+        // renderer can roll the switch back, matching Raycast's openAtLogin flow.
+        if (method == "settings.openAtLogin")
+        {
+            var enabled = data is { ValueKind: System.Text.Json.JsonValueKind.Object } loginPayload
+                && loginPayload.TryGetProperty("enabled", out var loginEnabled) && loginEnabled.GetBoolean();
+            SetOpenAtLogin(enabled);
+            return null;
+        }
+        if (method == "settings.trayIcon")
+        {
+            var enabled = data is { ValueKind: System.Text.Json.JsonValueKind.Object } trayPayload
+                && trayPayload.TryGetProperty("enabled", out var trayEnabled) && trayEnabled.GetBoolean();
+            _webView.Dispatcher.Invoke(() =>
+            {
+                if (enabled) InitTrayIcon();
+                else RemoveTrayIcon();
+            });
+            return null;
+        }
+        if (method == "settings.setGlobalHotkey")
+        {
+            var hotkey = data is { ValueKind: System.Text.Json.JsonValueKind.Object } hotkeyPayload
+                && hotkeyPayload.TryGetProperty("hotkey", out var hotkeyValue) ? hotkeyValue.GetString() : null;
+            if (hotkey is null) throw new InvalidOperationException("Missing hotkey");
+            _webView.Dispatcher.Invoke(() => ApplyGlobalHotkey(hotkey));
+            return null;
+        }
+
         // Raycast Notes (`host.raycast.showNotesWindow`): `open`/`create` close the launcher and
         // open the dedicated notes window; the payload carries {noteId?} or {create, text?}.
         if (method == "window.showNotes")
@@ -337,6 +366,12 @@ public partial class MainWindow : Window
             System.Text.Json.JsonSerializer.SerializeToElement(new { link, name = name ?? string.Empty }));
     }
 
+    /// <summary>Deliver a host-originated message to the Settings window's renderer, if open.</summary>
+    public void PostToSettingsRenderer(string method, System.Text.Json.JsonElement? data)
+    {
+        _settingsWindow?.PostToRenderer(method, data);
+    }
+
     /// <summary>Deliver a host-originated message to the renderer (`z.frontend.*`).</summary>
     public void PostToRenderer(string method, System.Text.Json.JsonElement? data)
     {
@@ -387,12 +422,96 @@ public partial class MainWindow : Window
         var ok1 = RegisterHotKey(handle, HotkeyId, ModAlt | ModControl, VkSpace);
         var ok2 = RegisterHotKey(handle, HotkeyIdFallback, ModControl | ModShift, VkSpace);
         App.Log.Write($"[hotkey] RegisterHotKey Ctrl+Alt+Space: ok={ok1} (err={Marshal.GetLastWin32Error()}), Ctrl+Shift+Space: ok={ok2}");
-        InitTrayIcon();
+
+        // Seed the dynamic settings (Raycast Hotkey, tray, Open at Login) from the settings store.
+        var storedHotkey = ReadStoredSetting("raycast-hotkey") as string;
+        if (!string.IsNullOrWhiteSpace(storedHotkey) && TryParseHotkey(storedHotkey, out var storedMods, out var storedKey))
+        {
+            UnregisterHotKey(handle, HotkeyId);
+            if (RegisterHotKey(handle, HotkeyId, storedMods, storedKey)) _globalHotkeyText = storedHotkey;
+            else RegisterHotKey(handle, HotkeyId, ModAlt | ModControl, VkSpace);
+        }
+        if (ReadStoredSetting("show-in-menu-bar") is false) RemoveTrayIcon();
+        else InitTrayIcon();
+        if (ReadStoredSetting("open-at-login") is true) SetOpenAtLogin(true);
+    }
+
+    /// <summary>Reads one value from the settings store JSON (`store/settings.json`).</summary>
+    internal static object? ReadStoredSetting(string key)
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+                "RaycastMini", "store", "settings.json");
+            if (!System.IO.File.Exists(path)) return null;
+            using var document = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path));
+            if (!document.RootElement.TryGetProperty(key, out var value)) return null;
+            return value.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.True => true,
+                System.Text.Json.JsonValueKind.False => false,
+                System.Text.Json.JsonValueKind.String => value.GetString(),
+                System.Text.Json.JsonValueKind.Number => value.GetDouble(),
+                _ => null,
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Open at Login: a Run-key entry pointing at this executable, like Raycast's login item.</summary>
+    private static void SetOpenAtLogin(bool enabled)
+    {
+        const string runKey = "Software\Microsoft\Windows\CurrentVersion\Run";
+        const string valueName = "RaycastMini";
+        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(runKey, writable: true)
+            ?? Microsoft.Win32.Registry.CurrentUser.CreateSubKey(runKey);
+        if (enabled)
+        {
+            var exe = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            if (string.IsNullOrEmpty(exe)) exe = System.Environment.ProcessPath ?? "";
+            key.SetValue(valueName, '"' + exe + '"');
+        }
+        else if (key.GetValue(valueName) is not null)
+        {
+            key.DeleteValue(valueName);
+        }
     }
 
     private bool _clipboardHotkeyRegistered;
     private string? _clipboardHotkeyText;
     private bool _launcherHotkeysSuppressed;
+    // The launcher hotkey from the settings store; "Ctrl + Alt + Space" until the store says otherwise.
+    private string _globalHotkeyText = "Ctrl + Alt + Space";
+
+    /// <summary>
+    /// Applies the settings store's Raycast Hotkey: unregisters the current launcher combination
+    /// and registers the new one. Throws when Windows rejects the combination so the caller can
+    /// roll the setting back (Raycast's hotkey failure flow).
+    /// </summary>
+    internal void ApplyGlobalHotkey(string hotkey)
+    {
+        if (string.IsNullOrWhiteSpace(hotkey))
+            throw new InvalidOperationException("Enter a hotkey combination");
+        var handle = new WindowInteropHelper(this).Handle;
+        if (!TryParseHotkey(hotkey, out var modifiers, out var key))
+            throw new InvalidOperationException($"The hotkey {hotkey} could not be registered");
+        var previous = _globalHotkeyText;
+        UnregisterHotKey(handle, HotkeyId);
+        if (!RegisterHotKey(handle, HotkeyId, modifiers, key))
+        {
+            // Restore whatever worked before so the launcher stays reachable.
+            if (TryParseHotkey(previous, out var prevMods, out var prevKey))
+                RegisterHotKey(handle, HotkeyId, prevMods, prevKey);
+            else
+                RegisterHotKey(handle, HotkeyId, ModAlt | ModControl, VkSpace);
+            throw new InvalidOperationException($"The hotkey {hotkey} could not be registered");
+        }
+        _globalHotkeyText = hotkey;
+    }
 
     /// <summary>
     /// Game Mode (docs/focus-games-taskbar-spec.md §B): unregister the launcher + Clipboard History
@@ -411,7 +530,11 @@ public partial class MainWindow : Window
             _launcherHotkeysSuppressed = true;
             return true;
         }
-        var restored = RegisterHotKey(handle, HotkeyId, ModAlt | ModControl, VkSpace);
+        var restored = false;
+        if (TryParseHotkey(_globalHotkeyText, out var launcherMods, out var launcherKey))
+            restored = RegisterHotKey(handle, HotkeyId, launcherMods, launcherKey);
+        else
+            restored = RegisterHotKey(handle, HotkeyId, ModAlt | ModControl, VkSpace);
         RegisterHotKey(handle, HotkeyIdFallback, ModControl | ModShift, VkSpace);
         if (_clipboardHotkeyRegistered && _clipboardHotkeyText is not null && TryParseHotkey(_clipboardHotkeyText, out var modifiers, out var key))
         {

@@ -280,7 +280,11 @@ _window = new MainWindow(_pipe, _backend);
         {
             if (_window is null) return null;
             _window.Dispatcher.Invoke(() =>
-                _window.PostToRenderer(message.Method, message.Data));
+            {
+                _window.PostToRenderer(message.Method, message.Data);
+                // Settings pushes (e.g. `settings.changed`) must reach the Settings window too.
+                if (_window is MainWindow main) main.PostToSettingsRenderer(message.Method, message.Data);
+            });
             return null;
         }
 

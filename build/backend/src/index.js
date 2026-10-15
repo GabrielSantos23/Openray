@@ -37,6 +37,7 @@ const { createWindowStates } = require("./window-states");
 const { createFocus } = require("./focus");
 const { createGames } = require("./games");
 const { createTaskbar } = require("./taskbar");
+const { createSettingsStore } = require("./settings-store");
 const { createNotes } = require("./notes");
 const { createExtensionStore } = require("./store");
 
@@ -158,6 +159,13 @@ const taskbar = createTaskbar({
 });
 backend.registerTaskbarHandler(taskbar.handlers);
 taskbar.pushSettingsToHost();
+
+// General settings (`settings.*`): the shared store both windows read; every change is pushed
+// back out so the launcher and the Settings window update live.
+const settingsStore = createSettingsStore({
+  toRenderer: (method, data) => backend.dispatch("frontend", method, data),
+});
+backend.registerSettingsStoreHandler(settingsStore.handlers);
 
 // Notes is the ninth (`notes.*`): the SQLite store, the trash with its 60-day purge and the
 // markdown conversions behind Copy As / Export live here; the window page and the launcher's

@@ -64,6 +64,7 @@ function createBackend(options) {
   let taskbarHandlers = {};
   let notesHandlers = {};
   let storeHandlers = {};
+  let settingsStoreHandlers = {};
   // Set by index.js to a launch gate; loadCommand refuses commands the gate rejects.
   let launchGate = null;
 
@@ -1093,6 +1094,11 @@ function createBackend(options) {
         const handler = focusHandlers[method.slice("focus.".length)];
         if (handler) return handler(data ?? {});
       }
+      if (method.startsWith("settings.")) {
+        const handler = settingsStoreHandlers[method.slice("settings.".length)];
+        if (handler) return handler(data ?? {});
+      }
+
       if (method.startsWith("games.") || method.startsWith("taskbar.")) {
         const table = method.startsWith("games.") ? gamesHandlers : taskbarHandlers;
         const handler = table[method.slice(method.indexOf(".") + 1)];
@@ -1205,6 +1211,10 @@ function createBackend(options) {
     /** Install the taskbar handler table. */
     registerTaskbarHandler(handlers) {
       taskbarHandlers = handlers ?? {};
+    },
+    /** Install the settings store handler table. */
+    registerSettingsStoreHandler(handlers) {
+      settingsStoreHandlers = handlers ?? {};
     },
     /** Install the notes store handler table. */
     registerNotesHandler(handlers) {
