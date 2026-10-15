@@ -281,10 +281,15 @@ export function MainWindow() {
   }, [interfaceSize]);
 
   // Compact window mode: the host shrinks to the search bar while the list is empty and grows
-  // back when results appear; "expanded" always uses the full height.
+  // back when results appear; "expanded" always uses the full height. The latest request is kept
+  // in a ref and re-asserted whenever the window becomes visible again (a mode changed while the
+  // launcher was hidden must win over whatever height the window ended up with).
   const compactListVisible = windowMode !== "compact" || searchText.trim().length > 0;
+  const launcherHeightRef = useRef<{ compact: boolean; visible: boolean }>({ compact: false, visible: true });
   useEffect(() => {
-    void ipcRequest("window.setLauncherHeight", { compact: windowMode === "compact", visible: compactListVisible }, { module: "frontend" }).catch(() => undefined);
+    const request = { compact: windowMode === "compact", visible: compactListVisible };
+    launcherHeightRef.current = request;
+    void ipcRequest("window.setLauncherHeight", request, { module: "frontend" }).catch(() => undefined);
   }, [windowMode, compactListVisible]);
 
   // Load fallback commands from localStorage and listen for changes from Settings window
@@ -531,6 +536,7 @@ export function MainWindow() {
           popToRootTimerRef.current = null;
         }
         setPopToRootTimer(null);
+        void ipcRequest("window.setLauncherHeight", launcherHeightRef.current, { module: "frontend" }).catch(() => undefined);
         return;
       }
       const resetToRoot = () => {

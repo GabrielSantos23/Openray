@@ -57,7 +57,7 @@ public sealed class SettingsWindow : Window
         WindowStyle = WindowStyle.None;
         var chrome = new System.Windows.Shell.WindowChrome
         {
-            ResizeBorderThickness = new Thickness(6),
+            ResizeBorderThickness = new Thickness(6, 0, 6, 6),
             CaptionHeight = 0,
             GlassFrameThickness = new Thickness(0),
             CornerRadius = new CornerRadius(0),
@@ -86,7 +86,15 @@ public sealed class SettingsWindow : Window
             }
             if (method == "window.dragSettings")
             {
-                Dispatcher.Invoke(() => { try { DragMove(); } catch { /* mouse released mid-drag */ } });
+                // ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION enters the native move loop even
+                // though the mousedown happened over the WebView child (DragMove's button check
+                // races the IPC hop and silently does nothing).
+                Dispatcher.Invoke(() =>
+                {
+                    var handle = new WindowInteropHelper(this).Handle;
+                    ReleaseCapture();
+                    _ = SendMessage(handle, WmNcLButtonDown, (IntPtr)HtCaption, IntPtr.Zero);
+                });
                 return Task.FromResult<System.Text.Json.JsonElement?>(null);
             }
             if (method == "window.maximizeSettings")
@@ -113,11 +121,15 @@ public sealed class SettingsWindow : Window
         });
 
         // Opaque: the settings page paints its own surfaces on top of this colour, matching
-        // Raycast's #1f1f1f window background.
+        // Raycast's #1f1f1f window background. The WebView is inset on three sides so the WPF
+        // surface owns the window edges and the WindowChrome resize borders are reachable (the
+        // child HWND would swallow every hit otherwise); the page and this background are the
+        // same colour, so the inset reads as part of the page.
         Background = new System.Windows.Media.SolidColorBrush(
             System.Windows.Media.Color.FromRgb(0x1F, 0x1F, 0x1F));
 
         _webView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0, 0x1F, 0x1F, 0x1F);
+        _webView.Margin = new Thickness(6, 0, 6, 6);
         Content = _webView;
 
         SourceInitialized += OnSourceInitialized;
@@ -264,7 +276,15 @@ public sealed class SettingsWindow : Window
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwaBorderColor = 34;
     private const int DwmwtcpRound = 2;
+    private const uint WmNcLButtonDown = 0x00A1;
+    private const IntPtr HtCaption = (IntPtr)2;
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 }

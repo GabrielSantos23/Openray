@@ -769,9 +769,32 @@
   flex: none;
 }
 
-/* Compact window mode (General > Window Mode): the list hides while the search is empty and the
-   host shrinks the window to the search bar; typing grows it back. */
-.window[data-window-mode="compact"][data-compact-hidden="true"] .list,
-.window[data-window-mode="compact"][data-compact-hidden="true"] .state {
+/* Compact window mode (General > Window Mode): the whole body collapses while the search is
+   empty and the host shrinks the window to the search bar; typing grows it back. */
+.window[data-window-mode="compact"][data-compact-hidden="true"] .window__body {
   display: none;
+}
+.window[data-window-mode="compact"][data-compact-hidden="true"] .window__header {
+  border-bottom: 0;
+}
+
+/* Compact styling per Raycast's compact launcher: one tall rounded search bar filling the
+   window — larger text, soft card surface, no separators. */
+.window[data-window-mode="compact"] .window__header {
+  padding: 10px 10px;
+}
+.window[data-window-mode="compact"] .searchbar {
+  flex: 1;
+  height: 62px;
+  padding: 0 18px;
+  border-radius: 12px;
+  background: var(--color-surface-control, #353535);
+  gap: 14px;
+}
+.window[data-window-mode="compact"] .searchbar__input {
+  font-size: 17px;
+}
+.window[data-window-mode="compact"] .raycast-mark svg {
+  width: 26px;
+  height: 26px;
 }

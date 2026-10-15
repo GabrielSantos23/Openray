@@ -7,6 +7,34 @@
    (fg 20%), separators fg 5%/10%.
    ========================================================================================== */
 
+/* Body-level portals (menus, recorder, titlebar) render outside .settings-window, so the token
+   set is mirrored on :root; the page scope below keeps identical values. */
+:root {
+  --settings-fg: 255 255 255;
+  --settings-bg: #1f1f1f;
+  --settings-fg-2_5: #242424;
+  --settings-fg-5: #2a2a2a;
+  --settings-fg-10: #353535;
+  --settings-fg-20: #505050;
+  --settings-fg-40: #7c7c7c;
+  --settings-fg-60: #a7a7a7;
+  --settings-text-primary: #ffffff;
+  --settings-text-secondary: var(--settings-fg-60);
+  --settings-text-tertiary: var(--settings-fg-40);
+  --settings-text-quaternary: var(--settings-fg-20);
+  --settings-separator: #303030;
+  --settings-separator-strong: #373737;
+  --settings-accent: var(--accent, #0078d4);
+  --settings-blue: #56c2ff;
+  --settings-red: #ff6363;
+  --settings-green: #59d499;
+  --settings-focus-ring: 1px solid rgba(255, 255, 255, 0.5);
+  --settings-shadow-panel:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
+    0 20px 25px -5px rgba(0, 0, 0, 0.2);
+  --settings-popover: #3a3a3a;
+}
+
 .settings-window {
   /* The ramp tokens below mirror Raycast's fg/N overlays on the opaque window surface. */
   --settings-fg: 255 255 255;
