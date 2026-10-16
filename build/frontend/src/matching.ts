@@ -206,6 +206,20 @@ export function compareRankedEntries<T>(
     if (bExactTitle) return 1;
   }
 
+  // Tier 1.5: Best keyword (alias) score — an exact alias match outranks fuzzy title hits and
+  // usage, which is what makes per-command aliases surface their row the way Raycast does.
+  const bestKeywordScore = (ranking: typeof a.ranking) => {
+    let best = Number.MIN_SAFE_INTEGER;
+    for (const keyword of ranking.keywords ?? []) {
+      const value = scoreToValue(keyword);
+      if (value > best) best = value;
+    }
+    return best;
+  };
+  const aKeywordScore = bestKeywordScore(a.ranking);
+  const bKeywordScore = bestKeywordScore(b.ranking);
+  if (aKeywordScore !== bKeywordScore) return bKeywordScore - aKeywordScore;
+
   // Tier 2: Title score difference
   const aTitleScore = scoreToValue(a.ranking.title);
   const bTitleScore = scoreToValue(b.ranking.title);
