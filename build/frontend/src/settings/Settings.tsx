@@ -73,7 +73,11 @@ import {
 import { ShortcutsFilterContext, ShortcutsPage, ShortcutsTitlebarActions, type ShortcutsFilter } from "./ShortcutsPage";
 import { FallbackSpecIcon } from "./brandIcons";
 import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
-import { ExtensionPreferences } from "./ExtensionPreferences";
+import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
+import type { ExtensionSummary } from "../app/entries";
+import { InternalCommandsSection, PageIntro } from "./CommandsSection";
+import { ExtensionDetailPage } from "./ExtensionDetail";
+import { ExtensionPreferences, useInstalledExtensions } from "./ExtensionPreferences";
 import { applyPreset, readStoredHotkeys } from "../windowManagement";
 import { WM_COMMANDS } from "../wm-commands";
 import { getSettings, installSettingsPush, syncFromBackend, updateSettings, useSetting, useSettings } from "./store";
@@ -306,6 +310,10 @@ export function Settings() {
   const [shortcutsFilter, setShortcutsFilter] = useState<ShortcutsFilter>({ query: "", categories: [], modifications: new Set() });
   const shortcutsContext = useMemo(() => ({ filter: shortcutsFilter, setFilter: setShortcutsFilter }), [shortcutsFilter]);
   const page = useMemo(() => PAGES.find((candidate) => candidate.id === route) ?? PAGES[0], [route]);
+  // `ext-<uuid>` routes are installed-extension detail pages (sidebar entries appended to the
+  // extensions group); everything else resolves through PAGES.
+  const extensionRoute = route.startsWith("ext-") ? route.slice(4) : null;
+  const installedExtensions = useInstalledExtensions();
   const results = useMemo(() => searchResults(query), [query]);
 
   const [translatorLanguages, setTranslatorLanguages] = useState<Array<{ code: string; name: string }>>([]);
@@ -337,12 +345,16 @@ export function Settings() {
           onQueryChange={setQuery}
           results={results}
           onNavigate={navigate}
+          installed={installedExtensions}
         />
         <main className="settings-main">
           <header className="settings-header" data-raycast-window-draggable-region="true" />
           <div className="settings-page__scroll">
             <div className="settings-page">
-              {page.id !== "shortcuts" && (page.sections.length === 0 || page.sections.every((section) => section.rows.length === 0)) ? (
+              {!extensionRoute && EXTENSION_PAGE_IDS.includes(page.id) ? <PageIntro page={page} /> : null}
+              {extensionRoute ? (
+                <ExtensionDetailPage uuid={extensionRoute} />
+              ) : page.id !== "shortcuts" && (page.sections.length === 0 || page.sections.every((section) => section.rows.length === 0)) ? (
                 <div className="settings-page__empty">{page.empty ?? "No settings available."}</div>
               ) : (
                 page.sections.map((section) =>
@@ -381,6 +393,7 @@ export function Settings() {
                   ),
                 )
               )}
+              {!extensionRoute && page.id !== "shortcuts" ? <InternalCommandsSection pageId={page.id} /> : null}
               {page.id === "shortcuts" ? <ShortcutsPage /> : null}
               {page.id === "translator" ? <TranslatorCustomCommands /> : null}
               {page.id === "extensions" ? <ExtensionPreferences /> : null}
@@ -486,12 +499,14 @@ function Sidebar({
   onQueryChange,
   results,
   onNavigate,
+  installed,
 }: {
   route: string;
   query: string;
   onQueryChange: (next: string) => void;
   results: Array<{ pageId: string; rowId?: string; title: string; group: string }>;
   onNavigate: (pageId: string) => void;
+  installed: ExtensionSummary[];
 }) {
   const searchRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -595,6 +610,23 @@ function Sidebar({
                   />
                 );
               })}
+              {installed
+                .slice()
+                .sort((a, b) => a.title.localeCompare(b.title))
+                .map((extension) => (
+                  <button
+                    key={extension.uuid}
+                    type="button"
+                    className="settings-navlink"
+                    data-active={route === `ext-${extension.uuid}`}
+                    onClick={() => onNavigate(`ext-${extension.uuid}`)}
+                  >
+                    <span className="settings-navlink__icon" data-tile="installed">
+                      <ExtensionIcon uuid={extension.uuid} size={16} />
+                    </span>
+                    <span className="settings-navlink__label">{extension.title}</span>
+                  </button>
+                ))}
             </div>
           </div>
         )}

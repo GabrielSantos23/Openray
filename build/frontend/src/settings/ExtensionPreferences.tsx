@@ -61,34 +61,16 @@ function TextPreferenceRow({
   );
 }
 
-export function ExtensionPreferences() {
+/** Installed-extension summaries, polled so installs while the window is open show up. */
+export function useInstalledExtensions(): ExtensionSummary[] {
   const [extensions, setExtensions] = useState<ExtensionSummary[]>([]);
-  const [aliases, setAliases] = useState<Record<string, string>>(() => readCommandAliases());
-  const [hotkeys, setHotkeys] = useState<Record<string, string>>(() => readCommandHotkeys());
-  const [preferenceValues, setPreferenceValues] = useState<Record<string, Record<string, unknown>>>({});
 
   const refresh = useCallback(async () => {
     try {
       const payload = (await ipc.backend("extensionHost.getInstalledNodeExtensionSummaries")) as {
         extensions?: ExtensionSummary[];
       };
-      const loaded = payload.extensions ?? [];
-      setExtensions(loaded);
-      // Values are authoritative in the backend file (the mirror may be stale across windows).
-      const next: Record<string, Record<string, unknown>> = {};
-      for (const extension of loaded) {
-        next[extension.uuid] = readFlowkeyPreferences(extension.uuid);
-      }
-      setPreferenceValues((current) => ({ ...next, ...current }));
-      for (const extension of loaded) {
-        try {
-          const { fetchFlowkeyPreferences } = await import("../features/extensions/preferences");
-          const values = await fetchFlowkeyPreferences(extension.uuid);
-          setPreferenceValues((current) => ({ ...current, [extension.uuid]: { ...current[extension.uuid], ...values } }));
-        } catch {
-          /* keep the mirror */
-        }
-      }
+      setExtensions(payload.extensions ?? []);
     } catch {
       setExtensions([]);
     }
@@ -101,6 +83,105 @@ export function ExtensionPreferences() {
     const interval = setInterval(() => void refresh(), 3000);
     return () => clearInterval(interval);
   }, [refresh]);
+
+  return extensions;
+}
+
+/** Stored values for one extension's FlowKey preferences (backend file is authoritative). */
+export function useExtensionPreferenceValues(extension: ExtensionSummary | undefined): Record<string, unknown> {
+  const [values, setValues] = useState<Record<string, unknown>>({});
+  useEffect(() => {
+    if (!extension) return;
+    let alive = true;
+    setValues(readFlowkeyPreferences(extension.uuid));
+    import("../features/extensions/preferences")
+      .then(({ fetchFlowkeyPreferences }) => fetchFlowkeyPreferences(extension.uuid))
+      .then((fetched) => {
+        if (alive) setValues(fetched);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [extension]);
+  return values;
+}
+
+/** The manifest's preference fields as Raycast-style rows (switch / select / text+Save). */
+export function ExtensionPreferenceRows({
+  extension,
+  values,
+  onValue,
+}: {
+  extension: ExtensionSummary;
+  values: Record<string, unknown>;
+  onValue: (name: string, value: unknown) => void;
+}) {
+  const preferences = extension.preferences ?? [];
+  if (preferences.length === 0) return null;
+  return (
+    <div className="settings-section__content">
+      {preferences.map((preference) =>
+        preference.type === "checkbox" ? (
+          <div className="settings-extensions__row" key={preference.name}>
+            <span className="settings-extensions__rowTitle">{preference.title}</span>
+            <Switch
+              label={preference.title}
+              checked={Boolean(values[preference.name] ?? preference.default)}
+              onChange={(checked) => void writeFlowkeyPreference(extension.uuid, preference.name, checked).then((next) => onValue(preference.name, next))}
+            />
+          </div>
+        ) : preference.type === "dropdown" || preference.type === "appPicker" ? (
+          <div className="settings-extensions__row" key={preference.name}>
+            <span className="settings-extensions__rowTitle">{preference.title}</span>
+            <select
+              className="settings-extensions__input"
+              value={String(values[preference.name] ?? preference.default ?? "")}
+              onChange={(event) => void writeFlowkeyPreference(extension.uuid, preference.name, event.target.value).then((next) => onValue(preference.name, next))}
+            >
+              {((preference.options ?? preference.data ?? [])).map((option) => (
+                <option key={String(option.value ?? option.title)} value={String(option.value ?? option.title)}>
+                  {option.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <TextPreferenceRow
+            key={preference.name}
+            uuid={extension.uuid}
+            preference={preference}
+            stored={values[preference.name] ?? preference.default}
+            onSaved={(_, name, value) => onValue(name, value)}
+          />
+        ),
+      )}
+    </div>
+  );
+}
+
+export function ExtensionPreferences() {
+  const extensions = useInstalledExtensions();
+  const [aliases, setAliases] = useState<Record<string, string>>(() => readCommandAliases());
+  const [hotkeys, setHotkeys] = useState<Record<string, string>>(() => readCommandHotkeys());
+  const [preferenceValues, setPreferenceValues] = useState<Record<string, Record<string, unknown>>>({});
+
+  // Values are authoritative in the backend file (the mirror may be stale across windows).
+  useEffect(() => {
+    const next: Record<string, Record<string, unknown>> = {};
+    for (const extension of extensions) {
+      next[extension.uuid] = readFlowkeyPreferences(extension.uuid);
+    }
+    setPreferenceValues((current) => ({ ...next, ...current }));
+    for (const extension of extensions) {
+      import("../features/extensions/preferences")
+        .then(({ fetchFlowkeyPreferences }) => fetchFlowkeyPreferences(extension.uuid))
+        .then((values) => {
+          setPreferenceValues((current) => ({ ...current, [extension.uuid]: { ...current[extension.uuid], ...values } }));
+        })
+        .catch(() => undefined);
+    }
+  }, [extensions]);
 
   const setAlias = (key: string, alias: string) => {
     setAliases(writeCommandAlias(key, alias));
@@ -118,8 +199,6 @@ export function ExtensionPreferences() {
   return (
     <div className="settings-extensions">
       {extensions.map((extension) => {
-        const preferences = extension.preferences ?? [];
-        const values = preferenceValues[extension.uuid] ?? {};
         return (
           <section className="settings-section" key={extension.uuid}>
             <h2 className="settings-section__title">
@@ -163,49 +242,16 @@ export function ExtensionPreferences() {
                 );
               })}
 
-              {preferences.map((preference) =>
-                preference.type === "checkbox" ? (
-                  <div className="settings-extensions__row" key={preference.name}>
-                    <span className="settings-extensions__rowTitle">{preference.title}</span>
-                    <Switch
-                      label={preference.title}
-                      checked={Boolean(values[preference.name] ?? preference.default)}
-                      onChange={(checked) => void writeFlowkeyPreference(extension.uuid, preference.name, checked).then((next) => {
-                        setPreferenceValues((current) => ({ ...current, [extension.uuid]: next }));
-                      })}
-                    />
-                  </div>
-                ) : preference.type === "dropdown" || preference.type === "appPicker" ? (
-                  <div className="settings-extensions__row" key={preference.name}>
-                    <span className="settings-extensions__rowTitle">{preference.title}</span>
-                    <select
-                      className="settings-extensions__input"
-                      value={String(values[preference.name] ?? preference.default ?? "")}
-                      onChange={(event) =>
-                        void writeFlowkeyPreference(extension.uuid, preference.name, event.target.value).then((next) => {
-                          setPreferenceValues((current) => ({ ...current, [extension.uuid]: next }));
-                        })
-                      }
-                    >
-                      {((preference.options ?? preference.data ?? [])).map((option) => (
-                        <option key={String(option.value ?? option.title)} value={String(option.value ?? option.title)}>
-                          {option.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <TextPreferenceRow
-                    key={preference.name}
-                    uuid={extension.uuid}
-                    preference={preference}
-                    stored={values[preference.name] ?? preference.default}
-                    onSaved={(uuid, name, value) =>
-                      setPreferenceValues((current) => ({ ...current, [uuid]: { ...(current[uuid] ?? {}), [name]: value } }))
-                    }
-                  />
-                ),
-              )}
+              <ExtensionPreferenceRows
+                extension={extension}
+                values={preferenceValues[extension.uuid] ?? {}}
+                onValue={(name, value) =>
+                  setPreferenceValues((current) => ({
+                    ...current,
+                    [extension.uuid]: { ...(current[extension.uuid] ?? {}), [name]: value },
+                  }))
+                }
+              />
             </div>
           </section>
         );

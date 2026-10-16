@@ -373,20 +373,28 @@
   align-items: center;
   justify-content: center;
   border-radius: 5px;
-  background: var(--settings-tile-gradient);
+  background: var(--tile-bg, var(--settings-tile-gradient));
   color: #ffffff;
 }
 
-.settings-navlink__icon[data-tile="ai"] { background: var(--settings-tile-red); }
-.settings-navlink__icon[data-tile="browser"],
-.settings-navlink__icon[data-tile="dictation"],
-.settings-navlink__icon[data-tile="emoji-symbols"],
-.settings-navlink__icon[data-tile="file-search"],
-.settings-navlink__icon[data-tile="navigation"] { background: var(--settings-tile-blue); }
-.settings-navlink__icon[data-tile="clipboard-history"] { background: var(--settings-tile-orange); }
-.settings-navlink__icon[data-tile="developer"] { background: var(--settings-tile-green); }
-.settings-navlink__icon[data-tile="quicklinks"] { background: var(--settings-tile-purple); }
-.settings-navlink__icon[data-tile="applications"] {
+.settings-navlink--result .settings-navlink__icon {
+  border-radius: 0;
+  background: none;
+  color: var(--settings-text-tertiary);
+}
+
+/* Tile palettes shared by the sidebar tiles and the detail-page intro tile. */
+[data-tile="ai"] { --tile-bg: var(--settings-tile-red); }
+[data-tile="browser"],
+[data-tile="dictation"],
+[data-tile="emoji-symbols"],
+[data-tile="file-search"],
+[data-tile="navigation"] { --tile-bg: var(--settings-tile-blue); }
+[data-tile="clipboard-history"] { --tile-bg: var(--settings-tile-orange); }
+[data-tile="developer"] { --tile-bg: var(--settings-tile-green); }
+[data-tile="quicklinks"] { --tile-bg: var(--settings-tile-purple); }
+[data-tile="installed"] { --tile-bg: none; }
+[data-tile="applications"] {
   background-color: #f2f2f2;
   background-image:
     linear-gradient(var(--settings-tile-red), var(--settings-tile-red)),
@@ -399,10 +407,10 @@
   color: transparent;
 }
 
-.settings-navlink--result .settings-navlink__icon {
-  border-radius: 0;
+/* Installed extensions keep their real icon: no tile behind it. */
+.settings-navlink__icon[data-tile="installed"] {
   background: none;
-  color: var(--settings-text-tertiary);
+  color: var(--settings-text-primary);
 }
 
 .settings-navlink__label {
@@ -567,6 +575,80 @@
 .settings-page__introDescription {
   color: var(--settings-text-secondary);
   text-wrap: pretty;
+}
+
+.settings-page__introDescription[data-clamped="true"] {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.settings-page__introTitle {
+  margin: 0;
+  font-size: 22px;
+  font-weight: var(--font-weight-600);
+  color: var(--settings-text-primary);
+}
+
+.settings-page__introToggle {
+  margin-top: var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--settings-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-12);
+  cursor: pointer;
+}
+
+.settings-page__introToggle:hover {
+  color: var(--settings-text-primary);
+}
+
+.settings-page__introToggleChevron {
+  display: inline-flex;
+  transition: transform 180ms var(--easing-ease-out-expo);
+}
+
+.settings-page__introToggleChevron[data-expanded="true"] {
+  transform: rotate(180deg);
+}
+
+/* Detail-page intro tile: the sidebar tile palette at 54px scale. */
+.settings-introTile {
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--tile-bg, var(--settings-tile-gradient));
+  color: #ffffff;
+}
+
+/* Commands section on extension pages: label above a Shortcuts-style card. */
+.settings-commands {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.settings-commands__title {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-600);
+  color: var(--settings-text-primary);
+}
+
+.settings-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
 }
 
 /* ---- sections + rows --------------------------------------------------------------------- */
