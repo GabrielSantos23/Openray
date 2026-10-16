@@ -816,6 +816,10 @@ textarea[data-error="true"] {
   background: linear-gradient(140deg, #ffd479 0%, #e0a63f 100%);
 }
 
+.command-tile--clipboard {
+  background: linear-gradient(140deg, #ffc46b 0%, #ff9f0a 100%);
+}
+
 /* ---- Calculator split row (root search + the history view's live row) ---- */
 
 .calc-row {

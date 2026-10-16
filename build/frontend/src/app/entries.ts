@@ -67,8 +67,27 @@ export interface ClipboardEntryResult {
  * four Quicklinks commands (create/export/import/search) and four Snippets commands, each opening
  * its own view.
  */
-export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search" | "notes" | "store";
-export type InternalCommandName = "search" | "create" | "import" | "export" | "history" | "translate" | "searchFiles" | "open" | "browse";
+export type InternalArea =
+  | "quicklinks"
+  | "snippets"
+  | "calculator"
+  | "translator"
+  | "file-search"
+  | "notes"
+  | "store"
+  | "clipboard-history";
+export type InternalCommandName =
+  | "search"
+  | "create"
+  | "import"
+  | "export"
+  | "history"
+  | "translate"
+  | "searchFiles"
+  | "open"
+  | "browse"
+  | "pasteSequential"
+  | "resetPasteSequence";
 
 export interface InternalCommandEntry {
   kind: "internal";
@@ -96,6 +115,7 @@ export const INTERNAL_EXTENSION_META: Record<InternalArea, { title: string; icon
   "file-search": { title: "File Search", icon: "folder-search", tile: "command-tile--filesearch" },
   notes: { title: "Raycast Notes", icon: "blank-document", tile: "command-tile--notes" },
   store: { title: "Store", icon: "extension", tile: "command-tile--store" },
+  "clipboard-history": { title: "Clipboard History", icon: "copy-clipboard", tile: "command-tile--clipboard" },
 };
 
 export const INTERNAL_COMMANDS: ReadonlyArray<{
@@ -118,6 +138,12 @@ export const INTERNAL_COMMANDS: ReadonlyArray<{
   { area: "notes", command: "create", title: "Create Note", keywords: ["notes", "new note"] },
   { area: "notes", command: "search", title: "Search Notes", keywords: ["notes", "search notes"] },
   { area: "store", command: "browse", title: "Store", keywords: ["store", "extensions", "marketplace", "install"] },
+  // Raycast's Clipboard History extension commands (the AI `Ask Clipboard` one has no clone).
+  // `history` is carried by the existing `clipboard` root row, so buildSections drops it from the
+  // generated internal rows to avoid a duplicate.
+  { area: "clipboard-history", command: "history", title: "Clipboard History", keywords: ["clipboard history clipboard"] },
+  { area: "clipboard-history", command: "pasteSequential", title: "Paste Sequentially", keywords: ["clipboard", "paste sequentially"] },
+  { area: "clipboard-history", command: "resetPasteSequence", title: "Reset Paste Sequence", keywords: ["clipboard", "reset paste sequence"] },
 ];
 
 export function internalCommandEntry(area: InternalArea, command: InternalCommandName): InternalCommandEntry {

@@ -179,13 +179,11 @@ public static class ClipboardHistory
             if (representation.Text is not null) texts.Add(representation);
         }
 
-        var payload = new DataObject();
-
+        string? plain = null;
+        string? html = null;
+        string? rtf = null;
         if (texts.Count > 0)
         {
-            string? plain = null;
-            string? html = null;
-            string? rtf = null;
             foreach (var text in texts)
             {
                 switch (text.MimeType)
@@ -206,22 +204,6 @@ public static class ClipboardHistory
             plain ??= html is not null ? StripHtml(html) : rtf is not null ? PlainFromRtf(rtf) : null;
             if (html is not null && plain is null) plain = StripHtml(html);
             if (rtf is not null && plain is null) plain = PlainFromRtf(rtf);
-
-            if (plain is not null) payload.SetText(plain);
-            if (html is not null) payload.SetData(DataFormats.Html, html, autoConvert: false);
-            if (rtf is not null) payload.SetData(DataFormats.Rtf, rtf, autoConvert: false);
-        }
-
-        if (filePaths.Count > 0)
-        {
-            var collection = new System.Collections.Specialized.StringCollection();
-            collection.AddRange(filePaths.ToArray());
-            payload.SetData(DataFormats.FileDrop, collection, autoConvert: false);
-        }
-
-        if (image is not null)
-        {
-            payload.SetData(DataFormats.Bitmap, image, autoConvert: false);
         }
 
         if (texts.Count == 0 && filePaths.Count == 0 && image is null)
@@ -231,7 +213,18 @@ public static class ClipboardHistory
 
         try
         {
-            RetryOnBusy(() => Clipboard.SetDataObject(payload, true));
+            WriteClipboardRaw(() =>
+            {
+                if (plain is not null) SetClipboardData(CfUnicodeText, AllocGlobal(TextBytes(plain)));
+                if (html is not null) SetClipboardData(HtmlFormat, AllocGlobal(Encoding.UTF8.GetBytes(html)));
+                if (rtf is not null) SetClipboardData(RtfFormat, AllocGlobal(Encoding.ASCII.GetBytes(rtf)));
+                if (filePaths.Count > 0) SetClipboardData(CfHdrop, AllocGlobal(DropListBytes(filePaths)));
+                if (image is not null)
+                {
+                    using var bitmap = new System.Drawing.Bitmap(image);
+                    SetClipboardData(CfBitmap, bitmap.GetHbitmap());
+                }
+            });
         }
         finally
         {
@@ -384,43 +377,26 @@ public static class ClipboardHistory
     private static void RestoreClipboard(ClipboardBackup? backup)
     {
         if (backup is null) return;
+        if (backup.Text is null && backup.Html is null && backup.Rtf is null
+            && backup.Bitmap is null && (backup.Paths is null || backup.Paths.Length == 0))
+        {
+            return;
+        }
         try
         {
-            RetryOnBusy(() =>
+            WriteClipboardRaw(() =>
             {
-                var payload = new DataObject();
-                var wroteSomething = false;
-
-                if (backup.Paths is { Length: > 0 })
-                {
-                    var collection = new System.Collections.Specialized.StringCollection();
-                    collection.AddRange(backup.Paths);
-                    payload.SetData(DataFormats.FileDrop, collection, autoConvert: false);
-                    wroteSomething = true;
-                }
-                if (backup.Text is not null)
-                {
-                    payload.SetText(backup.Text);
-                    wroteSomething = true;
-                }
-                if (backup.Html is not null)
-                {
-                    payload.SetData(DataFormats.Html, backup.Html, autoConvert: false);
-                    wroteSomething = true;
-                }
-                if (backup.Rtf is not null)
-                {
-                    payload.SetData(DataFormats.Rtf, backup.Rtf, autoConvert: false);
-                    wroteSomething = true;
-                }
+                if (backup.Paths is { Length: > 0 }) SetClipboardData(CfHdrop, AllocGlobal(DropListBytes(backup.Paths.ToList())));
+                if (backup.Text is not null) SetClipboardData(CfUnicodeText, AllocGlobal(TextBytes(backup.Text)));
+                if (backup.Html is not null) SetClipboardData(HtmlFormat, AllocGlobal(Encoding.UTF8.GetBytes(backup.Html)));
+                if (backup.Rtf is not null) SetClipboardData(RtfFormat, AllocGlobal(Encoding.ASCII.GetBytes(backup.Rtf)));
                 if (backup.Bitmap is not null)
                 {
-                    payload.SetData(DataFormats.Bitmap, BitmapImageFromBytes(backup.Bitmap), autoConvert: false);
-                    wroteSomething = true;
+                    using var stream = new MemoryStream(backup.Bitmap);
+                    using var decoded = System.Drawing.Image.FromStream(stream);
+                    using var bitmap = new System.Drawing.Bitmap(decoded);
+                    SetClipboardData(CfBitmap, bitmap.GetHbitmap());
                 }
-
-                if (!wroteSomething) return;
-                Clipboard.SetDataObject(payload, true);
             });
         }
         catch (Exception error)
@@ -448,7 +424,11 @@ public static class ClipboardHistory
         var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
         if (sent != inputs.Length)
         {
-            App.Log.Write($"[clipboard] SendInput delivered {sent}/{inputs.Length} events");
+            var target = GetForegroundWindow();
+            _ = GetWindowThreadProcessId(target, out var targetPid);
+            var targetName = "unknown";
+            try { targetName = Process.GetProcessById((int)targetPid).ProcessName; } catch { }
+            App.Log.Write($"[clipboard] SendInput delivered {sent}/{inputs.Length} events (foreground pid {targetPid} {targetName})");
         }
     }
 
@@ -482,32 +462,104 @@ public static class ClipboardHistory
         return bitmap;
     }
 
-    private static void RetryOnBusy(Action action)
+    // --- raw Win32 clipboard writer ------------------------------------------------------------
+
+    // `Clipboard.SetDataObject` goes through `OleSetClipboard`, which fails with CLIPBRD_E_CANT_OPEN
+    // on some machines even when nothing holds the clipboard — observed here while raw
+    // `OpenClipboard`/`SetClipboardData` kept succeeding for every other process. Every clipboard
+    // write therefore goes through the raw path below; the data is rendered eagerly, which is also
+    // what `copy: true` used to guarantee.
+
+    private const uint CfBitmap = 2;
+    private const uint CfUnicodeText = 13;
+    private const uint CfHdrop = 15;
+    private const uint GmemMoveable = 0x0002;
+
+    private static uint _htmlFormat;
+    private static uint HtmlFormat => _htmlFormat != 0 ? _htmlFormat : _htmlFormat = RegisterClipboardFormat("HTML Format");
+
+    private static uint _rtfFormat;
+    private static uint RtfFormat => _rtfFormat != 0 ? _rtfFormat : _rtfFormat = RegisterClipboardFormat("Rich Text Format");
+
+    /// <summary>Clears the clipboard and runs `write` inside one open/close session, retrying while
+    /// other processes hold the clipboard. The launcher window is the owner so `SetClipboardData`
+    /// accepts the handles.</summary>
+    internal static void WriteClipboardRaw(Action write)
     {
-        for (var attempt = 0; attempt < 8; attempt++)
+        var owner = Application.Current?.MainWindow is Window window
+            ? new System.Windows.Interop.WindowInteropHelper(window).Handle
+            : IntPtr.Zero;
+        var lastError = "OpenClipboard never succeeded";
+        for (var attempt = 0; attempt < 60; attempt++)
         {
-            try
+            if (OpenClipboard(owner))
             {
-                action();
-                return;
+                try
+                {
+                    EmptyClipboard();
+                    write();
+                    return;
+                }
+                finally
+                {
+                    CloseClipboard();
+                }
             }
-            catch (COMException)
-            {
-                Thread.Sleep(25);
-            }
-            catch (ExternalException)
-            {
-                Thread.Sleep(25);
-            }
+            lastError = new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()).Message;
+            Thread.Sleep(50);
         }
-        throw new InvalidOperationException("clipboard is busy");
+        throw new InvalidOperationException($"clipboard never opened for writing: {lastError}");
     }
+
+    /// <summary>The raw clipboard helper the launcher's own `clipboard.write` verb uses.</summary>
+    internal static void WriteTextToClipboard(string text)
+    {
+        WriteClipboardRaw(() => SetClipboardData(CfUnicodeText, AllocGlobal(TextBytes(text))));
+    }
+
+    internal static void ClearClipboardRaw()
+    {
+        WriteClipboardRaw(() => { });
+    }
+
+    private static byte[] TextBytes(string text) => Encoding.Unicode.GetBytes(text + "\0");
+
+    private static IntPtr AllocGlobal(byte[] bytes)
+    {
+        var handle = GlobalAlloc(GmemMoveable, (UIntPtr)bytes.Length);
+        var pointer = GlobalLock(handle);
+        try
+        {
+            Marshal.Copy(bytes, 0, pointer, bytes.Length);
+        }
+        finally
+        {
+            GlobalUnlock(handle);
+        }
+        return handle;
+    }
+
+    /// <summary>`DROPFILES` header (20 bytes) + double-null-terminated wide path list.</summary>
+    private static byte[] DropListBytes(List<string> paths)
+    {
+        var names = string.Join("\0", paths) + "\0\0";
+        var nameBytes = Encoding.Unicode.GetBytes(names);
+        var payload = new byte[20 + nameBytes.Length];
+        BitConverter.GetBytes(20).CopyTo(payload, 0);
+        BitConverter.GetBytes((short)1).CopyTo(payload, 18);
+        nameBytes.CopyTo(payload, 20);
+        return payload;
+    }
+
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
     {
         public uint type;
         public KEYBDINPUT ki;
+        // The real `INPUT` union also holds `MOUSEINPUT` (32 bytes on x64); without the padding
+        // `Marshal.SizeOf` hands SendInput a cbSize of 32 instead of 40 and every batch is rejected.
+        public ulong padding;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -523,8 +575,35 @@ public static class ClipboardHistory
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint numberOfInputs, INPUT[] inputs, int sizeOfInput);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool OpenClipboard(IntPtr newOwner);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool CloseClipboard();
+
+    [DllImport("user32.dll")]
+    private static extern bool EmptyClipboard();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetClipboardData(uint format, IntPtr memory);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint RegisterClipboardFormat(string name);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GlobalAlloc(uint flags, UIntPtr bytes);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GlobalLock(IntPtr memory);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GlobalUnlock(IntPtr memory);
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetOpenClipboardWindow();
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr window);

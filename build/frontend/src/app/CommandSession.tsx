@@ -271,6 +271,32 @@ export function CommandSession({
   }
 
   if (entry.kind === "internal") {
+    if (entry.area === "clipboard-history") {
+      // Raycast's Clipboard History extension: `history` renders the shared view, the two paste
+      // sequence commands are view-less — run once, toast, close.
+      if (entry.command === "history") {
+        return (
+          <ClipboardHistoryView
+            searchText={searchText}
+            onSearchTextChange={setSearchText}
+            subscribeStateChanged={subscribeClipboardStateChanged}
+            showToast={showToast}
+            onBack={onBack}
+            runEntryAction={runClipboardEntryAction}
+            closeMainWindow={closeWindow}
+            openUrl={openClipboardUrl}
+          />
+        );
+      }
+      return (
+        <ClipboardCommandRedirect
+          command={entry.command as "pasteSequential" | "resetPasteSequence"}
+          showToast={showToast}
+          closeMainWindow={closeWindow}
+          onBack={onBack}
+        />
+      );
+    }
     if (entry.area === "store") {
       // The extension Store: browse the synced GitHub catalog + uploads; install lands in the
       // live extensions root.
@@ -606,6 +632,44 @@ function NotesWindowRedirect({
     openNotesWindow(command === "create" ? { create: true } : {});
     onBack();
     // Raycast's command runs exactly once per invocation; the deps exist to satisfy the linter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
+/** `Paste Sequentially` / `Reset Paste Sequence`: backend runs once, then the launcher closes. */
+function ClipboardCommandRedirect({
+  command,
+  showToast,
+  closeMainWindow,
+  onBack,
+}: {
+  command: "pasteSequential" | "resetPasteSequence";
+  showToast: (message: string) => void;
+  closeMainWindow: () => void;
+  onBack: () => void;
+}) {
+  const fired = useRef(false);
+  useEffect(() => {
+    if (fired.current) return;
+    fired.current = true;
+    void (async () => {
+      try {
+        if (command === "pasteSequential") {
+          const result = (await ipc.backend("clipboard.pasteSequentially", {}, { module: "backend" })) as
+            | { pasted?: boolean }
+            | undefined;
+          if (!result?.pasted) showToast("No clipboard item found to paste");
+        } else {
+          await ipc.backend("clipboard.resetPasteSequence", {}, { module: "backend" });
+          showToast("Paste sequence reset");
+        }
+      } catch {
+        showToast(command === "pasteSequential" ? "No clipboard item found to paste" : "Paste sequence reset");
+      }
+      closeMainWindow();
+      onBack();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;

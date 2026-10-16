@@ -288,7 +288,7 @@ public static class NativeHost
     private static object WriteClipboard(JsonElement? data)
     {
         var content = data?.TryGetProperty("content", out var element) == true ? element.ToString() : string.Empty;
-        RetryOnBusy(() => Clipboard.SetText(content ?? string.Empty));
+        ClipboardHistory.WriteTextToClipboard(content ?? string.Empty);
         return new { ok = true };
     }
 
@@ -306,7 +306,7 @@ public static class NativeHost
 
     private static object ClearClipboard()
     {
-        RetryOnBusy(Clipboard.Clear);
+        ClipboardHistory.ClearClipboardRaw();
         return new { ok = true };
     }
 

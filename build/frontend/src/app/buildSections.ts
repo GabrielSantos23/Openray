@@ -104,18 +104,24 @@ export function buildSections(
   }));
   const appAliasForKey = (applicationId: string) => appAliases[appConfigKey(applicationId)];
 
-  // Build searchable entries for clipboard history
+  // Build searchable entries for clipboard history. The row doubles as the `history` command of
+  // the internal Clipboard History extension: its alias and Shortcuts enable toggle use the same
+  // `command:internal/clipboard-history/history` key the settings page writes.
+  const clipboardHistoryAlias = readCommandAliases()[internalConfigKey("clipboard-history", "history")];
   const clipboardSearchable: SearchableEntry = {
     title: "Clipboard History",
     subtitle: "Search for text, images, links and colors you copied earlier and paste it again.",
-    keywords: ["clipboard history clipboard"],
+    keywords: ["clipboard history clipboard", ...(clipboardHistoryAlias ? [clipboardHistoryAlias.toLowerCase()] : [])],
     rootEntry: CLIPBOARD_COMMAND,
   };
 
-  // Internal extension commands: one root row per command, rendered like installed commands.
+  // Internal extension commands: one root row per command, rendered like installed commands. The
+  // Clipboard History `history` command is skipped — the dedicated clipboard row above is it.
   const internalCommandSearchables: SearchableEntry[] = INTERNAL_COMMANDS.filter(
     (definition) => !isShortcutDisabled(internalConfigKey(definition.area, definition.command)),
-  ).map((definition) => ({
+  )
+    .filter((definition) => !(definition.area === "clipboard-history" && definition.command === "history"))
+    .map((definition) => ({
     title: definition.title,
     subtitle: INTERNAL_EXTENSION_META[definition.area].title,
     keywords: [

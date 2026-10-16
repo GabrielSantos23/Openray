@@ -251,6 +251,12 @@ export function ClipboardHistoryView({
         }
         // Alt+Enter is Raycast's Paste and Keep Window Open.
         void activate(entry, event.altKey ? "pasteAndKeepOpen" : "paste");
+      } else if (event.key === "Delete") {
+        // Raycast deletes the selected entry straight from the list, with no confirmation step.
+        const entry = rows[selectedIndex];
+        if (!entry) return;
+        event.preventDefault();
+        void runClipboardAction(entry, "clipboard:delete", handlers);
       } else if (event.key === "Escape") {
         event.preventDefault();
         if (searchText) onSearchTextChange("");
