@@ -107,7 +107,6 @@ export function ShortcutsPage() {
     }
     for (const extension of extensions) {
       for (const command of extension.commands ?? []) {
-        if (command.mode === "no-view") continue;
         next.push({
           key: commandConfigKey(extension.uuid, command.name),
           category: "Extensions",

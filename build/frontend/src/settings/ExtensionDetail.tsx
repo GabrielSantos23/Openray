@@ -22,7 +22,7 @@ export function ExtensionDetailPage({ uuid }: { uuid: string }) {
   }
 
   const rows: CommandRowData[] = extension.commands
-    .filter((command) => command.mode !== "no-view")
+    .filter((command) => !command.disabledReason)
     .map((command) => ({
       key: commandConfigKey(extension.uuid, command.name),
       title: command.title,

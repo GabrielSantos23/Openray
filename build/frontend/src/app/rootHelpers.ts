@@ -3,7 +3,7 @@
 
 import { useMemo, useSyncExternalStore, type MouseEvent } from "react";
 import type { ActionGroup } from "../ActionPanel";
-import { hudStore, toastStore } from "../toastStore";
+import { hostHud, toastStore } from "../toastStore";
 import { ipc, onNotification } from "../ipc";
 import { APPLICATION_AREA_KEYS } from "../applications";
 import { plainTextOf, type ClipboardEntry, type ClipboardEntryAction } from "../clipboardHistory";
@@ -25,9 +25,11 @@ export function formatRelativeTime(timestamp: number): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-/** `Hne`: after the window closes, the HUD is what remains — command icon at 22px in Raycast. */
+/** `Hne`: after the window closes, the HUD is what remains — command icon at 22px in Raycast.
+ * The host-owned HUD window is the only one still visible once the launcher hides, which is
+ * exactly when a no-view command's HUD fires. */
 export function hudStoreOpenForExtension(title: string) {
-  hudStore.open({ id: nextToastId(), title, variant: "default" }, { durationMs: 1200 });
+  hostHud.show({ title, durationMs: 1200 });
 }
 
 /** `getToastActions()` — primary/secondary surface in the open action panel while the toast lives. */

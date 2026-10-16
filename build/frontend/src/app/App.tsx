@@ -751,6 +751,9 @@ export function MainWindow() {
       void payload.popToRootType;
       toastStore.get()?.onClose?.();
       hudStoreOpenForExtension(payload.title ?? "");
+      // A no-view session is done: unload it while the window is hidden so the next open lands
+      // on root search instead of the command's outcome view.
+      setSelected(null);
     });
     const offHideToast = onNotification("extensionHost.hideToast", () => {
       toastStore.close();
@@ -1603,6 +1606,11 @@ export function MainWindow() {
           setArgumentErrors([]);
           setArgumentFocusIndex(0);
           setArgumentEntry(entry);
+        } else if (entry.kind === "extension" && entry.command.mode === "no-view") {
+          // Raycast's no-view commands never open a screen: the window hides at once, the
+          // background session runs, and its HUD lands on the host HUD window.
+          closeMainWindow();
+          setSelected(entry);
         } else if (entry.kind === "inline") {
           // Inline entries (quicklink, snippet, web-search) execute their action and stay/close
           entry.result.action(searchText, closeMainWindow);
@@ -2477,6 +2485,11 @@ export function MainWindow() {
                             onClick={() => {
                               if (entry.command.disabledReason) {
                                 showToast(entry.command.title, entry.command.disabledReason);
+                                return;
+                              }
+                              if (entry.command.mode === "no-view") {
+                                closeMainWindow();
+                                setSelected(entry);
                                 return;
                               }
                               setSelected(entry);
