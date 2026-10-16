@@ -20,9 +20,9 @@ import { useExtensionCommand } from "../useExtensionCommand";
 import { alertStore, type ExtensionAlertPayload } from "../alertStore";
 import AlertHost from "../AlertHost";
 import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "../testHooks";
-import { registerAllCommandHotkeys } from "../commandConfig";
+import { readCommandHotkeys, registerAllCommandHotkeys } from "../commandConfig";
 import { installSystemAccent } from "./systemAccent";
-import { installSettingsPush, syncFromBackend, updateSettings, useSetting } from "../settings/store";
+import { installSettingsPush, subscribeSettings, syncFromBackend, updateSettings, useSetting } from "../settings/store";
 import { POP_TO_ROOT_BY_LABEL } from "../settings/persistence";
 import { applyTheme, clearThemeOverride, resolveThemeName, themeByName } from "./themes";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
@@ -853,9 +853,17 @@ export function MainWindow() {
     });
   }, []);
 
-  // Command hotkeys live in the host process; re-register the stored ones on renderer mount.
+  // Command hotkeys live in the host process; re-register the stored ones on renderer mount
+  // and whenever the Settings window edits them (the store push bumps this subscription).
   useEffect(() => {
     void registerAllCommandHotkeys();
+    let last = JSON.stringify(readCommandHotkeys());
+    return subscribeSettings(() => {
+      const next = JSON.stringify(readCommandHotkeys());
+      if (next === last) return;
+      last = next;
+      void registerAllCommandHotkeys();
+    });
   }, []);
 
   const { applications, error: applicationsError, loading: applicationsLoading } = useApplications(true);

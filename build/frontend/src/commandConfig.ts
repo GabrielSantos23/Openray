@@ -5,7 +5,18 @@
 // `cmd:<uuid>/<command>` so they never collide with the WM preset keys.
 
 import { ipc } from "./ipc";
+import { updateSettings } from "./settings/store";
 
+// The Settings window runs in its own WebView2 profile, so its localStorage is invisible to the
+// launcher. All per-command config therefore lives in the settings store (backend-persisted,
+// pushed to both windows via `settings.changed` and mirrored into each window's localStorage
+// under `raycast-mini:settings`); the legacy localStorage keys remain as a read fallback.
+const STORE_KEY = "raycast-mini:settings";
+const ALIASES_STORE_KEY = "command-aliases";
+const HOTKEYS_STORE_KEY = "command-hotkeys";
+const APP_ALIASES_STORE_KEY = "app-aliases";
+const QUICKLINK_ALIASES_STORE_KEY = "quicklink-aliases";
+const DISABLED_STORE_KEY = "shortcuts-disabled";
 const ALIASES_KEY = "raycast-mini:command-aliases";
 const HOTKEYS_KEY = "raycast-mini:command-hotkeys";
 const APP_ALIASES_KEY = "raycast-mini:app-aliases";
@@ -31,7 +42,24 @@ export function internalConfigKey(area: string, command: string): CommandConfigK
   return `command:internal/${area}/${command}`;
 }
 
-function readMap(storageKey: string): Record<string, string> {
+function readStoreMap(storeKey: string, legacyKey: string): Record<string, string> {
+  try {
+    const raw = window.localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const entry = parsed[storeKey];
+      if (typeof entry === "string") {
+        const map = JSON.parse(entry) as Record<string, string>;
+        if (map && typeof map === "object") return map;
+      }
+    }
+  } catch {
+    /* fall through to the legacy key */
+  }
+  return readLegacyMap(legacyKey);
+}
+
+function readLegacyMap(storageKey: string): Record<string, string> {
   try {
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) return {};
@@ -42,16 +70,12 @@ function readMap(storageKey: string): Record<string, string> {
   }
 }
 
-function writeMap(storageKey: string, map: Record<string, string>): void {
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(map));
-  } catch {
-    /* private mode / quota — config does not persist */
-  }
+function writeStoreMap(storeKey: string, map: Record<string, string>): void {
+  updateSettings({ [storeKey]: JSON.stringify(map) });
 }
 
 export function readCommandAliases(): Record<string, string> {
-  return readMap(ALIASES_KEY);
+  return readStoreMap(ALIASES_STORE_KEY, ALIASES_KEY);
 }
 
 /** Returns the current alias for the command ("" clears it). */
@@ -60,53 +84,53 @@ export function writeCommandAlias(key: CommandConfigKey, alias: string): Record<
   const trimmed = alias.trim();
   if (trimmed) map[key] = trimmed;
   else delete map[key];
-  writeMap(ALIASES_KEY, map);
+  writeStoreMap(ALIASES_STORE_KEY, map);
   return map;
 }
 
 export function readCommandHotkeys(): Record<string, string> {
-  return readMap(HOTKEYS_KEY);
+  return readStoreMap(HOTKEYS_STORE_KEY, HOTKEYS_KEY);
 }
 
 export function readAppAliases(): Record<string, string> {
-  return readMap(APP_ALIASES_KEY);
+  return readStoreMap(APP_ALIASES_STORE_KEY, APP_ALIASES_KEY);
 }
 
 export function writeAppAlias(key: CommandConfigKey, alias: string): Record<string, string> {
-  return writeAliasMap(APP_ALIASES_KEY, key, alias);
+  return writeAliasMap(APP_ALIASES_STORE_KEY, APP_ALIASES_KEY, key, alias);
 }
 
 export function readQuicklinkAliases(): Record<string, string> {
-  return readMap(QUICKLINK_ALIASES_KEY);
+  return readStoreMap(QUICKLINK_ALIASES_STORE_KEY, QUICKLINK_ALIASES_KEY);
 }
 
 export function writeQuicklinkAlias(key: CommandConfigKey, alias: string): Record<string, string> {
-  return writeAliasMap(QUICKLINK_ALIASES_KEY, key, alias);
+  return writeAliasMap(QUICKLINK_ALIASES_STORE_KEY, QUICKLINK_ALIASES_KEY, key, alias);
 }
 
-function writeAliasMap(storageKey: string, key: CommandConfigKey, alias: string): Record<string, string> {
-  const map = readMap(storageKey);
+function writeAliasMap(storeKey: string, legacyKey: string, key: CommandConfigKey, alias: string): Record<string, string> {
+  const map = readStoreMap(storeKey, legacyKey);
   const trimmed = alias.trim();
   if (trimmed) map[key] = trimmed;
   else delete map[key];
-  writeMap(storageKey, map);
+  writeStoreMap(storeKey, map);
   return map;
 }
 
 /** True when the item was switched off on the Shortcuts page (hidden from root search). */
 export function isShortcutDisabled(key: CommandConfigKey): boolean {
-  return readMap(DISABLED_KEY)[key] === "1";
+  return readStoreMap(DISABLED_STORE_KEY, DISABLED_KEY)[key] === "1";
 }
 
 export function readShortcutDisabled(): Record<string, string> {
-  return readMap(DISABLED_KEY);
+  return readStoreMap(DISABLED_STORE_KEY, DISABLED_KEY);
 }
 
 export function writeShortcutDisabled(key: CommandConfigKey, disabled: boolean): Record<string, string> {
-  const map = readMap(DISABLED_KEY);
+  const map = readStoreMap(DISABLED_STORE_KEY, DISABLED_KEY);
   if (disabled) map[key] = "1";
   else delete map[key];
-  writeMap(DISABLED_KEY, map);
+  writeStoreMap(DISABLED_STORE_KEY, map);
   return map;
 }
 
@@ -114,7 +138,7 @@ export function writeCommandHotkey(key: CommandConfigKey, hotkey: string | null)
   const map = readCommandHotkeys();
   if (hotkey) map[key] = hotkey;
   else delete map[key];
-  writeMap(HOTKEYS_KEY, map);
+  writeStoreMap(HOTKEYS_STORE_KEY, map);
   return map;
 }
 
