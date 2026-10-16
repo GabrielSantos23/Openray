@@ -286,7 +286,14 @@ export function MainWindow() {
     const apply = () => {
       const theme = themeByName(storedActiveTheme || resolveThemeName(followSystemAppearance, query.matches, themeDark, themeLight));
       applyTheme(theme);
-      void ipcRequest("settings.setChromeAppearance", { light: theme?.appearance === "light" }, { module: "frontend" }).catch(() => undefined);
+      void ipcRequest(
+        "settings.setChromeAppearance",
+        {
+          light: theme?.appearance === "light",
+          color: getComputedStyle(document.querySelector(".window") ?? document.body).backgroundColor,
+        },
+        { module: "frontend" },
+      ).catch(() => undefined);
     };
     apply();
     const onChange = () => {

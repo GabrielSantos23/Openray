@@ -313,12 +313,19 @@ public partial class MainWindow : Window
         {
             var light = data is { ValueKind: System.Text.Json.JsonValueKind.Object } chromePayload
                 && chromePayload.TryGetProperty("light", out var chromeLight) && chromeLight.GetBoolean();
+            var cssColor = data is { ValueKind: System.Text.Json.JsonValueKind.Object } colorPayload
+                && colorPayload.TryGetProperty("color", out var chromeColor)
+                ? chromeColor.GetString()
+                : null;
+            var chrome = ParseCssColor(cssColor)
+                ?? (light ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
+                          : System.Windows.Media.Color.FromRgb(0x1F, 0x1F, 0x1F));
             _webView.Dispatcher.Invoke(() =>
             {
                 Root.Background = new System.Windows.Media.SolidColorBrush(
                     light ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
                           : System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
-                _settingsWindow?.SetChromeLight(light);
+                _settingsWindow?.SetChromeLight(chrome);
             });
             return null;
         }
@@ -511,6 +518,28 @@ public partial class MainWindow : Window
         catch
         {
             return "#0078D4";
+        }
+    }
+
+    /// <summary>Parses `rgb(r, g, b)` / `color(srgb r g b / a)` from the renderer's computed style.</summary>
+    internal static System.Windows.Media.Color? ParseCssColor(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var matches = System.Text.RegularExpressions.Regex.Matches(value, @"[\d.]+");
+        if (matches.Count < 3) return null;
+        try
+        {
+            double alpha = matches.Count >= 4 ? double.Parse(matches[3].Value, System.Globalization.CultureInfo.InvariantCulture) : 1;
+            double scale = value.StartsWith("color(srgb", System.StringComparison.Ordinal) ? 255.0 : 1.0;
+            return System.Windows.Media.Color.FromArgb(
+                (byte)Math.Round(alpha * 255),
+                (byte)Math.Round(double.Parse(matches[0].Value, System.Globalization.CultureInfo.InvariantCulture) * scale),
+                (byte)Math.Round(double.Parse(matches[1].Value, System.Globalization.CultureInfo.InvariantCulture) * scale),
+                (byte)Math.Round(double.Parse(matches[2].Value, System.Globalization.CultureInfo.InvariantCulture) * scale));
+        }
+        catch
+        {
+            return null;
         }
     }
 

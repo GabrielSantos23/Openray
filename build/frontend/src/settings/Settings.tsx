@@ -212,7 +212,14 @@ export function Settings() {
         mergeValues({ [id]: next });
         void updateSettings({ [id]: next, "active-theme": String(next) });
         applyTheme(themeByName(String(next)));
-        void ipcRequest("settings.setChromeAppearance", { light: themeByName(String(next))?.appearance === "light" }, { module: "frontend" }).catch(() => undefined);
+        void ipcRequest(
+          "settings.setChromeAppearance",
+          {
+            light: themeByName(String(next))?.appearance === "light",
+            color: getComputedStyle(document.querySelector(".settings-window") ?? document.body).backgroundColor,
+          },
+          { module: "frontend" },
+        ).catch(() => undefined);
         return;
       }
       if (id === "follow-system-appearance") {
