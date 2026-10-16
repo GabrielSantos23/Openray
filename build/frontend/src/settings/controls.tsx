@@ -516,7 +516,25 @@ export function HotkeyRecorder({
         aria-label={footerLabel}
         onClick={() => setOpen((state) => !state)}
       >
-        {value ? <VisualShortcut shortcut={value} /> : "Record Hotkey"}
+        {value ? (
+          <>
+            <VisualShortcut shortcut={value} />
+            <span
+              className="settings-hotkeyTrigger__clear"
+              role="button"
+              aria-label={`Clear ${footerLabel}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                setOpen(false);
+                onChange("");
+              }}
+            >
+              <RaycastIcon name="XMark" size={9} />
+            </span>
+          </>
+        ) : (
+          "Record Hotkey"
+        )}
       </button>
       {open && popupRect
         ? createPortal(

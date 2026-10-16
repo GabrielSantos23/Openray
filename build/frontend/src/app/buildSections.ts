@@ -96,7 +96,10 @@ export function buildSections(
     .map((app) => ({
     title: app.title,
     subtitle: app.subtitle,
-    keywords: app.keywords,
+    keywords: [
+      ...app.keywords,
+      ...(appAliases[appConfigKey(app.payload.id)] ? [appAliases[appConfigKey(app.payload.id)].toLowerCase()] : []),
+    ],
     rootEntry: { kind: "application" as const, application: app },
   }));
   const appAliasForKey = (applicationId: string) => appAliases[appConfigKey(applicationId)];

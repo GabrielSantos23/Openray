@@ -1022,6 +1022,26 @@
   background: var(--settings-fg-5);
 }
 
+.settings-hotkeyTrigger__clear {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-4);
+  color: var(--settings-text-secondary);
+  cursor: pointer;
+}
+
+.settings-hotkeyTrigger__clear:hover {
+  background: var(--settings-fg-10);
+  color: var(--settings-text-primary);
+}
+
+.settings-hotkeyTrigger:hover .settings-hotkeyTrigger__clear {
+  display: inline-flex;
+}
+
 .settings-hotkeyTrigger[data-empty="true"] {
   color: var(--settings-text-tertiary);
 }
