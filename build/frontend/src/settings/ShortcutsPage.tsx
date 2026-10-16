@@ -415,25 +415,55 @@ export function ShortcutsTitlebarActions() {
     setFilter({ ...filter, modifications: next });
   };
 
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
   return (
     <span className="settings-shortcuts__titlebar" ref={rootRef}>
-      <SearchField
-        value={filter.query}
-        placeholder="Search..."
-        ariaLabel="Search shortcuts"
-        onChange={(query) => setFilter({ ...filter, query })}
-        onEscape={() => setFilter({ ...filter, query: "" })}
-      />
+      <span className="settings-shortcuts__search" data-open={searchOpen || filter.query ? "true" : undefined}>
+        <button
+          type="button"
+          className="settings-shortcuts__searchToggle"
+          aria-label="Search shortcuts"
+          onClick={() => setSearchOpen(true)}
+        >
+          <RaycastIcon name="magnifying-glass" size={12} />
+        </button>
+        <input
+          ref={searchInputRef}
+          className="settings-shortcuts__searchInput"
+          type="text"
+          placeholder="Search by name or alias"
+          aria-label="Search shortcuts"
+          value={filter.query}
+          onChange={(event) => setFilter({ ...filter, query: event.target.value })}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setFilter({ ...filter, query: "" });
+              setSearchOpen(false);
+            }
+          }}
+          onBlur={() => {
+            if (!filter.query) setSearchOpen(false);
+          }}
+        />
+      </span>
       <button
         ref={triggerRef}
         type="button"
         className="settings-shortcuts__filterTrigger"
         aria-haspopup="dialog"
         aria-expanded={open}
+        data-open={open ? "true" : undefined}
         onClick={() => setOpen((state) => !state)}
       >
         {label}
-        <RaycastIcon name="chevron-right" size={10} />
+        <span className="settings-shortcuts__filterChevron">
+          <RaycastIcon name="chevron-right" size={10} />
+        </span>
       </button>
       {open && popupRect
         ? createPortal(

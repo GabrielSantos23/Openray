@@ -46,7 +46,7 @@ export function useDismiss(open: boolean, onClose: () => void, rootRef: React.Re
 
 /** Anchors a portal popup under (or over) the trigger rect, clamped to the viewport. */
 export function usePopupRect(open: boolean, triggerRef: React.RefObject<HTMLElement | null>, placement: "bottom" | "top") {
-  const [rect, setRect] = useState<{ left: number; top: number } | null>(null);
+  const [rect, setRect] = useState<{ left: number; top: number; bottom: number } | null>(null);
   useLayoutEffect(() => {
     if (!open) {
       setRect(null);
@@ -55,7 +55,7 @@ export function usePopupRect(open: boolean, triggerRef: React.RefObject<HTMLElem
     const el = triggerRef.current;
     if (!el) return;
     const box = el.getBoundingClientRect();
-    setRect({ left: box.left, top: placement === "bottom" ? box.bottom + 4 : box.top });
+    setRect({ left: box.left, top: placement === "bottom" ? box.bottom + 4 : box.top, bottom: box.bottom });
   }, [open, placement]);
   return rect;
 }
@@ -543,7 +543,11 @@ export function HotkeyRecorder({
               data-variant={variant}
               role="dialog"
               aria-label={footerLabel}
-              style={{ left: Math.min(popupRect.left, window.innerWidth - 336), top: popupRect.top - 170 }}
+              style={{
+                left: Math.min(popupRect.left, window.innerWidth - 336),
+                // Flip below the trigger when there is no room above (the card is ~170px tall).
+                top: popupRect.top < 190 ? popupRect.bottom + 6 : popupRect.top - 170,
+              }}
             >
               <div className="settings-recorder__content">
                 {held.length > 0 ? (

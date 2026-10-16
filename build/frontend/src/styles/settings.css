@@ -16,6 +16,8 @@
   --settings-fg-10: rgb(from var(--fg) r g b / 10%);
   --settings-fg-20: rgb(from var(--fg) r g b / 20%);
   --settings-fg-40: rgb(from var(--fg) r g b / 40%);
+  --settings-dropdown: var(--settings-fg-5);
+  --settings-dropdown-border: var(--settings-fg-20);
   --settings-fg-60: rgb(from var(--fg) r g b / 60%);
   --settings-text-primary: var(--fg);
   --settings-text-secondary: var(--settings-fg-60);
@@ -42,6 +44,8 @@
   --settings-fg-10: rgb(from var(--fg) r g b / 10%);
   --settings-fg-20: rgb(from var(--fg) r g b / 20%);
   --settings-fg-40: rgb(from var(--fg) r g b / 40%);
+  --settings-dropdown: var(--settings-fg-5);
+  --settings-dropdown-border: var(--settings-fg-20);
   --settings-fg-60: rgb(from var(--fg) r g b / 60%);
   --settings-text-primary: var(--fg);
   --settings-text-secondary: var(--settings-fg-60);
@@ -1679,26 +1683,89 @@
   gap: var(--space-3);
 }
 
-.settings-shortcuts__titlebar .settings-searchField {
-  width: 160px;
+.settings-shortcuts__search {
+  display: inline-flex;
+  align-items: center;
+  width: 26px;
+  height: 24px;
+  border-radius: var(--radius-6);
+  background: var(--settings-dropdown);
+  border: 1px solid var(--settings-dropdown-border, var(--settings-fg-20));
+  overflow: hidden;
+  transition: width 200ms var(--easing-ease-out-expo), background-color 120ms var(--easing-ease-out-expo);
+}
+
+.settings-shortcuts__search[data-open="true"] {
+  width: 210px;
+}
+
+.settings-shortcuts__searchToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--settings-text-secondary);
+  cursor: pointer;
+}
+
+.settings-shortcuts__search[data-open="true"] .settings-shortcuts__searchToggle {
+  color: var(--settings-text);
+}
+
+.settings-shortcuts__searchInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px 0 2px;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--settings-text);
+  font: inherit;
+  font-size: var(--font-size-12);
+  opacity: 0;
+  transition: opacity 160ms var(--easing-ease-out-expo);
+}
+
+.settings-shortcuts__search[data-open="true"] .settings-shortcuts__searchInput {
+  opacity: 1;
+}
+
+.settings-shortcuts__searchInput::placeholder {
+  color: var(--settings-text-secondary);
 }
 
 .settings-shortcuts__filterTrigger {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: 5px 10px;
-  border: 0;
+  gap: 8px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--settings-dropdown-border, var(--settings-fg-20));
   border-radius: var(--radius-6);
   background: var(--settings-dropdown);
   color: var(--settings-text);
   font: inherit;
   font-size: var(--font-size-12);
   cursor: pointer;
+  transition: background-color 120ms var(--easing-ease-out-expo);
 }
 
 .settings-shortcuts__filterTrigger:hover {
   background: var(--settings-fg-5);
+}
+
+.settings-shortcuts__filterChevron {
+  display: inline-flex;
+  align-items: center;
+  transition: transform 180ms var(--easing-ease-out-expo);
+}
+
+.settings-shortcuts__filterTrigger[data-open="true"] .settings-shortcuts__filterChevron {
+  transform: rotate(90deg);
 }
 
 .settings-shortcuts__filterMenu .settings-menu__item input[type="checkbox"] {
