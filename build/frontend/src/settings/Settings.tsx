@@ -134,6 +134,8 @@ export function Settings() {
       if (event.key !== "Escape") return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      // An open recorder or dropdown owns Escape (it closes the popup, not the window).
+      if (document.querySelector(".settings-recorder, .settings-menu")) return;
       event.preventDefault();
       void ipcRequest("window.closeSettings", {}, { module: "frontend" }).catch(() => undefined);
     };

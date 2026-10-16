@@ -833,9 +833,10 @@ public partial class MainWindow : Window
             var upper = char.ToUpperInvariant(part[0]);
             if (upper is >= 'A' and <= 'Z') return (uint)upper;
             if (upper is >= '0' and <= '9') return (uint)upper;
-            if (part.Length >= 2 && char.ToUpperInvariant(part[0]) == 'F' && part[1] is >= '1' and <= '9')
+            if (part.Length >= 3 && char.ToUpperInvariant(part[0]) == 'F'
+                && int.TryParse(part.AsSpan(1), out var functionKey) && functionKey is >= 1 and <= 24)
             {
-                return (uint)(0x70 + (part[1] - '0'));
+                return (uint)(0x70 + functionKey - 1);
             }
         }
         return part.ToLowerInvariant() switch
@@ -852,9 +853,24 @@ public partial class MainWindow : Window
             "pageup" => 0x21,
             "pagedown" => 0x22,
             "left" => 0x25,
+            "arrowleft" => 0x25,
             "up" => 0x26,
+            "arrowup" => 0x26,
             "right" => 0x27,
+            "arrowright" => 0x27,
             "down" => 0x28,
+            "arrowdown" => 0x28,
+            ";" => 0xBA,
+            "=" => 0xBB,
+            "," => 0xBC,
+            "-" => 0xBD,
+            "." => 0xBE,
+            "/" => 0xBF,
+            "`" => 0xC0,
+            "[" => 0xDB,
+            "\\" => 0xDC,
+            "]" => 0xDD,
+            "'" => 0xDE,
             _ => 0,
         };
     }

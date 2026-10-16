@@ -483,7 +483,6 @@ export function HotkeyRecorder({
       const keyLabel = code.startsWith("Key") && code.length === 4 ? code.slice(3)
         : code.startsWith("Digit") && code.length === 6 ? code.slice(5)
         : event.key === " " ? "Space"
-        : event.key.length === 1 ? event.key.toUpperCase()
         : event.key;
       parts.push(keyLabel);
       onChange(parts.join(" + "));
