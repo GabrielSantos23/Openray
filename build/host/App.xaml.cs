@@ -212,11 +212,12 @@ private MainWindow? _window;
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         Log.Write($"repoRoot={repoRoot} (exists={Directory.Exists(repoRoot)})");
 
-        _pipe = new NamedPipeBridge(PipeName);
-        Log.Write("pipe server created");
-
         _backend = new BackendProcess(PipeName, repoRoot);
         Log.Write($"backend entry={Path.Combine(repoRoot, "backend", "src", "index.js")}");
+
+        _pipe = new NamedPipeBridge(PipeName);
+        _pipe.SetPrimaryToken(_backend.ConnectionToken);
+        Log.Write("pipe server created");
 
         // The Node backend connects *to* us; start it before waiting for the connection so the
         // ordering matches Raycast (host owns the pipe, backend dials in).

@@ -931,6 +931,9 @@ function createBackend(options) {
     const client = net.createConnection(pipeAddress, () => {
       socket = client;
       reconnectAttempts = 0;
+      // Prove this connection was spawned by the current host: the bridge promotes the client
+      // whose token matches and rejects stale-token zombies instead of letting one become primary.
+      client.write(`${JSON.stringify({ type: "hello", token: process.env.RAYCAST_MINI_PIPE_TOKEN ?? "" })}` + "\n");
       console.log(`[backend] connected to launcher pipe "${options.pipeName}"`);
       connectedCallbacks.splice(0).forEach((resolve) => resolve(client));
     });

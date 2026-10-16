@@ -5,6 +5,7 @@
 // the Node backend connects to it.
 //
 // Protocol (newline-delimited JSON):
+//   backend -> host : { type:"hello", token }   (first message; proves the client was spawned by this host)
 //   backend -> host : { type:"request", id, module:"frontend"|"backend", method, data }
 //   host -> backend : { type:"response", id, ok, data | error }
 //   host -> backend : { type:"push",    module:"frontend", method, data }
@@ -12,9 +13,11 @@
 //   module "frontend" == deliver to the WebView2 renderer (Raycast's `z.frontend.*`)
 //   module "backend"  == ask the Node host to do something  (Raycast's `dispatchRequest("backend", …)`)
 //
-// The first connected client is the backend ("primary"): only its responses resolve host-side
+// The authenticated client is the backend ("primary"): only its responses resolve host-side
 // `RequestAsync` waiters, and its disconnect fails them. Additional clients (session drivers) may
 // send requests and get answers on their own connection without ever touching backend traffic.
+// The hello token keeps a zombie backend from a killed host from claiming the primary slot and
+// silently stranding every backend request.
 
 using System.IO;
 using System.IO.Pipes;
@@ -32,6 +35,7 @@ public sealed class PipeMessage
     public JsonElement? Data { get; set; }
     public bool Ok { get; set; }
     public string? Error { get; set; }
+    public string? Token { get; set; }
 }
 
 /// <summary>
@@ -53,6 +57,7 @@ public sealed class NamedPipeBridge : IAsyncDisposable
     {
         public required NamedPipeServerStream Pipe;
         public StreamReader? Reader;
+        public bool IsPrimary;
     }
 
     private readonly string _pipeName;
@@ -61,6 +66,7 @@ public sealed class NamedPipeBridge : IAsyncDisposable
     private readonly Dictionary<long, TaskCompletionSource<JsonElement?>> _waiters = new();
     private readonly List<PipeClient> _clients = new();
     private NamedPipeServerStream? _listening;
+    private string? _primaryToken;
     private long _nextId = 1;
     private bool _disposed;
 
@@ -76,6 +82,15 @@ public sealed class NamedPipeBridge : IAsyncDisposable
         // The reader/writer are created only after a client is connected: a StreamWriter backed by
         // an unconnected pipe flushes in its constructor and throws.
         _listening = CreateServer();
+    }
+
+    /// <summary>
+    /// The connection token the real backend must present in its `hello`. Until set, the bridge
+    /// falls back to the legacy first-client-is-primary behavior.
+    /// </summary>
+    public void SetPrimaryToken(string token)
+    {
+        lock (_stateGate) _primaryToken = token;
     }
 
     public bool IsConnected
@@ -142,13 +157,14 @@ public sealed class NamedPipeBridge : IAsyncDisposable
             bool isPrimary;
             lock (_stateGate)
             {
-                isPrimary = _clients.Count == 0;
+                isPrimary = _primaryToken is null && _clients.Count == 0;
+                client.IsPrimary = isPrimary;
                 _clients.Add(client);
                 if (!_disposed) _listening = CreateServer();
             }
             App.Log.Write($"[pipe] client connected (primary={isPrimary}, total={CountClients()})");
             if (isPrimary) _firstConnection.TrySetResult();
-            _ = Task.Run(() => ReadClientAsync(client, isPrimary, cancellationToken));
+            _ = Task.Run(() => ReadClientAsync(client, cancellationToken));
         }
     }
 
@@ -174,7 +190,7 @@ public sealed class NamedPipeBridge : IAsyncDisposable
         }
     }
 
-    private async Task ReadClientAsync(PipeClient client, bool isPrimary, CancellationToken cancellationToken)
+    private async Task ReadClientAsync(PipeClient client, CancellationToken cancellationToken)
     {
         try
         {
@@ -198,10 +214,40 @@ public sealed class NamedPipeBridge : IAsyncDisposable
                 if (message is null) continue;
                 App.Log.Write($"[pipe<] {message.Type} {message.Module}.{message.Method} id={message.Id}");
 
+                if (message.Type == "hello")
+                {
+                    string? expected;
+                    lock (_stateGate) expected = _primaryToken;
+                    if (expected is not null)
+                    {
+                        if (message.Token != expected)
+                        {
+                            // A backend left over from a killed host: it can never answer for this
+                            // host, so drop it instead of letting it park a client slot forever.
+                            App.Log.Write("[pipe] rejecting client with stale pipe token");
+                            break;
+                        }
+                        bool promoted;
+                        lock (_stateGate)
+                        {
+                            promoted = !client.IsPrimary;
+                            client.IsPrimary = true;
+                            _clients.Remove(client);
+                            _clients.Insert(0, client);
+                        }
+                        if (promoted)
+                        {
+                            App.Log.Write("[pipe] backend authenticated (primary)");
+                            _firstConnection.TrySetResult();
+                        }
+                    }
+                    continue;
+                }
+
                 if (message.Type == "response")
                 {
                     // Only the primary client (the Node backend) answers host-side requests.
-                    if (!isPrimary) continue;
+                    if (!client.IsPrimary) continue;
                     lock (_waiters)
                     {
                         if (_waiters.TryGetValue(message.Id, out var waiter))
@@ -240,9 +286,9 @@ public sealed class NamedPipeBridge : IAsyncDisposable
         finally
         {
             lock (_stateGate) _clients.Remove(client);
-            if (isPrimary) FailPendingWaiters("backend disconnected");
+            if (client.IsPrimary) FailPendingWaiters("backend disconnected");
             try { client.Pipe.Dispose(); } catch { /* already gone */ }
-            App.Log.Write($"[pipe] client disconnected (primary={isPrimary}, total={CountClients()})");
+            App.Log.Write($"[pipe] client disconnected (primary={client.IsPrimary}, total={CountClients()})");
         }
     }
 
@@ -256,11 +302,11 @@ public sealed class NamedPipeBridge : IAsyncDisposable
         // A restarting backend needs a moment; wait briefly for it to dial back in instead of failing
         // the caller (and leaving a blank UI) the instant the pipe is down.
         var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!IsConnected && !_disposed && DateTime.UtcNow < deadline)
+        while (PrimaryClient is null && !_disposed && DateTime.UtcNow < deadline)
         {
             await Task.Delay(50, cancellationToken);
         }
-        if (!IsConnected) throw new InvalidOperationException($"pipe \"{_pipeName}\" is not connected");
+        if (PrimaryClient is null) throw new InvalidOperationException($"pipe \"{_pipeName}\" is not connected");
 
         var id = Interlocked.Increment(ref _nextId);
         var completion = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -284,7 +330,18 @@ public sealed class NamedPipeBridge : IAsyncDisposable
 
     private PipeClient? PrimaryClient
     {
-        get { lock (_stateGate) return _clients.Count > 0 ? _clients[0] : null; }
+        get
+        {
+            lock (_stateGate)
+            {
+                if (_primaryToken is not null)
+                {
+                    // Requests go only to an authenticated backend; driver connections never see them.
+                    return _clients.FirstOrDefault(client => client.IsPrimary);
+                }
+                return _clients.Count > 0 ? _clients[0] : null;
+            }
+        }
     }
 
     private async Task WriteToPrimaryAsync(PipeMessage message)

@@ -35,6 +35,11 @@ public sealed class BackendProcess : IAsyncDisposable
     public string FrontendRoot { get; }
     public string ApiRoot { get; }
     public string ExtensionsRoot { get; }
+    /// <summary>
+    /// Per-launch token the backend presents on the pipe (`hello`). A zombie backend left over from
+    /// a killed host carries a stale token and is rejected by the bridge instead of becoming primary.
+    /// </summary>
+    public string ConnectionToken { get; } = Guid.NewGuid().ToString("N");
     public bool IsRunning
     {
         get
@@ -61,6 +66,7 @@ public sealed class BackendProcess : IAsyncDisposable
         };
 
         startInfo.EnvironmentVariables["RAYCAST_MINI_PIPE"] = _pipeName;
+        startInfo.EnvironmentVariables["RAYCAST_MINI_PIPE_TOKEN"] = ConnectionToken;
         _startCount++;
         startInfo.EnvironmentVariables["RAYCAST_MINI_API_ROOT"] = ApiRoot;
         startInfo.EnvironmentVariables["RAYCAST_MINI_FRONTEND_ROOT"] = FrontendRoot;
