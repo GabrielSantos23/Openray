@@ -8,12 +8,27 @@ import { ipc } from "./ipc";
 
 const ALIASES_KEY = "raycast-mini:command-aliases";
 const HOTKEYS_KEY = "raycast-mini:command-hotkeys";
+const APP_ALIASES_KEY = "raycast-mini:app-aliases";
+const QUICKLINK_ALIASES_KEY = "raycast-mini:quicklink-aliases";
+const DISABLED_KEY = "raycast-mini:shortcuts-disabled";
 
 /** `command:<uuid>/<name>` — the same key shape favorites use. */
 export type CommandConfigKey = string;
 
 export function commandConfigKey(uuid: string, commandName: string): CommandConfigKey {
   return `command:${uuid}/${commandName}`;
+}
+
+export function appConfigKey(applicationId: string): CommandConfigKey {
+  return `app:${applicationId}`;
+}
+
+export function quicklinkConfigKey(quicklinkId: string): CommandConfigKey {
+  return `quicklink:${quicklinkId}`;
+}
+
+export function internalConfigKey(area: string, command: string): CommandConfigKey {
+  return `command:internal/${area}/${command}`;
 }
 
 function readMap(storageKey: string): Record<string, string> {
@@ -51,6 +66,48 @@ export function writeCommandAlias(key: CommandConfigKey, alias: string): Record<
 
 export function readCommandHotkeys(): Record<string, string> {
   return readMap(HOTKEYS_KEY);
+}
+
+export function readAppAliases(): Record<string, string> {
+  return readMap(APP_ALIASES_KEY);
+}
+
+export function writeAppAlias(key: CommandConfigKey, alias: string): Record<string, string> {
+  return writeAliasMap(APP_ALIASES_KEY, key, alias);
+}
+
+export function readQuicklinkAliases(): Record<string, string> {
+  return readMap(QUICKLINK_ALIASES_KEY);
+}
+
+export function writeQuicklinkAlias(key: CommandConfigKey, alias: string): Record<string, string> {
+  return writeAliasMap(QUICKLINK_ALIASES_KEY, key, alias);
+}
+
+function writeAliasMap(storageKey: string, key: CommandConfigKey, alias: string): Record<string, string> {
+  const map = readMap(storageKey);
+  const trimmed = alias.trim();
+  if (trimmed) map[key] = trimmed;
+  else delete map[key];
+  writeMap(storageKey, map);
+  return map;
+}
+
+/** True when the item was switched off on the Shortcuts page (hidden from root search). */
+export function isShortcutDisabled(key: CommandConfigKey): boolean {
+  return readMap(DISABLED_KEY)[key] === "1";
+}
+
+export function readShortcutDisabled(): Record<string, string> {
+  return readMap(DISABLED_KEY);
+}
+
+export function writeShortcutDisabled(key: CommandConfigKey, disabled: boolean): Record<string, string> {
+  const map = readMap(DISABLED_KEY);
+  if (disabled) map[key] = "1";
+  else delete map[key];
+  writeMap(DISABLED_KEY, map);
+  return map;
 }
 
 export function writeCommandHotkey(key: CommandConfigKey, hotkey: string | null): Record<string, string> {

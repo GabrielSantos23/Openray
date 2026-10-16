@@ -111,6 +111,8 @@ import {
   INTERNAL_EXTENSION_META,
   INTERNAL_COMMANDS,
   internalCommandEntry,
+  type InternalArea,
+  type InternalCommandName,
   type CalculatorEntry,
   type FocusActionEntry,
   type FocusSessionEntry,
@@ -1700,6 +1702,35 @@ export function MainWindow() {
       console.info(`[applications] open failed: ${String(error)}`);
     });
   };
+  // Application / quicklink / internal-command hotkeys registered on the Shortcuts page:
+  // a separate subscription so the lookups can close over the loaded data.
+  useEffect(() => {
+    return onNotification("windowManagement.hotkey", (raw) => {
+      const payload = raw as { commandKey?: string };
+      if (!payload.commandKey) return;
+      if (payload.commandKey.startsWith("app:")) {
+        const appId = payload.commandKey.slice("app:".length);
+        const app = applications.find((candidate) => candidate.payload.id === appId);
+        if (app) openApplicationEntry(app);
+        return;
+      }
+      if (payload.commandKey.startsWith("quicklink:")) {
+        const quicklinkId = payload.commandKey.slice("quicklink:".length);
+        const quicklink = quicklinkRows.find((candidate) => candidate.id === quicklinkId);
+        if (quicklink) {
+          void ipcRequest("window.showMainWindow", {}, { module: "frontend" }).catch(() => undefined);
+          openQuicklinkRow(quicklink);
+        }
+        return;
+      }
+      if (payload.commandKey.startsWith("command:internal/")) {
+        const [, area, command] = payload.commandKey.split("/");
+        void ipcRequest("window.showMainWindow", {}, { module: "frontend" }).catch(() => undefined);
+        setSelected(internalCommandEntry(area as InternalArea, command as InternalCommandName));
+      }
+    });
+    // openApplicationEntry/openQuicklinkRow are stable; data flows through the deps below.
+  }, [applications, quicklinkRows, openApplicationEntry, openQuicklinkRow, setSelected]);
 
   // Toast actions merge into whatever action panel is open, like Raycast's `getToastActions()`.
   const toastGroups = useToastActionGroups();

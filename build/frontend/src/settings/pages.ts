@@ -235,7 +235,6 @@ export const PAGES: readonly PageDefinition[] = [
     description: "Manage command hotkeys and aliases across Raycast.",
     icon: "shortcuts",
     keywords: ["aliases", "applications", "commands", "extensions", "hotkeys", "keybindings", "keyboard", "quicklinks"],
-    empty: "Hotkeys and aliases are stored per command. Raycast Mini keeps them with their extension.",
     sections: [],
   },
   {

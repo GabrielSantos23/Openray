@@ -6,7 +6,7 @@ import type { ApplicationCommand } from "../applications";
 import type { FocusSessionState } from "../focus";
 import { applicationFavoriteKey, commandFavoriteKey, internalFavoriteKey } from "../favorites";
 import { isDevExtensionsEnabled } from "../testHooks";
-import { readCommandAliases } from "../commandConfig";
+import { appConfigKey, internalConfigKey, isShortcutDisabled, quicklinkConfigKey, readAppAliases, readCommandAliases, readQuicklinkAliases, readShortcutDisabled } from "../commandConfig";
 import { isLikelyUrl, type QuicklinkEntry } from "../quicklinks";
 import { looksLikeFilePath } from "../fileSearch";
 import { WM_COMMANDS } from "../windowManagement";
@@ -89,12 +89,17 @@ export function buildSections(
   focusSession: FocusSessionState | null,
   gameApps: ApplicationCommand[]
 ): RootSection[] {  // Build searchable entries for all applications
-  const appSearchables: SearchableEntry[] = applications.map((app) => ({
+  const appAliases = readAppAliases();
+  const disabledShortcuts = readShortcutDisabled();
+  const appSearchables: SearchableEntry[] = applications
+    .filter((app) => !isShortcutDisabled(appConfigKey(app.payload.id)))
+    .map((app) => ({
     title: app.title,
     subtitle: app.subtitle,
     keywords: app.keywords,
     rootEntry: { kind: "application" as const, application: app },
   }));
+  const appAliasForKey = (applicationId: string) => appAliases[appConfigKey(applicationId)];
 
   // Build searchable entries for clipboard history
   const clipboardSearchable: SearchableEntry = {
@@ -105,10 +110,17 @@ export function buildSections(
   };
 
   // Internal extension commands: one root row per command, rendered like installed commands.
-  const internalCommandSearchables: SearchableEntry[] = INTERNAL_COMMANDS.map((definition) => ({
+  const internalCommandSearchables: SearchableEntry[] = INTERNAL_COMMANDS.filter(
+    (definition) => !isShortcutDisabled(internalConfigKey(definition.area, definition.command)),
+  ).map((definition) => ({
     title: definition.title,
     subtitle: INTERNAL_EXTENSION_META[definition.area].title,
-    keywords: definition.keywords,
+    keywords: [
+      ...definition.keywords,
+      ...(readCommandAliases()[`command:internal/${definition.area}/${definition.command}`]
+        ? [readCommandAliases()[`command:internal/${definition.area}/${definition.command}`].toLowerCase()]
+        : []),
+    ],
     rootEntry: internalCommandEntry(definition.area, definition.command),
   }));
 
@@ -146,7 +158,9 @@ export function buildSections(
 
   // Dynamic `game` command rows (root-search section `apps`): flagged applications, shown while
   // searching exactly like dynamic quicklink rows.
-  const gameSearchables: SearchableEntry[] = gameApps.map((app) => ({
+  const gameSearchables: SearchableEntry[] = gameApps
+    .filter((app) => !isShortcutDisabled(appConfigKey(app.payload.id)))
+    .map((app) => ({
     title: app.title,
     subtitle: app.subtitle,
     keywords: ["game", "games", ...app.keywords],
@@ -155,12 +169,18 @@ export function buildSections(
 
   // Dynamic quicklink rows: title = name, keywords include the `quicklink` tag (Raycast's
   // `dynamicCommands.quicklink`).
-  const quicklinkSearchables: SearchableEntry[] = quicklinkRows.map((entry) => ({
-    title: entry.name,
-    subtitle: entry.link,
-    keywords: ["quicklink", ...entry.tags.map((tag) => tag.toLowerCase())],
-    rootEntry: { kind: "quicklink" as const, quicklink: entry },
-  }));
+  const quicklinkAliases = readQuicklinkAliases();
+  const quicklinkSearchables: SearchableEntry[] = quicklinkRows
+    .filter((entry) => !isShortcutDisabled(quicklinkConfigKey(entry.id)))
+    .map((entry) => {
+      const alias = quicklinkAliases[quicklinkConfigKey(entry.id)];
+      return {
+        title: entry.name,
+        subtitle: entry.link,
+        keywords: ["quicklink", ...entry.tags.map((tag) => tag.toLowerCase()), ...(alias ? [alias.toLowerCase()] : [])],
+        rootEntry: { kind: "quicklink" as const, quicklink: entry },
+      };
+    });
 
   // Dynamic custom translate commands (`customTranslate`): title = command name. Like the other
   // dynamic commands they are searchable rows, shown while searching.
@@ -182,6 +202,7 @@ export function buildSections(
       // Dev-only test extensions stay hidden unless the flag is on: localStorage
       // `raycast-mini:dev-extensions=1`, or the host's `--dev-extensions` / env equivalent.
       if (extension.name === "command-ux-test" && !isDevExtensionsEnabled()) continue;
+      if (isShortcutDisabled(commandFavoriteKey(extension.uuid, command.name))) continue;
       const entry: ExtensionEntry = { kind: "extension", extension, command };
       // A user alias widens the match like an extra keyword (Raycast's per-command aliases).
       const alias = commandAliases[commandFavoriteKey(extension.uuid, command.name)];

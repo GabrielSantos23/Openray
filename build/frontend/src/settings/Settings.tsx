@@ -70,6 +70,7 @@ import {
   useDismiss,
   usePopupRect,
 } from "./controls";
+import { ShortcutsFilterContext, ShortcutsPage, ShortcutsTitlebarActions, type ShortcutsFilter } from "./ShortcutsPage";
 import { FallbackSpecIcon } from "./brandIcons";
 import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
 import { ExtensionPreferences } from "./ExtensionPreferences";
@@ -302,6 +303,8 @@ export function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values, mergeValues]);
 
+  const [shortcutsFilter, setShortcutsFilter] = useState<ShortcutsFilter>({ query: "", categories: [], modifications: new Set() });
+  const shortcutsContext = useMemo(() => ({ filter: shortcutsFilter, setFilter: setShortcutsFilter }), [shortcutsFilter]);
   const page = useMemo(() => PAGES.find((candidate) => candidate.id === route) ?? PAGES[0], [route]);
   const results = useMemo(() => searchResults(query), [query]);
 
@@ -324,8 +327,9 @@ export function Settings() {
   }, [translatorLanguages]);
 
   return (
+    <ShortcutsFilterContext.Provider value={shortcutsContext}>
     <div className="settings-window">
-      <Titlebar page={page} onNavigate={navigate} />
+<Titlebar page={page} onNavigate={navigate} actions={page.id === "shortcuts" ? <ShortcutsTitlebarActions /> : null} />
       <div className="settings-chrome">
         <Sidebar
           route={route}
@@ -338,7 +342,7 @@ export function Settings() {
           <header className="settings-header" data-raycast-window-draggable-region="true" />
           <div className="settings-page__scroll">
             <div className="settings-page">
-              {page.sections.length === 0 || page.sections.every((section) => section.rows.length === 0) ? (
+              {page.id !== "shortcuts" && (page.sections.length === 0 || page.sections.every((section) => section.rows.length === 0)) ? (
                 <div className="settings-page__empty">{page.empty ?? "No settings available."}</div>
               ) : (
                 page.sections.map((section) =>
@@ -377,6 +381,7 @@ export function Settings() {
                   ),
                 )
               )}
+              {page.id === "shortcuts" ? <ShortcutsPage /> : null}
               {page.id === "translator" ? <TranslatorCustomCommands /> : null}
               {page.id === "extensions" ? <ExtensionPreferences /> : null}
             </div>
@@ -385,11 +390,12 @@ export function Settings() {
       </div>
       <SettingsToastHost />
     </div>
+    </ShortcutsFilterContext.Provider>
   );
 }
 
 /** The in-page titlebar: sidebar "Settings" label, back/forward, page title, caption buttons. */
-function Titlebar({ page, onNavigate }: { page: PageDefinition; onNavigate: (pageId: string) => void }) {
+function Titlebar({ page, onNavigate, actions }: { page: PageDefinition; onNavigate: (pageId: string) => void; actions?: ReactNode }) {
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
 
@@ -436,6 +442,7 @@ function Titlebar({ page, onNavigate }: { page: PageDefinition; onNavigate: (pag
         </button>
         <span className="settings-titlebar__page">{page.title}</span>
       </div>
+      {actions ? <div className="settings-titlebar__actions">{actions}</div> : null}
       <div className="settings-titlebar__caption">
         <button
           type="button"
