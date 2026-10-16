@@ -24,6 +24,7 @@ import { registerAllCommandHotkeys } from "../commandConfig";
 import { installSystemAccent } from "./systemAccent";
 import { installSettingsPush, syncFromBackend, useSetting } from "../settings/store";
 import { POP_TO_ROOT_BY_LABEL } from "../settings/persistence";
+import { applyTheme, themeByName } from "./themes";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
 import {
   hudStore,
@@ -273,6 +274,22 @@ export function MainWindow() {
   }, []);
 
   // Search sensitivity follows the settings store (live via `settings.changed`).
+
+  // Theme engine: the bundled palettes override the root token set; Follow System Appearance
+  // switches dark/light with the OS, otherwise the dark theme always applies.
+  const followSystemAppearance = useSetting("follow-system-appearance") !== false;
+  const themeDark = String(useSetting("theme-dark") ?? "Raycast Dark");
+  const themeLight = String(useSetting("theme-light") ?? "Raycast Light");
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const name = followSystemAppearance ? (query.matches ? themeDark : themeLight) : themeDark;
+      applyTheme(themeByName(name));
+    };
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, [followSystemAppearance, themeDark, themeLight]);
 
   // Interface Size zooms the whole window like Raycast's `--spx` (1 / 1.1 / 1.2).
   useEffect(() => {

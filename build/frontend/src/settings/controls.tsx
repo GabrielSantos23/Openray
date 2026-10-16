@@ -485,7 +485,10 @@ export function HotkeyRecorder({
       if (event.altKey) parts.push("Alt");
       if (event.shiftKey) parts.push("Shift");
       if (event.metaKey) parts.push("Win");
-      parts.push(event.key.length === 1 ? event.key.toUpperCase() : event.key);
+      const keyLabel = event.key === " " ? "Space"
+        : event.key.length === 1 ? event.key.toUpperCase()
+        : event.key;
+      parts.push(keyLabel);
       onChange(parts.join(" + "));
       setRecording(false);
       setFlash(conflict ? "conflict" : "saved");

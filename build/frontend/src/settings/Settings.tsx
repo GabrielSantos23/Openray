@@ -185,6 +185,7 @@ export function Settings() {
         "show-in-menu-bar",
         "automatically-show-taskbar",
         "raycast-hotkey",
+        "replace-start-menu",
         "follow-system-appearance",
         "theme-dark",
         "theme-light",
@@ -393,7 +394,7 @@ function Titlebar({ page, onNavigate }: { page: PageDefinition; onNavigate: (pag
           className="settings-caption-button"
           aria-label="Minimize"
           onMouseDown={(event) => event.stopPropagation()}
-          onClick={() => void ipcRequest("window.minimize")}
+          onClick={() => void ipcRequest("window.minimize", {}, { module: "frontend" })}
         >
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
             <path d="M0 5h10" stroke="currentColor" strokeWidth="1" />
@@ -404,7 +405,7 @@ function Titlebar({ page, onNavigate }: { page: PageDefinition; onNavigate: (pag
           className="settings-caption-button settings-caption-button--close"
           aria-label="Close"
           onMouseDown={(event) => event.stopPropagation()}
-          onClick={() => void ipcRequest("window.closeSettings")}
+          onClick={() => void ipcRequest("window.closeSettings", {}, { module: "frontend" })}
         >
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
             <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" strokeWidth="1" />
@@ -703,7 +704,7 @@ function Row({
   );
 }
 
-/** The Raycast Hotkey composite: optional Replace-Start-Menu-style hint, recorder, reset. */
+/** The Raycast Hotkey composite: Replace Start Menu toggle, recorder, reset. */
 function HotkeyRow({
   row,
   value,
@@ -714,15 +715,31 @@ function HotkeyRow({
   onValueChange: (next: string) => void;
 }) {
   const isDefault = value === row.value;
+  const replaceStartMenu = useSetting("replace-start-menu") === true;
+  const toggleStartMenu = () => {
+    const next = !replaceStartMenu;
+    updateSettings({ "replace-start-menu": next });
+    void ipcRequest("settings.replaceStartMenu", { enabled: next }, { module: "frontend" }).catch(() => {
+      updateSettings({ "replace-start-menu": !next });
+      window.dispatchEvent(
+        new CustomEvent("raycast-mini:settings-toast", {
+          detail: { title: next ? "Failed to register the Win key" : "Failed to restore the Start Menu" },
+        }),
+      );
+    });
+  };
   return (
     <span className="settings-row__right">
-      {!isDefault && row.value ? (
+      {row.id === "raycast-hotkey" ? (
         <Button
           title="The Win key will open Raycast instead of the Start Menu. You'll still be able to open the Start Menu from the taskbar."
-          onClick={() => onValueChange(row.value ?? "")}
+          onClick={toggleStartMenu}
         >
-          Restore Default
+          {replaceStartMenu ? "Restore Start Menu" : "Replace Start Menu"} <span aria-hidden>⊞</span>
         </Button>
+      ) : null}
+      {!isDefault && row.value && row.id !== "raycast-hotkey" ? (
+        <Button onClick={() => onValueChange(row.value ?? "")}>Restore Default</Button>
       ) : null}
       <HotkeyRecorder value={value} onChange={onValueChange} footerLabel="Raycast Hotkey" />
       <IconButton
@@ -826,6 +843,9 @@ async function applyGeneralSetting(id: string, next: SettingsValue): Promise<voi
       return;
     case "raycast-hotkey":
       await ipcRequest("settings.setGlobalHotkey", { hotkey: String(next) }, { module: "frontend" });
+      return;
+    case "replace-start-menu":
+      await ipcRequest("settings.replaceStartMenu", { enabled: Boolean(next) }, { module: "frontend" });
       return;
     case "follow-system-appearance":
     case "theme-dark":

@@ -777,6 +777,9 @@
 .window[data-window-mode="compact"][data-compact-hidden="true"] .window__header {
   border-bottom: 0;
 }
+.window[data-window-mode="compact"] .window__footer {
+  display: none;
+}
 
 /* Compact styling per Raycast's compact launcher: one tall rounded search bar filling the
    window — larger text, soft card surface, no separators. */

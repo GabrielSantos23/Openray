@@ -23,7 +23,12 @@ public partial class MainWindow : Window
 {
     private const int HotkeyId = 0x1000;
     private const int HotkeyIdFallback = 0x1002;
+    private const int StartMenuHotkeyId = 0x1003;
+    private bool _startMenuReplaced;
     private const uint ModAlt = 0x0001;
+    private const uint ModWin = 0x0008;
+    private const uint VkLWin = 0x5B;
+    private const uint VkRWin = 0x5C;
     private const uint ModControl = 0x0002;
     private const uint ModShift = 0x0004;
     private const uint VkSpace = 0x20;
@@ -294,6 +299,14 @@ public partial class MainWindow : Window
             });
             return null;
         }
+        // Replace Start Menu: register the bare Win key (left and right) as launcher hotkeys.
+        if (method == "settings.replaceStartMenu")
+        {
+            var enabled = data is { ValueKind: System.Text.Json.JsonValueKind.Object } startPayload
+                && startPayload.TryGetProperty("enabled", out var startEnabled) && startEnabled.GetBoolean();
+            _webView.Dispatcher.Invoke(() => SetStartMenuReplaced(enabled));
+            return null;
+        }
         if (method == "settings.setGlobalHotkey")
         {
             var hotkey = data is { ValueKind: System.Text.Json.JsonValueKind.Object } hotkeyPayload
@@ -456,6 +469,7 @@ public partial class MainWindow : Window
         if (ReadStoredSetting("show-in-menu-bar") is false) RemoveTrayIcon();
         else InitTrayIcon();
         if (ReadStoredSetting("open-at-login") is true) SetOpenAtLogin(true);
+        if (ReadStoredSetting("replace-start-menu") is true) SetStartMenuReplaced(true);
 
         // The Windows accent drives every toggle/link color; re-push when the user changes it.
         try
@@ -517,6 +531,33 @@ public partial class MainWindow : Window
         catch
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Replace Start Menu: MOD_WIN + VK_LWIN/VK_RWIN hotkeys intercept the bare Win key so it
+    /// opens the launcher instead of the Start Menu (taskbar Win still works per-key).
+    /// </summary>
+    private void SetStartMenuReplaced(bool enabled)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (enabled == _startMenuReplaced) return;
+        if (enabled)
+        {
+            var leftOk = RegisterHotKey(handle, StartMenuHotkeyId, ModWin, VkLWin);
+            var rightOk = RegisterHotKey(handle, StartMenuHotkeyId + 1, ModWin, VkRWin);
+            if (!leftOk && !rightOk)
+            {
+                App.Log.Write($"[hotkey] replace start menu failed (err={Marshal.GetLastWin32Error()})");
+                throw new InvalidOperationException("The Win key could not be registered");
+            }
+            _startMenuReplaced = true;
+        }
+        else
+        {
+            UnregisterHotKey(handle, StartMenuHotkeyId);
+            UnregisterHotKey(handle, StartMenuHotkeyId + 1);
+            _startMenuReplaced = false;
         }
     }
 
@@ -735,7 +776,7 @@ public partial class MainWindow : Window
         }
         else if (message == WmHotkey)
         {
-            if (wParam.ToInt32() == HotkeyId || wParam.ToInt32() == HotkeyIdFallback)
+            if (wParam.ToInt32() == HotkeyId || wParam.ToInt32() == HotkeyIdFallback || wParam.ToInt32() == StartMenuHotkeyId)
             {
                 Toggle();
                 handled = true;

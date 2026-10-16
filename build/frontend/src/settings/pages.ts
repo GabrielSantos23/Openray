@@ -21,8 +21,8 @@ export type ControlKind =
   | "none";/** The version the launcher reports everywhere else, kept in one place. */
 export const VERSION = "2.4.0.0";
 export const HOST_NAME = "This Computer";
-/** Raycast's default hotkey is the Win key; the clone keeps its registrable default. */
-export const RAYCASTMINI_DEFAULT_HOTKEY = "Alt + Space";
+/** Raycast's default hotkey is the Win key; the clone's registrable default is Ctrl+Alt+Space. */
+export const RAYCASTMINI_DEFAULT_HOTKEY = "Ctrl + Alt + Space";
 export interface RowDefinition {
   id: string;
   title: string;

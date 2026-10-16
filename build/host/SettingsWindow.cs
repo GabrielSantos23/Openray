@@ -57,7 +57,7 @@ public sealed class SettingsWindow : Window
         WindowStyle = WindowStyle.None;
         var chrome = new System.Windows.Shell.WindowChrome
         {
-            ResizeBorderThickness = new Thickness(6, 0, 6, 6),
+            ResizeBorderThickness = new Thickness(6),
             CaptionHeight = 0,
             GlassFrameThickness = new Thickness(0),
             CornerRadius = new CornerRadius(0),
@@ -129,7 +129,7 @@ public sealed class SettingsWindow : Window
             System.Windows.Media.Color.FromRgb(0x1F, 0x1F, 0x1F));
 
         _webView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0, 0x1F, 0x1F, 0x1F);
-        _webView.Margin = new Thickness(6, 0, 6, 6);
+        _webView.Margin = new Thickness(6, 6, 6, 6);
         Content = _webView;
 
         SourceInitialized += OnSourceInitialized;
@@ -144,6 +144,10 @@ public sealed class SettingsWindow : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         var handle = new WindowInteropHelper(this).Handle;
+        var source = HwndSource.FromHwnd(handle);
+        // Alt+Space is the Windows system-menu shortcut; swallowing WM_SYSCOMMAND's key-menu
+        // variant lets the page see the combination so the hotkey recorder can record it.
+        source?.AddHook(WndProcHook);
         var dark = 1;
         DwmSetWindowAttribute(handle, DwmwaUseImmersiveDarkMode, ref dark, sizeof(int));
         var rounded = DwmwtcpRound;
@@ -194,6 +198,18 @@ public sealed class SettingsWindow : Window
     {
         Closing -= OnClosing;
         Close();
+    }
+
+    private IntPtr WndProcHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int wmSysCommand = 0x0112;
+        const int scKeyMenu = 0xF100;
+        if (msg == wmSysCommand && (wParam.ToInt64() & 0xFFF0) == scKeyMenu)
+        {
+            handled = true;
+            return IntPtr.Zero;
+        }
+        return IntPtr.Zero;
     }
 
     private void OnStateChanged(object? sender, EventArgs e)
