@@ -155,9 +155,9 @@ export const DEFAULTS: SettingsMap = {
   "fallback-commands": JSON.stringify([
     { id: "cmd:snippets/search", kind: "command", title: "Search Snippets", provider: "Snippets", icon: "text", area: "snippets", command: "search" },
     { id: "cmd:store/browse", kind: "command", title: "Store", provider: "Raycast", icon: "extension", area: "store", command: "browse" },
-    { id: "web:google", kind: "url", title: "Google Search", provider: "Web Searches", icon: "globe", url: "https://www.google.com/search?q={query}" },
-    { id: "web:duckduckgo", kind: "url", title: "DuckDuckGo Search", provider: "Web Searches", icon: "globe", url: "https://duckduckgo.com/?q={query}" },
-    { id: "web:bing", kind: "url", title: "Bing", provider: "Web Searches", icon: "globe", url: "https://www.bing.com/search?q={query}" },
+    { id: "web:google", kind: "url", title: "Google Search", provider: "Web Searches", icon: "brand:google", url: "https://www.google.com/search?q={query}" },
+    { id: "web:duckduckgo", kind: "url", title: "DuckDuckGo Search", provider: "Web Searches", icon: "brand:duckduckgo", url: "https://duckduckgo.com/?q={query}" },
+    { id: "web:bing", kind: "url", title: "Bing", provider: "Web Searches", icon: "brand:bing", url: "https://www.bing.com/search?q={query}" },
   ]),
   "snippets-enable-expansion": true,
   "snippets-expansion-mode": "Immediately",
@@ -293,12 +293,12 @@ export const FALLBACK_CATALOG: FallbackCommandSpec[] = [
   { id: "cmd:notes/search", kind: "command", title: "Search Notes", provider: "Notes", icon: "blank-document", area: "notes", command: "search" },
   { id: "cmd:file-search/searchFiles", kind: "command", title: "Search Files", provider: "File Search", icon: "folder-search", area: "file-search", command: "searchFiles" },
   { id: "cmd:translator/translate", kind: "command", title: "Translate", provider: "Translation", icon: "Globe", area: "translator", command: "translate" },
-  { id: "web:google", kind: "url", title: "Google Search", provider: "Web Searches", icon: "globe", url: "https://www.google.com/search?q={query}" },
-  { id: "web:duckduckgo", kind: "url", title: "DuckDuckGo Search", provider: "Web Searches", icon: "globe", url: "https://duckduckgo.com/?q={query}" },
-  { id: "web:bing", kind: "url", title: "Bing", provider: "Web Searches", icon: "globe", url: "https://www.bing.com/search?q={query}" },
-  { id: "web:github", kind: "url", title: "GitHub Search", provider: "Web Searches", icon: "globe", url: "https://github.com/search?q={query}" },
-  { id: "web:youtube", kind: "url", title: "YouTube Search", provider: "Web Searches", icon: "globe", url: "https://www.youtube.com/results?search_query={query}" },
-  { id: "web:wikipedia", kind: "url", title: "Wikipedia", provider: "Web Searches", icon: "globe", url: "https://en.wikipedia.org/w/index.php?search={query}" },
+  { id: "web:google", kind: "url", title: "Google Search", provider: "Web Searches", icon: "brand:google", url: "https://www.google.com/search?q={query}" },
+  { id: "web:duckduckgo", kind: "url", title: "DuckDuckGo Search", provider: "Web Searches", icon: "brand:duckduckgo", url: "https://duckduckgo.com/?q={query}" },
+  { id: "web:bing", kind: "url", title: "Bing", provider: "Web Searches", icon: "brand:bing", url: "https://www.bing.com/search?q={query}" },
+  { id: "web:github", kind: "url", title: "GitHub Search", provider: "Web Searches", icon: "brand:github", url: "https://github.com/search?q={query}" },
+  { id: "web:youtube", kind: "url", title: "YouTube Search", provider: "Web Searches", icon: "brand:youtube", url: "https://www.youtube.com/results?search_query={query}" },
+  { id: "web:wikipedia", kind: "url", title: "Wikipedia", provider: "Web Searches", icon: "brand:wikipedia", url: "https://en.wikipedia.org/w/index.php?search={query}" },
 ];
 
 export function parseFallbackSpecs(value: unknown): FallbackCommandSpec[] {

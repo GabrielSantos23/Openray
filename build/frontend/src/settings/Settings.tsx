@@ -70,6 +70,7 @@ import {
   useDismiss,
   usePopupRect,
 } from "./controls";
+import { FallbackSpecIcon } from "./brandIcons";
 import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
 import { ExtensionPreferences } from "./ExtensionPreferences";
 import { applyPreset, readStoredHotkeys } from "../windowManagement";
@@ -819,7 +820,7 @@ function FallbackAddRow({
                   onClick={() => add(spec)}
                 >
                   <span className="settings-fallback__icon">
-                    <RaycastIcon name={spec.icon} size={14} />
+                    <FallbackSpecIcon spec={spec} size={14} />
                   </span>
                   <span>{spec.title}</span>
                   <span className="settings-fallback__provider">{spec.provider}</span>
@@ -893,7 +894,7 @@ function FallbackListRow({
               <RaycastIcon name="grip-vertical" size={13} />
             </span>
             <span className="settings-fallback__icon">
-              <RaycastIcon name={item.icon} size={14} />
+              <FallbackSpecIcon spec={item} size={14} />
             </span>
             <span className="settings-row__title">{item.title}</span>
           </span>
