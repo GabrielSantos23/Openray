@@ -62,6 +62,7 @@ function createBackend(options) {
   let focusHandlers = {};
   let gamesHandlers = {};
   let taskbarHandlers = {};
+  let advancedHandlers = {};
   let notesHandlers = {};
   let storeHandlers = {};
   let settingsStoreHandlers = {};
@@ -1112,8 +1113,8 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
-      if (method.startsWith("games.") || method.startsWith("taskbar.")) {
-        const table = method.startsWith("games.") ? gamesHandlers : taskbarHandlers;
+      if (method.startsWith("games.") || method.startsWith("taskbar.") || method.startsWith("advanced.")) {
+        const table = method.startsWith("games.") ? gamesHandlers : method.startsWith("taskbar.") ? taskbarHandlers : advancedHandlers;
         const handler = table[method.slice(method.indexOf(".") + 1)];
         if (handler) return handler(data ?? {});
       }
@@ -1228,6 +1229,10 @@ function createBackend(options) {
     /** Install the settings store handler table. */
     registerSettingsStoreHandler(handlers) {
       settingsStoreHandlers = handlers ?? {};
+    },
+    /** Install the advanced handler table. */
+    registerAdvancedHandler(handlers) {
+      advancedHandlers = handlers ?? {};
     },
     /** Install the notes store handler table. */
     registerNotesHandler(handlers) {

@@ -17,6 +17,8 @@ const { enumerateArguments, resolvePlaceholders } = require("./placeholders");
 
 const DEFAULT_PREFERENCES = {
   passSelectedTextAsArgument: false,
+  showLinkPreviews: true,
+  preferExistingTabs: false,
 };
 
 const SCHEMA = `
@@ -285,10 +287,14 @@ function createQuicklinks({ dispatch, pushToFrontend, dataRoot, calculate } = {}
       if (!(key in DEFAULT_PREFERENCES)) {
         throw new Error(`Unknown quicklinks preference: ${key}`);
       }
-      if (key === "passSelectedTextAsArgument") {
+      if (key === "passSelectedTextAsArgument" || key === "showLinkPreviews" || key === "preferExistingTabs") {
         preferences[key] = value === true;
       }
       persistPreferences();
+      if (key === "preferExistingTabs" && typeof dispatch === "function") {
+        Promise.resolve(dispatch("shell.setOpenUrlPreferences", { preferExistingTabs: preferences.preferExistingTabs }))
+          .catch(() => undefined);
+      }
       return { value: preferences[key] };
     },
   };
@@ -310,8 +316,16 @@ function createQuicklinks({ dispatch, pushToFrontend, dataRoot, calculate } = {}
     rows.forEach((row, position) => update.run(position + 1, row.id));
   }
 
+  function pushPreferencesToHost() {
+    if (typeof dispatch === "function") {
+      Promise.resolve(dispatch("shell.setOpenUrlPreferences", { preferExistingTabs: preferences.preferExistingTabs }))
+        .catch(() => undefined);
+    }
+  }
+
   return {
     handlers,
+    pushPreferencesToHost,
     databasePath,
     close() {
       db.close();

@@ -72,6 +72,29 @@ public sealed class BackendProcess : IAsyncDisposable
         startInfo.EnvironmentVariables["RAYCAST_MINI_FRONTEND_ROOT"] = FrontendRoot;
         startInfo.EnvironmentVariables["RAYCAST_MINI_EXTENSIONS_ROOT"] = ExtensionsRoot;
 
+        // Advanced > Connection: trust an extra certificate authority in the Node process from boot.
+        try
+        {
+            var dataDir = Environment.GetEnvironmentVariable("RAYCAST_MINI_DATA_DIR")
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RaycastMini");
+            var settingsFile = Path.Combine(dataDir, "store", "settings.json");
+            if (File.Exists(settingsFile))
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(settingsFile));
+                if (document.RootElement.TryGetProperty("additional-certificate-authorities", out var authority)
+                    && authority.ValueKind == JsonValueKind.String
+                    && authority.GetString() is { Length: > 0 } certificate
+                    && File.Exists(certificate))
+                {
+                    startInfo.EnvironmentVariables["NODE_EXTRA_CA_CERTS"] = certificate;
+                }
+            }
+        }
+        catch
+        {
+            /* settings store unreadable — launch without the override */
+        }
+
         _process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
 
         _process.OutputDataReceived += (_, args) =>

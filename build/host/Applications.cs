@@ -618,6 +618,10 @@ public static class Applications
             {
                 return new { path = GetDefaultBrowserPath() };
             }
+            case "applications.setActivationBehavior":
+            {
+                return SetActivationBehavior(data);
+            }
             case "applications.open":
             {
                 var id = data?.GetProperty("id").GetString();
@@ -797,8 +801,95 @@ public static class Applications
         Process.Start(new ProcessStartInfo(app.Path) { UseShellExecute = true, Verb = verb });
     }
 
+    // ---- Advanced > Window Activation Behavior ------------------------------------------------
+    // `move`: bring a running window to the current virtual desktop, then focus it.
+    // `switch`: focus the window where it lives, so the OS switches to that desktop.
+    private static string _activationBehavior = "move";
+
+    private static object SetActivationBehavior(JsonElement? data)
+    {
+        _activationBehavior = data is { ValueKind: JsonValueKind.Object } payload
+            && payload.TryGetProperty("behavior", out var value)
+            && value.GetString() == "switch" ? "switch" : "move";
+        return new { ok = true };
+    }
+
+    /// <summary>Top-level window of a running app whose executable matches <paramref name="path"/>.</summary>
+    private static IntPtr FindWindowByPath(string path)
+    {
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (process.MainModule?.FileName is { Length: > 0 } module
+                    && string.Equals(module, path, StringComparison.OrdinalIgnoreCase)
+                    && process.MainWindowHandle != IntPtr.Zero)
+                {
+                    return process.MainWindowHandle;
+                }
+            }
+            catch
+            {
+                /* access denied */
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// IVirtualDesktopManager COM interop (documented public interface): MoveWindowToDesktop pulls a
+    /// window onto the current virtual desktop. May fail for UWP hosted windows — fall back plain.
+    /// </summary>
+    [ComImport]
+    [Guid("372EAD1D-C3A9-4A09-A17F-D3F18B7DE38A")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IVirtualDesktopManager
+    {
+        [PreserveSig]
+        int IsWindowOnCurrentVirtualDesktop(IntPtr topLevelWindow);
+
+        [PreserveSig]
+        int GetWindowDesktopId(IntPtr topLevelWindow, out Guid desktopId);
+
+        [PreserveSig]
+        int MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
+    }
+
+    /// <summary>Activates a running instance honoring the Window Activation Behavior preference.</summary>
+    private static bool ActivateRunningInstance(ApplicationEntry app)
+    {
+        if (app.Path is null || app.IsMsix) return false;
+        var window = FindWindowByPath(app.Path);
+        if (window == IntPtr.Zero) return false;
+        try
+        {
+            var managerType = Type.GetTypeFromCLSID(new Guid("AA509086-5CA9-4C25-8F95-589D3C07B0F8"));
+            var manager = (IVirtualDesktopManager)(Activator.CreateInstance(managerType!) ?? throw new InvalidOperationException("IVirtualDesktopManager unavailable"));
+            if (_activationBehavior == "move"
+                && manager.GetWindowDesktopId(window, out var windowDesktop) == 0
+                && manager.GetWindowDesktopId(NativeHost.ForegroundWindow(), out var currentDesktop) == 0
+                && windowDesktop != currentDesktop)
+            {
+                var target = currentDesktop;
+                manager.MoveWindowToDesktop(window, ref target);
+            }
+        }
+        catch
+        {
+            /* COM unavailable — plain activation still applies */
+        }
+        NativeHost.SetForeground(window);
+        return true;
+    }
+
     private static void Launch(ApplicationEntry app, bool elevated = false)
     {
+        if (!elevated && !app.IsMsix && ActivateRunningInstance(app)) return;
+
         if (app.IsMsix || (app.BundleId?.Contains("!") ?? false))
         {
             // Store apps launch through their AppUserModelID.

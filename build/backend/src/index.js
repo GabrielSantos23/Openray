@@ -36,6 +36,7 @@ const { migrateRemovedStoreArtifacts } = require("./store-migration");
 const { createWindowStates } = require("./window-states");
 const { createFocus } = require("./focus");
 const { createGames } = require("./games");
+const { createAdvanced } = require("./advanced");
 const { createTaskbar } = require("./taskbar");
 const { createSettingsStore } = require("./settings-store");
 const { createNotes } = require("./notes");
@@ -93,6 +94,7 @@ const quicklinks = createQuicklinks({
   calculate: (expression) => calculator.calculateExpression(expression),
 });
 backend.registerQuicklinksHandler(quicklinks.handlers);
+quicklinks.pushPreferencesToHost();
 
 // Snippets is the third internal extension persisted in this process (`snippets.*`). The native
 // hook asks this store to resolve placeholders (`snippets.resolve`) because the backend is alive
@@ -166,6 +168,19 @@ const settingsStore = createSettingsStore({
   toRenderer: (method, data) => backend.dispatch("frontend", method, data),
 });
 backend.registerSettingsStoreHandler(settingsStore.handlers);
+
+// Advanced (`advanced.*`): the Export section (manual + scheduled backups with an optional
+// AES-GCM passphrase) and the Connection preferences applied to this process at boot.
+const advanced = createAdvanced({
+  dispatch: (method, data) => backend.dispatch("backend", method, data),
+  dataRoot: process.env.RAYCAST_MINI_DATA_DIR ?? path.dirname(config.extensionsRoot),
+  settings: {
+    getAll: () => settingsStore.getValues(),
+    set: (patch) => settingsStore.handlers.set({ values: patch }),
+  },
+});
+backend.registerAdvancedHandler(advanced.handlers);
+advanced.bootstrap();
 
 // Notes is the ninth (`notes.*`): the SQLite store, the trash with its 60-day purge and the
 // markdown conversions behind Copy As / Export live here; the window page and the launcher's

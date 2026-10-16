@@ -40,6 +40,8 @@ public static class NativeHost
         "shell.openUrl" => Task.FromResult(OpenUrl(data)),
         "shell.openWith" => Task.FromResult(OpenWith(data)),
         "shell.revealFile" => Task.FromResult(RevealFile(data)),
+        "shell.setOpenUrlPreferences" => Task.FromResult(SetOpenUrlPreferences(data)),
+        "system.powerStatus" => Task.FromResult(PowerStatus()),
         "fileSystem.openFile" => Task.FromResult(OpenFile(data)),
         "fileSystem.moveToTrash" => Task.FromResult(MoveToTrash(data)),
         "fileSystem.showOpenFileDialog" => Task.FromResult(ShowOpenFileDialog(data)),
@@ -63,11 +65,94 @@ public static class NativeHost
         throw new InvalidOperationException($"missing \"{property}\"");
     }
 
+    // ---- Quicklinks > Prefer Existing Tabs ----------------------------------------------------
+    // When enabled, opening a URL first looks for a visible window whose title contains the URL's
+    // host and activates it instead of spawning a new browser window/tab.
+    private static bool _preferExistingTabs;
+
+    private static object SetOpenUrlPreferences(JsonElement? data)
+    {
+        _preferExistingTabs = data is { ValueKind: JsonValueKind.Object } payload
+            && payload.TryGetProperty("preferExistingTabs", out var value)
+            && value.GetBoolean();
+        return new { ok = true };
+    }
+
+    private static object PowerStatus()
+    {
+        if (!GetSystemPowerStatus(out var status)) return new { onBattery = false };
+        // ACLineStatus: 0 = offline (on battery), 1 = online, 255 = unknown.
+        return new { onBattery = status.ACLineStatus == 0 };
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SYSTEM_POWER_STATUS
+    {
+        public byte ACLineStatus;
+        public byte BatteryFlag;
+        public byte BatteryLifePercent;
+        public byte Reserved1;
+        public int BatteryLifeTime;
+        public int BatteryFullLifeTime;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
+
+    private const int SwRestore = 9;
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr window, int command);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    /// <summary>Foreground window handle, shared with the application activation path.</summary>
+    public static IntPtr ForegroundWindow() => GetForegroundWindow();
+
+    /// <summary>Focus a top-level window (used by Window Activation Behavior and quicklinks).</summary>
+    public static void SetForeground(IntPtr window) => SetForegroundWindow(window);
+
     private static object OpenUrl(JsonElement? data)
     {
         var url = RequireString(data, "url");
+        if (_preferExistingTabs && TryActivateWindowForUrl(url)) return new { ok = true, activated = true };
         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         return new { ok = true };
+    }
+
+    /// <summary>Activates an existing top-level window whose title contains the URL's host.</summary>
+    private static bool TryActivateWindowForUrl(string url)
+    {
+        string? host = null;
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == "http" || uri.Scheme == "https"))
+        {
+            host = uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..] : uri.Host;
+        }
+        if (string.IsNullOrEmpty(host)) return false;
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(process.MainWindowTitle)) continue;
+                if (process.MainWindowTitle.IndexOf(host, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (process.MainWindowHandle == IntPtr.Zero) continue;
+                ShowWindow(process.MainWindowHandle, SwRestore);
+                if (SetForegroundWindow(process.MainWindowHandle)) return true;
+            }
+            catch
+            {
+                /* access denied — keep scanning */
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+        return false;
     }
 
     private static object OpenWith(JsonElement? data)

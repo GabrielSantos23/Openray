@@ -257,6 +257,8 @@ export function Settings() {
         "root-search-sensitivity",
         "escape-key-behavior",
         "escape-key-closes-window",
+        "window-activation-behavior",
+        "use-system-proxy-settings",
       ]);
       if (generalKeys.has(id)) {
         const previous = values[id] ?? DEFAULTS[id] ?? next;
@@ -1112,6 +1114,12 @@ async function applyGeneralSetting(id: string, next: SettingsValue): Promise<voi
     case "theme-light":
     case "window-mode":
     case "show-favorites-in-compact-mode":
+    case "window-activation-behavior":
+      await ipcRequest("applications.setActivationBehavior", { behavior: next === "Switch Space" ? "switch" : "move" }, { module: "frontend" });
+      return;
+    case "use-system-proxy-settings":
+      // The Node backend re-reads the system proxy from the store on its next start.
+      return;
     case "interface-size":
       // Pure renderer concerns applied via the settings.changed push in both windows.
       return;
@@ -1173,6 +1181,45 @@ function routeLegacyRow(id: string, next: SettingsValue, values: SettingsMap): v
     void ipc
       .backend("fileSearch.setSettings", patch, { module: "backend" })
       .catch((error: unknown) => toaster("Couldn't save that setting", error instanceof Error ? error.message : undefined));
+    return;
+  }
+  if (id === "builtin-hotkeys-preset") {
+    // Built-in Hotkeys Preset: Improved registers the Clipboard History hotkey, Classic clears it.
+    const hotkey = next === "Classic" ? "" : "Ctrl + Shift + V";
+    void ipc.backend("clipboard.setHotkey", { hotkey }, { module: "backend" });
+    return;
+  }
+  if (id === "quicklinks-show-link-previews" || id === "quicklinks-prefer-existing-tabs") {
+    const key = id === "quicklinks-show-link-previews" ? "showLinkPreviews" : "preferExistingTabs";
+    void ipc.backend("quicklinks.setPreference", { key, value: Boolean(next) }, { module: "backend" }).catch(() => undefined);
+    return;
+  }
+  if (id === "focus-allow-all-websites") {
+    void ipc
+      .backend("focus.setPreferences", { allowAllOnEmptyWebsiteAllowlist: Boolean(next) }, { module: "backend" })
+      .catch(() => undefined);
+    return;
+  }
+  if (id === "file-search-content-search") {
+    void ipc
+      .backend("fileSearch.setSettings", { contentSearch: Boolean(next), contentSearchInRootSearch: Boolean(next) }, { module: "backend" })
+      .catch(() => undefined);
+    return;
+  }
+  if (id === "scheduled-backup" || id === "auto-delete-backups" || id === "skip-on-battery" || id === "export-passphrase" || id === "backup-location") {
+    const payload: Record<string, unknown> = {};
+    if (id === "scheduled-backup") {
+      payload.scheduled = next === "Daily" ? "daily" : next === "Weekly" ? "weekly" : next === "Monthly" ? "monthly" : "off";
+    } else if (id === "auto-delete-backups") {
+      payload.autoDelete = next === "Keep Latest" ? "1" : next === "Keep Last 5" ? "5" : next === "Keep Last 10" ? "10" : "never";
+    } else if (id === "skip-on-battery") {
+      payload.skipOnBattery = Boolean(next);
+    } else if (id === "export-passphrase") {
+      payload.passphrase = String(next ?? "");
+    } else {
+      payload.location = String(next ?? "");
+    }
+    void ipc.backend("advanced.setExportPreferences", payload, { module: "backend" }).catch(() => undefined);
     return;
   }
   if (id === "wm-preset") {
@@ -1344,6 +1391,54 @@ function runLegacyAction(
       });
     return;
   }
+  if (id === "backup-location") {
+    void ipc
+      .backend("fileSystem.showSelectFolderDialog", { title: "Choose Backup Location" }, { module: "backend" })
+      .then((response) => {
+        const folder = (response as { path?: string | null }).path;
+        if (!folder) return;
+        mergeValues({ "backup-location": folder });
+        void ipc.backend("advanced.setExportPreferences", { location: folder }, { module: "backend" }).catch(() => undefined);
+      })
+      .catch((error: unknown) => toaster("Couldn't choose that folder", error instanceof Error ? error.message : undefined));
+    return;
+  }
+  if (id === "additional-certificate-authorities") {
+    void ipc
+      .backend("fileSystem.showOpenFileDialog", { title: "Choose a certificate file" }, { module: "backend" })
+      .then((response) => {
+        const file = (response as { path?: string | null }).path;
+        if (!file) return;
+        updateSettings({ "additional-certificate-authorities": file });
+        mergeValues({ "additional-certificate-authorities": file });
+        toaster("Certificate added", "The Node backend picks it up the next time Raycast Mini starts.");
+      })
+      .catch((error: unknown) => toaster("Couldn't add that certificate", error instanceof Error ? error.message : undefined));
+    return;
+  }
+  if (id === "export-settings") {
+    void ipc
+      .backend("advanced.exportNow", { passphrase: String(values["export-passphrase"] ?? "") }, { module: "backend" })
+      .then((response) => {
+        const result = response as { ok?: boolean; file?: string; cancelled?: boolean };
+        if (result?.cancelled) return;
+        toaster("Settings exported", result?.file ?? undefined);
+      })
+      .catch((error: unknown) => toaster("Export failed", error instanceof Error ? error.message : undefined));
+    return;
+  }
+  if (id === "import-settings") {
+    void ipc
+      .backend("advanced.importFromFile", { passphrase: String(values["export-passphrase"] ?? "") }, { module: "backend" })
+      .then((response) => {
+        const result = response as { ok?: boolean; keys?: number; cancelled?: boolean };
+        if (result?.cancelled) return;
+        toaster("Settings imported", `${result?.keys ?? 0} values restored.`);
+        void syncFromBackend();
+      })
+      .catch((error: unknown) => toaster("Import failed", error instanceof Error ? error.message : undefined));
+    return;
+  }
   if (id === "clipboard-run-maintenance") {
     void ipc
       .backend("clipboard.runMaintenance", {}, { module: "backend" })
@@ -1389,8 +1484,12 @@ function useLegacyRowMirrors(mergeValues: (patch: SettingsMap) => void): void {
 
     void fetch("quicklinks.getPreferences").then((response) => {
       if (!response) return;
-      const preferences = response as { passSelectedTextAsArgument?: boolean };
-      mergeValues({ "quicklinks-pass-selected-text": Boolean(preferences.passSelectedTextAsArgument) });
+      const preferences = response as { passSelectedTextAsArgument?: boolean; showLinkPreviews?: boolean; preferExistingTabs?: boolean };
+      mergeValues({
+        "quicklinks-pass-selected-text": Boolean(preferences.passSelectedTextAsArgument),
+        "quicklinks-show-link-previews": preferences.showLinkPreviews !== false,
+        "quicklinks-prefer-existing-tabs": Boolean(preferences.preferExistingTabs),
+      });
     });
     mergeValues({
       "quicklinks-warn-before-delete": window.localStorage.getItem("raycast-mini:quicklinks-warn-delete") !== "0",
@@ -1460,12 +1559,13 @@ function useLegacyRowMirrors(mergeValues: (patch: SettingsMap) => void): void {
 
     void fetch("focus.getSession").then((response) => {
       if (!response) return;
-      const preferences = (response as { preferences?: { snoozeDurationMs: number | null; playSound: boolean; restoreAppsWhenSessionEnds: boolean } }).preferences;
+      const preferences = (response as { preferences?: { snoozeDurationMs: number | null; playSound: boolean; restoreAppsWhenSessionEnds: boolean; allowAllOnEmptyWebsiteAllowlist?: boolean } }).preferences;
       if (!preferences) return;
       mergeValues({
         "focus-snooze-duration": FOCUS_SNOOZE_LABEL[String(preferences.snoozeDurationMs ?? "null")] ?? "3 minutes",
         "focus-play-sound": preferences.playSound !== false,
         "focus-restore-apps": preferences.restoreAppsWhenSessionEnds === true,
+        "focus-allow-all-websites": preferences.allowAllOnEmptyWebsiteAllowlist === true,
       });
     });
     void fetch("games.getSettings").then((response) => {

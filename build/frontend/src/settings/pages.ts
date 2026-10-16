@@ -289,6 +289,14 @@ export const PAGES: readonly PageDefinition[] = [
             value: "Square Brackets",
           },
           {
+            id: "builtin-hotkeys-preset",
+            title: "Built-in Hotkeys Preset",
+            description: "Choose the default hotkeys for built-in commands. Improved adds the Clipboard History hotkey alongside the launcher; Classic keeps only the launcher hotkey.",
+            control: "select",
+            options: ["Improved", "Classic"],
+            value: "Improved",
+          },
+          {
             id: "hyper-key",
             title: "Hyper Key",
             description:
@@ -386,6 +394,14 @@ export const PAGES: readonly PageDefinition[] = [
         id: "advanced",
         rows: [
           {
+            id: "window-activation-behavior",
+            title: "Window Activation Behavior",
+            description: "Choose whether Raycast brings windows to your current Space or switches to the Space where they are open.",
+            control: "select",
+            options: ["Move to Active Space", "Switch Space"],
+            value: "Move to Active Space",
+          },
+          {
             id: "favicon-provider",
             title: "Favicon Provider",
             description: "Select the provider used to fetch favicons or None to disable favicon fetching.",
@@ -428,13 +444,27 @@ export const PAGES: readonly PageDefinition[] = [
         rows: [
           { id: "export-passphrase", title: "Export Passphrase", description: "A passphrase to encrypt your exported settings and data.", control: "text", secret: true },
           {
-            id: "scheduled-export",
-            title: "Scheduled Export",
-            description: "Automatically back up your settings and data with Raycast Pro",
-            control: "action",
-            action: "Upgrade to Pro",
-            pro: true,
-            unavailable: true,
+            id: "scheduled-backup",
+            title: "Scheduled Backup",
+            description: "Automatically export your Raycast settings and data on a schedule.",
+            control: "select",
+            options: ["Off", "Daily", "Weekly", "Monthly"],
+            value: "Off",
+          },
+          { id: "backup-location", title: "Backup Location", description: "Folder that receives the scheduled backup files.", control: "action", action: "Choose Folder" },
+          {
+            id: "auto-delete-backups",
+            title: "Auto-Delete",
+            description: "Automatically delete old backups to save disk space.",
+            control: "select",
+            options: ["Never", "Keep Latest", "Keep Last 5", "Keep Last 10"],
+            value: "Never",
+          },
+          {
+            id: "skip-on-battery",
+            title: "Skip on Battery",
+            description: "Skip scheduled exports while on battery power and run them once back on AC power.",
+            control: "switch",
           },
           { id: "export-settings", title: "Export Settings", control: "action", action: "Export Settings" },
           { id: "import-settings", title: "Import Settings", control: "action", action: "Import Settings" },
@@ -449,7 +479,6 @@ export const PAGES: readonly PageDefinition[] = [
             title: "Use System Proxy Settings",
             description: "Automatically use your computer's proxy configuration for network connections.",
             control: "switch",
-            unavailable: true,
           },
           {
             id: "additional-certificate-authorities",
@@ -457,7 +486,6 @@ export const PAGES: readonly PageDefinition[] = [
             description: "Choose a certificate file (.crt, .cer, .pem) to trust connections that would otherwise show security warnings or fail.",
             control: "action",
             action: "+ Add File",
-            unavailable: true,
           },
         ],
       },
@@ -484,6 +512,18 @@ export const PAGES: readonly PageDefinition[] = [
       {
         id: "quicklinks",
         rows: [
+          {
+            id: "quicklinks-show-link-previews",
+            title: "Show Link Previews",
+            description: "Show the resolved link as the row preview in Root Search.",
+            control: "switch",
+          },
+          {
+            id: "quicklinks-prefer-existing-tabs",
+            title: "Prefer Existing Tabs",
+            description: "When opening a Quicklink, check if the URL is already open and activate that window instead of opening a new one.",
+            control: "switch",
+          },
           {
             id: "quicklinks-pass-selected-text",
             title: "Pass Selected Text as Argument",
@@ -681,6 +721,12 @@ export const PAGES: readonly PageDefinition[] = [
             control: "textarea-commit",
           },
           {
+            id: "file-search-content-search",
+            title: "Content Search",
+            description: "Also search the text inside files, not just their names.",
+            control: "switch",
+          },
+          {
             id: "file-search-include-hidden",
             title: "Include Hidden Files",
             description: "Files and folders whose names start with a dot are indexed too.",
@@ -797,6 +843,12 @@ export const PAGES: readonly PageDefinition[] = [
             id: "focus-play-sound",
             title: "Play Sound",
             description: "Play a sound when a focus session ends.",
+            control: "switch",
+          },
+          {
+            id: "focus-allow-all-websites",
+            title: "Allow all Websites",
+            description: "Allow all websites when a browser is allowed but no specific websites are listed.",
             control: "switch",
           },
           {
@@ -1035,44 +1087,6 @@ export const PAGES: readonly PageDefinition[] = [
     sections: [],
   },
   {
-    id: "remote",
-    title: "Remote",
-    description: "Connect an iPhone to run AI chats through this computer.",
-    icon: "remote",
-    keywords: ["computer", "iphone", "pair", "remote", "x-ray"],
-    sections: [
-      {
-        id: "remote",
-        rows: [
-          {
-            id: "remote-chat-enabled",
-            title: "Available to iPhone",
-            description: "Allow AI Chat on your iPhone to run through Raycast on this computer.",
-            control: "switch",
-            unavailable: true,
-          },
-          {
-            id: "remote-chat-device-name",
-            title: "Computer Name",
-            description: "The name shown when choosing this computer on iPhone.",
-            control: "select",
-            options: [HOST_NAME],
-            unavailable: true,
-          },
-          {
-            id: "remote-chat-keep-available",
-            title: "Keep This Computer Available",
-            description: "Prevent idle system sleep so this computer remains available for remote chats.",
-            control: "switch",
-            unavailable: true,
-          },
-          { id: "remote-chat-pair-phone", title: "Connect iPhone", description: "Scan a short-lived QR code in Raycast for iPhone to connect it to this computer.", control: "action", action: "Pair iPhone", unavailable: true },
-          { id: "remote-chat-diagnostics", title: "Remote Diagnostics", description: "Copy a privacy-safe connection report for troubleshooting Remote AI Chat.", control: "action", action: "Copy Diagnostics", unavailable: true },
-        ],
-      },
-    ],
-  },
-  {
     id: "about",
     title: "About",
     description: "Check for updates, view links, and open feedback destinations.",
@@ -1108,16 +1122,6 @@ export const PAGES: readonly PageDefinition[] = [
         ],
       },
     ],
-  },
-  {
-    id: "ai",
-    title: "AI",
-    description: "AI commands, models, and defaults.",
-    icon: "Bolt",
-    pro: true,
-    keywords: ["ai", "artificial intelligence", "chat", "models"],
-    empty: "AI features are not available in RaycastMini.",
-    sections: [],
   },
   {
     id: "applications",
@@ -1157,61 +1161,6 @@ export const PAGES: readonly PageDefinition[] = [
       },
     ],
   },
-  {
-    id: "browser",
-    title: "Browser",
-    description: "Control your browser with Raycast.",
-    icon: "globe",
-    keywords: ["browser", "chrome", "firefox", "tabs"],
-    empty: "Browser integration is not available in RaycastMini.",
-    sections: [],
-  },
-  {
-    id: "developer",
-    title: "Developer",
-    description: "Search and run scripts and develop extensions.",
-    icon: "code",
-    keywords: ["developer", "extensions", "scripts", "debug"],
-    empty: "Developer tools are not available in RaycastMini.",
-    sections: [],
-  },
-  {
-    id: "dictation",
-    title: "Dictation",
-    description: "Convert your speech into text with AI-powered dictation.",
-    icon: "info",
-    pro: true,
-    keywords: ["dictation", "speech", "transcription", "voice"],
-    empty: "Dictation is not available in RaycastMini.",
-    sections: [],
-  },
-  {
-    id: "emoji-symbols",
-    title: "Emoji & Symbols",
-    description: "Search emojis and symbols and copy them to your clipboard.",
-    icon: "at-symbol",
-    keywords: ["emoji", "emoticon", "kaomoji", "symbol", "unicode"],
-    empty: "Emoji search is not available in RaycastMini.",
-    sections: [],
-  },
-  {
-    id: "screenshots",
-    title: "Screenshots",
-    description: "Capture, annotate, and organize screenshots.",
-    icon: "image",
-    keywords: ["screenshot", "capture", "screen", "recording"],
-    empty: "Screenshots are not available in RaycastMini.",
-    sections: [],
-  },
-  {
-    id: "windows-run",
-    title: "Windows Run",
-    description: "Run commands, files, and URLs with the Windows Run dialog.",
-    icon: "app-window",
-    keywords: ["run", "commands", "shell", "windows"],
-    empty: "Windows Run is not available in RaycastMini.",
-    sections: [],
-  },
 ];
 
 
@@ -1229,26 +1178,18 @@ export const SIDEBAR_PAGE_IDS = [
 
 /** The extension-pages group under the root pages, alphabetical like Raycast's sidebar. */
 export const EXTENSION_PAGE_IDS = [
-  "ai",
   "applications",
-  "browser",
   "calculator",
   "clipboard-history",
-  "developer",
-  "dictation",
-  "emoji-symbols",
   "file-search",
   "games",
   "notes",
   "quicklinks",
   "raycast-focus",
-  "remote",
-  "screenshots",
   "snippets",
   "taskbar",
   "translator",
   "window-management",
-  "windows-run",
 ];
 
 // ---------------------------------------------------------------------------------------------

@@ -112,6 +112,16 @@ export const NOTES_ESCAPE_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 export const DEFAULTS: SettingsMap = {
+  "window-activation-behavior": "Move to Active Space",
+  "builtin-hotkeys-preset": "Improved",
+  "scheduled-backup": "Off",
+  "auto-delete-backups": "Never",
+  "skip-on-battery": false,
+  "backup-location": "",
+  "quicklinks-show-link-previews": true,
+  "quicklinks-prefer-existing-tabs": false,
+  "focus-allow-all-websites": false,
+  "file-search-content-search": false,
   "follow-system-appearance": true,
   "theme-dark": "Raycast Dark",
   "theme-light": "Raycast Light",
