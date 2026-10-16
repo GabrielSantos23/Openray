@@ -63,6 +63,7 @@ import {
   Select,
   Switch,
   WindowModeCards,
+  VisualShortcut,
 } from "./controls";
 import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
 import { ExtensionPreferences } from "./ExtensionPreferences";
@@ -738,17 +739,23 @@ function HotkeyRow({
           {replaceStartMenu ? "Restore Start Menu" : "Replace Start Menu"} <span aria-hidden>⊞</span>
         </Button>
       ) : null}
-      {!isDefault && row.value && row.id !== "raycast-hotkey" ? (
-        <Button onClick={() => onValueChange(row.value ?? "")}>Restore Default</Button>
-      ) : null}
-      <HotkeyRecorder value={value} onChange={onValueChange} footerLabel="Raycast Hotkey" />
-      <IconButton
-        icon="arrow-clockwise"
-        size={12}
-        title="Reset to default hotkey"
-        disabled={isDefault}
-        onClick={() => onValueChange(row.value ?? "")}
-      />
+      {row.id === "raycast-hotkey" && replaceStartMenu ? (
+        <VisualShortcut shortcut="Win" />
+      ) : (
+        <>
+          {!isDefault && row.value && row.id !== "raycast-hotkey" ? (
+            <Button onClick={() => onValueChange(row.value ?? "")}>Restore Default</Button>
+          ) : null}
+          <HotkeyRecorder value={value} onChange={onValueChange} footerLabel="Raycast Hotkey" />
+          <IconButton
+            icon="arrow-clockwise"
+            size={12}
+            title="Reset to default hotkey"
+            disabled={isDefault}
+            onClick={() => onValueChange(row.value ?? "")}
+          />
+        </>
+      )}
     </span>
   );
 }

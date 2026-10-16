@@ -15,7 +15,7 @@
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display">
     <Border x:Name="Root"
-            Background="#000000"
+            Background="#CC333333"
             CornerRadius="8"
             SnapsToDevicePixels="True">
         <Border.Effect>

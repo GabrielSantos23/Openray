@@ -90,10 +90,12 @@ export function applyTheme(theme: ThemeDefinition | null): void {
   const style = document.documentElement.style;
   if (!theme || theme.id === "bundled-raycast-dark") {
     for (const [variable] of THEME_VARIABLES) style.removeProperty(variable);
+    style.setProperty("--theme-backdrop-base", "#333333");
     document.documentElement.removeAttribute("data-theme-appearance");
     return;
   }
   for (const [variable, key] of THEME_VARIABLES) style.setProperty(variable, theme[key] as string);
+  style.setProperty("--theme-backdrop-base", theme.appearance === "light" ? "#ffffff" : "#333333");
   document.documentElement.setAttribute("data-theme-appearance", theme.appearance);
 }
 

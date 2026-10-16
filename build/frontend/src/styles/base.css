@@ -79,7 +79,6 @@
   --color-settings-dropdown-border: #ffffff33;
   --color-settings-popover: #2c2c2ce6;
   --color-settings-popover-overlay: #ffffff08;
-  --color-window-bg: var(--bg-40);
   --color-window-bg-secondary: var(--bg-40);
   --color-surface-list-selection: var(--fg-10);
   --color-surface-list-hover: var(--fg-5);
@@ -139,6 +138,10 @@
   --shadow-panel-border: inset 0 0 0 1px var(--fg-20);
   --shadow-panel-shadow: 0 8px 10px -6px #0000001a, 0 20px 25px -5px #0003;
   --shadow-panel: var(--shadow-panel-border), var(--shadow-panel-shadow);
+  /* The launcher window paints `--bg` at 40% over this opaque backdrop, Raycast's `#333c`
+     panel material; themes switch it per appearance (themes.ts). */
+  --theme-backdrop-base: #333333;
+  --color-window-bg: color-mix(in srgb, var(--bg) 40%, var(--theme-backdrop-base));
 
   color-scheme: dark;
   font-family: "InterVariable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;

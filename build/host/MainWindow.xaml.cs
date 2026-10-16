@@ -535,31 +535,77 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Replace Start Menu: MOD_WIN + VK_LWIN/VK_RWIN hotkeys intercept the bare Win key so it
-    /// opens the launcher instead of the Start Menu (taskbar Win still works per-key).
+    /// Replace Start Menu: a low-level keyboard hook that swallows the bare Win keyUP (the Start
+    /// Menu opens on up) and toggles the launcher instead. Win down and every Win+key combination
+    /// pass through untouched, so shortcuts like Win+E keep working.
     /// </summary>
     private void SetStartMenuReplaced(bool enabled)
     {
-        var handle = new WindowInteropHelper(this).Handle;
         if (enabled == _startMenuReplaced) return;
         if (enabled)
         {
-            var leftOk = RegisterHotKey(handle, StartMenuHotkeyId, ModWin, VkLWin);
-            var rightOk = RegisterHotKey(handle, StartMenuHotkeyId + 1, ModWin, VkRWin);
-            if (!leftOk && !rightOk)
+            _winKeyHook = SetWindowsHookEx(WhKeyboardLl, WinKeyHookProc, GetModuleHandle(null), 0);
+            if (_winKeyHook == IntPtr.Zero)
             {
-                App.Log.Write($"[hotkey] replace start menu failed (err={Marshal.GetLastWin32Error()})");
-                throw new InvalidOperationException("The Win key could not be registered");
+                App.Log.Write($"[hotkey] win hook failed (err={Marshal.GetLastWin32Error()})");
+                throw new InvalidOperationException("The Win key could not be intercepted");
             }
             _startMenuReplaced = true;
         }
         else
         {
-            UnregisterHotKey(handle, StartMenuHotkeyId);
-            UnregisterHotKey(handle, StartMenuHotkeyId + 1);
+            if (_winKeyHook != IntPtr.Zero) UnhookWindowsHookEx(_winKeyHook);
+            _winKeyHook = IntPtr.Zero;
             _startMenuReplaced = false;
         }
     }
+
+    private IntPtr _winKeyHook;
+    private bool _winDownTracked;
+
+    private IntPtr WinKeyHookProc(int code, IntPtr wParam, IntPtr lParam)
+    {
+        if (code >= 0 && _startMenuReplaced)
+        {
+            const int wmKeyDown = 0x0100;
+            const int wmKeyUp = 0x0101;
+            const int wmSysKeyDown = 0x0104;
+            const int wmSysKeyUp = 0x0105;
+            var vk = (uint)Marshal.ReadInt32(lParam, 0) & 0xFFFF;
+            var message = wParam.ToInt64();
+            var isWin = vk is VkLWin or VkRWin;
+            if (message is wmKeyDown or wmSysKeyDown)
+            {
+                _winDownTracked = isWin;
+            }
+            else if (message is wmKeyUp or wmSysKeyUp && isWin)
+            {
+                if (_winDownTracked)
+                {
+                    _winDownTracked = false;
+                    Dispatcher.BeginInvoke(() => { try { Toggle(); } catch { /* shutting down */ } });
+                    return (IntPtr)1;
+                }
+            }
+        }
+        return CallNextHookEx(_winKeyHook, code, wParam, lParam);
+    }
+
+    private const int WhKeyboardLl = 13;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc proc, IntPtr module, uint threadId);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWindowsHookEx(IntPtr hook);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetModuleHandle(string? name);
+
+    private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr wParam, IntPtr lParam);
 
     /// <summary>Open at Login: a Run-key entry pointing at this executable, like Raycast's login item.</summary>
     private static void SetOpenAtLogin(bool enabled)
