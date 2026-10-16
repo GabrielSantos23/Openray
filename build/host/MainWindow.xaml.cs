@@ -296,7 +296,7 @@ public partial class MainWindow : Window
             {
                 if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
                 _launcherHeight = compact && !visible ? CompactLauncherHeight : ExpandedLauncherHeight;
-                Height = _launcherHeight;
+                ApplyLauncherHeight();
             });
             return null;
         }
@@ -1022,6 +1022,18 @@ public partial class MainWindow : Window
         // stale viewport otherwise (the page then lays out taller than the visible strip). When
         // the height already matches, force a real arrange pass with a 1px round-trip — the
         // HwndHost child only re-homes on an actual size change.
+        ApplyLauncherHeight();
+        PostVisibility(true);
+        _webView.Focus();
+    }
+
+    // Re-homes the WebView child after a launcher height change: the HwndHost only re-lays-out
+    // on an actual size change, so when the height already matches (the renderer asked for the
+    // same size it already had, e.g. after an expanded→compact→expanded flip while visible) a
+    // 1px arrange round-trip forces the child to re-home — otherwise the page keeps a stale
+    // viewport and the compact bar renders empty.
+    private void ApplyLauncherHeight()
+    {
         if (Math.Abs(Height - _launcherHeight) > 0.5)
         {
             Height = _launcherHeight;
@@ -1034,12 +1046,10 @@ public partial class MainWindow : Window
         }
         _webView.InvalidateMeasure();
         UpdateLayout();
-        PostVisibility(true);
-        _webView.Focus();
     }
 
     // Launcher sizes for the Window Mode setting (compact = search bar only until typing).
-    internal const double CompactLauncherHeight = 84;
+    internal const double CompactLauncherHeight = 64;
     internal const double ExpandedLauncherHeight = 480;
     // The last height the renderer asked for; re-applied on show because the WebView child does
     // not re-layout a size change that happened while the window was hidden.
