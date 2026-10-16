@@ -439,37 +439,28 @@ export function HotkeyRecorder({
   footerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [recording, setRecording] = useState(false);
   const [flash, setFlash] = useState<"saved" | "conflict" | null>(null);
   const [hintIndex, setHintIndex] = useState(0);
+  const [held, setHeld] = useState<string[]>([]);
   const rootRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popupRect = usePopupRect(open, triggerRef, "top");
   useDismiss(open, useCallback(() => setOpen(false), []), rootRef);
 
+  // Recording starts the moment the popover opens; held modifiers show live (Raycast's recorder).
   useEffect(() => {
     if (!open) {
-      setRecording(false);
+      setHeld([]);
       return;
     }
-    let timer = 0;
-    if (!recording) {
-      timer = window.setInterval(() => setHintIndex((index) => (index + 1) % HOTKEY_TYPE_HINTS.length), 1800);
-    }
+    const timer = window.setInterval(() => setHintIndex((index) => (index + 1) % HOTKEY_TYPE_HINTS.length), 1800);
+    const modifierLabels: Record<string, string> = { Shift: "Shift", Control: "Ctrl", Alt: "Alt", Meta: "Win" };
     const onKeyDown = (event: KeyboardEvent) => {
       event.preventDefault();
       event.stopPropagation();
       if (event.key === "Escape") {
         setOpen(false);
-        setRecording(false);
         triggerRef.current?.focus();
-        return;
-      }
-      if (!recording) {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          setRecording(true);
-        }
         return;
       }
       if (event.key === "Backspace" || event.key === "Delete") {
@@ -477,29 +468,41 @@ export function HotkeyRecorder({
         setOpen(false);
         return;
       }
-      if (event.key === "Shift" || event.key === "Control" || event.key === "Alt" || event.key === "Meta") {
-        return; // modifiers alone keep recording (Raycast waits for the full combination)
+      const modifierLabel = modifierLabels[event.key];
+      if (modifierLabel) {
+        setHeld((current) => (current.includes(modifierLabel) ? current : [...current, modifierLabel]));
+        return;
       }
       const parts: string[] = [];
       if (event.ctrlKey) parts.push("Ctrl");
       if (event.altKey) parts.push("Alt");
       if (event.shiftKey) parts.push("Shift");
       if (event.metaKey) parts.push("Win");
-      const keyLabel = event.key === " " ? "Space"
+      // Physical key position: Shift must not turn Digit1 into "!" (unregistrable).
+      const code = event.code;
+      const keyLabel = code.startsWith("Key") && code.length === 4 ? code.slice(3)
+        : code.startsWith("Digit") && code.length === 6 ? code.slice(5)
+        : event.key === " " ? "Space"
         : event.key.length === 1 ? event.key.toUpperCase()
         : event.key;
       parts.push(keyLabel);
       onChange(parts.join(" + "));
-      setRecording(false);
+      setHeld([]);
       setFlash(conflict ? "conflict" : "saved");
       window.setTimeout(() => setFlash(null), 250);
     };
+    const onKeyUp = (event: KeyboardEvent) => {
+      const modifierLabel = modifierLabels[event.key];
+      if (modifierLabel) setHeld((current) => current.filter((candidate) => candidate !== modifierLabel));
+    };
     window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("keyup", onKeyUp, true);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("keyup", onKeyUp, true);
     };
-  }, [open, recording, onChange, conflict]);
+  }, [open, onChange, conflict]);
 
   const variant = flash ?? (conflict ? "conflict" : "idle");
 
@@ -526,10 +529,12 @@ export function HotkeyRecorder({
               style={{ left: Math.min(popupRect.left, window.innerWidth - 336), top: popupRect.top - 170 }}
             >
               <div className="settings-recorder__content">
-                {recording ? (
+                {held.length > 0 ? (
                   <>
                     <span className="settings-recorder__keys">
-                      <KeyCap>…</KeyCap>
+                      {held.map((key) => (
+                        <KeyCap key={key}>{key}</KeyCap>
+                      ))}
                     </span>
                     <span className="settings-recorder__message">Recording…</span>
                   </>
@@ -560,10 +565,7 @@ export function HotkeyRecorder({
                   {conflict ? `Overwrite it or record a new hotkey` : footerLabel}
                 </span>
                 <span className="settings-recorder__actions">
-                  <button type="button" className="settings-recorder__action" onClick={() => setRecording((state) => !state)}>
-                    {recording ? "Back" : "Record"}
-                    <KeyCap>↵</KeyCap>
-                  </button>
+
                   {conflict && onOverwrite ? (
                     <button
                       type="button"
@@ -579,10 +581,7 @@ export function HotkeyRecorder({
                   <button
                     type="button"
                     className="settings-recorder__action"
-                    onClick={() => {
-                      setOpen(false);
-                      setRecording(false);
-                    }}
+                    onClick={() => setOpen(false)}
                   >
                     Close
                     <KeyCap>Esc</KeyCap>
