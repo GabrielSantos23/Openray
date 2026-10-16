@@ -295,7 +295,8 @@ public partial class MainWindow : Window
             _webView.Dispatcher.Invoke(() =>
             {
                 if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
-                Height = compact && !visible ? CompactLauncherHeight : ExpandedLauncherHeight;
+                _launcherHeight = compact && !visible ? CompactLauncherHeight : ExpandedLauncherHeight;
+                Height = _launcherHeight;
             });
             return null;
         }
@@ -305,6 +306,20 @@ public partial class MainWindow : Window
             var enabled = data is { ValueKind: System.Text.Json.JsonValueKind.Object } startPayload
                 && startPayload.TryGetProperty("enabled", out var startEnabled) && startEnabled.GetBoolean();
             _webView.Dispatcher.Invoke(() => SetStartMenuReplaced(enabled));
+            return null;
+        }
+        // Themes drive the native chrome behind the WebView (backdrop border, settings strips).
+        if (method == "settings.setChromeAppearance")
+        {
+            var light = data is { ValueKind: System.Text.Json.JsonValueKind.Object } chromePayload
+                && chromePayload.TryGetProperty("light", out var chromeLight) && chromeLight.GetBoolean();
+            _webView.Dispatcher.Invoke(() =>
+            {
+                Root.Background = new System.Windows.Media.SolidColorBrush(
+                    light ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
+                          : System.Windows.Media.Color.FromRgb(0x33, 0x33, 0x33));
+                _settingsWindow?.SetChromeLight(light);
+            });
             return null;
         }
         if (method == "settings.setGlobalHotkey")
@@ -561,7 +576,7 @@ public partial class MainWindow : Window
     }
 
     private IntPtr _winKeyHook;
-    private bool _winDownTracked;
+    private bool _winDownSwallowed;
 
     private IntPtr WinKeyHookProc(int code, IntPtr wParam, IntPtr lParam)
     {
@@ -571,18 +586,32 @@ public partial class MainWindow : Window
             const int wmKeyUp = 0x0101;
             const int wmSysKeyDown = 0x0104;
             const int wmSysKeyUp = 0x0105;
+            const uint llkhfInjected = 0x10;
             var vk = (uint)Marshal.ReadInt32(lParam, 0) & 0xFFFF;
+            var flags = (uint)Marshal.ReadInt32(lParam, 8);
             var message = wParam.ToInt64();
             var isWin = vk is VkLWin or VkRWin;
-            if (message is wmKeyDown or wmSysKeyDown)
+            if ((flags & llkhfInjected) == 0)
             {
-                _winDownTracked = isWin;
-            }
-            else if (message is wmKeyUp or wmSysKeyUp && isWin)
-            {
-                if (_winDownTracked)
+                if (message is wmKeyDown or wmSysKeyDown)
                 {
-                    _winDownTracked = false;
+                    if (isWin)
+                    {
+                        // Hold the bare Win down; if a combo key follows it is re-injected so
+                        // Win+E etc. reach the shell, otherwise the up below is swallowed and
+                        // the Start Menu never triggers.
+                        _winDownSwallowed = true;
+                        return (IntPtr)1;
+                    }
+                    if (_winDownSwallowed && !isWin)
+                    {
+                        _winDownSwallowed = false;
+                        InjectWinDown();
+                    }
+                }
+                else if (message is wmKeyUp or wmSysKeyUp && isWin && _winDownSwallowed)
+                {
+                    _winDownSwallowed = false;
                     Dispatcher.BeginInvoke(() => { try { Toggle(); } catch { /* shutting down */ } });
                     return (IntPtr)1;
                 }
@@ -590,6 +619,45 @@ public partial class MainWindow : Window
         }
         return CallNextHookEx(_winKeyHook, code, wParam, lParam);
     }
+
+    private void InjectWinDown()
+    {
+        var input = new NativeInput[]
+        {
+            new()
+            {
+                type = 1, // INPUT_KEYBOARD
+                u = new InputUnion { ki = new KeyboardInput { wVk = (ushort)VkLWin } },
+            },
+        };
+        _ = SendInput((uint)input.Length, input, Marshal.SizeOf<NativeInput>());
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeInput
+    {
+        public int type;
+        public InputUnion u;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)] public KeyboardInput ki;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KeyboardInput
+    {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern uint SendInput(uint count, NativeInput[] inputs, int size);
 
     private const int WhKeyboardLl = 13;
 
@@ -905,6 +973,22 @@ public partial class MainWindow : Window
         }
         Activate();
         Topmost = true;
+        // Re-assert the pending size now that the window is visible: the WebView child keeps the
+        // stale viewport otherwise (the page then lays out taller than the visible strip). When
+        // the height already matches, force a real arrange pass with a 1px round-trip — the
+        // HwndHost child only re-homes on an actual size change.
+        if (Math.Abs(Height - _launcherHeight) > 0.5)
+        {
+            Height = _launcherHeight;
+        }
+        else
+        {
+            Height = _launcherHeight + 1;
+            UpdateLayout();
+            Height = _launcherHeight;
+        }
+        _webView.InvalidateMeasure();
+        UpdateLayout();
         PostVisibility(true);
         _webView.Focus();
     }
@@ -912,6 +996,9 @@ public partial class MainWindow : Window
     // Launcher sizes for the Window Mode setting (compact = search bar only until typing).
     internal const double CompactLauncherHeight = 84;
     internal const double ExpandedLauncherHeight = 480;
+    // The last height the renderer asked for; re-applied on show because the WebView child does
+    // not re-layout a size change that happened while the window was hidden.
+    private double _launcherHeight = ExpandedLauncherHeight;
 
     /// <summary>
     /// "Show Raycast On" (General page): place the launcher on the screen containing the mouse,

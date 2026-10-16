@@ -193,6 +193,14 @@ public sealed class SettingsWindow : Window
         Dispatcher.Invoke(() => _webView.CoreWebView2?.PostWebMessageAsJson(payload));
     }
 
+    /// <summary>The native strips around the inset WebView follow the active theme's appearance.</summary>
+    public void SetChromeLight(bool light)
+    {
+        Background = new System.Windows.Media.SolidColorBrush(
+            light ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
+                  : System.Windows.Media.Color.FromRgb(0x1F, 0x1F, 0x1F));
+    }
+
     /// <summary>Actually close on shutdown, so the process is never kept alive by this window.</summary>
     public void ShutdownForReal()
     {

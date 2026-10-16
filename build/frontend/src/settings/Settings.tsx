@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { RaycastIcon } from "../icons";
 import { ipc, ipcRequest, onNotification } from "../ipc";
 import { installSystemAccent } from "../app/systemAccent";
+import { applyTheme, clearThemeOverride, resolveThemeName, setActiveThemeOverride, themeByName } from "../app/themes";
 import { type Sensitivity } from "../matching";
 import type { FileSearchSettings } from "../fileSearch";
 import {
@@ -105,6 +106,26 @@ export function Settings() {
     document.documentElement.style.zoom = zoom > 1 && zoom <= 1.2 ? String(zoom) : "";
   }, [interfaceSize]);
 
+  // Theme engine: the Settings window re-skins with the same active theme as the launcher.
+  const followSystemAppearance = useSetting("follow-system-appearance") !== false;
+  const themeDark = String(useSetting("theme-dark") ?? "Raycast Dark");
+  const themeLight = String(useSetting("theme-light") ?? "Raycast Light");
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const theme = themeByName(resolveThemeName(followSystemAppearance, query.matches, themeDark, themeLight));
+      applyTheme(theme);
+      void ipcRequest("settings.setChromeAppearance", { light: theme?.appearance === "light" }, { module: "frontend" }).catch(() => undefined);
+    };
+    apply();
+    const onChange = () => {
+      clearThemeOverride();
+      apply();
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, [followSystemAppearance, themeDark, themeLight]);
+
   // Escape Key Closes Window (Keyboard page): Escape dismisses the Settings window.
   const escapeClosesWindow = useSetting("escape-key-closes-window") !== false;
   useEffect(() => {
@@ -181,6 +202,9 @@ export function Settings() {
 
   const setValue = useCallback(
     (id: string, next: SettingsValue) => {
+      if (id === "theme-dark" || id === "theme-light") {
+        setActiveThemeOverride(String(next));
+      }
       const generalKeys = new Set([
         "open-at-login",
         "show-in-menu-bar",

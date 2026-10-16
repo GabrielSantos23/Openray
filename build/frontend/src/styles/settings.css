@@ -10,56 +10,54 @@
 /* Body-level portals (menus, recorder, titlebar) render outside .settings-window, so the token
    set is mirrored on :root; the page scope below keeps identical values. */
 :root {
-  --settings-fg: 255 255 255;
-  --settings-bg: #1f1f1f;
-  --settings-fg-2_5: #242424;
-  --settings-fg-5: #2a2a2a;
-  --settings-fg-10: #353535;
-  --settings-fg-20: #505050;
-  --settings-fg-40: #7c7c7c;
-  --settings-fg-60: #a7a7a7;
-  --settings-text-primary: #ffffff;
+  --settings-bg: var(--color-window-bg);
+  --settings-fg-2_5: rgb(from var(--fg) r g b / 2.5%);
+  --settings-fg-5: rgb(from var(--fg) r g b / 5%);
+  --settings-fg-10: rgb(from var(--fg) r g b / 10%);
+  --settings-fg-20: rgb(from var(--fg) r g b / 20%);
+  --settings-fg-40: rgb(from var(--fg) r g b / 40%);
+  --settings-fg-60: rgb(from var(--fg) r g b / 60%);
+  --settings-text-primary: var(--fg);
   --settings-text-secondary: var(--settings-fg-60);
   --settings-text-tertiary: var(--settings-fg-40);
   --settings-text-quaternary: var(--settings-fg-20);
-  --settings-separator: #303030;
-  --settings-separator-strong: #373737;
+  --settings-separator: rgb(from var(--fg) r g b / 7%);
+  --settings-separator-strong: rgb(from var(--fg) r g b / 11%);
   --settings-accent: var(--accent, #0078d4);
   --settings-blue: #56c2ff;
   --settings-red: #ff6363;
   --settings-green: #59d499;
-  --settings-focus-ring: 1px solid rgba(255, 255, 255, 0.5);
+  --settings-focus-ring: 1px solid rgb(from var(--fg) r g b / 50%);
   --settings-shadow-panel:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 1px rgb(from var(--fg) r g b / 20%), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
     0 20px 25px -5px rgba(0, 0, 0, 0.2);
-  --settings-popover: #3a3a3a;
+  --settings-popover: color-mix(in srgb, var(--fg) 12%, var(--color-window-bg));
 }
 
 .settings-window {
   /* The ramp tokens below mirror Raycast's fg/N overlays on the opaque window surface. */
-  --settings-fg: 255 255 255;
-  --settings-bg: #1f1f1f;
-  --settings-fg-2_5: #242424;
-  --settings-fg-5: #2a2a2a;
-  --settings-fg-10: #353535;
-  --settings-fg-20: #505050;
-  --settings-fg-40: #7c7c7c;
-  --settings-fg-60: #a7a7a7;
-  --settings-text-primary: #ffffff;
+  --settings-bg: var(--color-window-bg);
+  --settings-fg-2_5: rgb(from var(--fg) r g b / 2.5%);
+  --settings-fg-5: rgb(from var(--fg) r g b / 5%);
+  --settings-fg-10: rgb(from var(--fg) r g b / 10%);
+  --settings-fg-20: rgb(from var(--fg) r g b / 20%);
+  --settings-fg-40: rgb(from var(--fg) r g b / 40%);
+  --settings-fg-60: rgb(from var(--fg) r g b / 60%);
+  --settings-text-primary: var(--fg);
   --settings-text-secondary: var(--settings-fg-60);
   --settings-text-tertiary: var(--settings-fg-40);
   --settings-text-quaternary: var(--settings-fg-20);
-  --settings-separator: #303030;
-  --settings-separator-strong: #373737;
+  --settings-separator: rgb(from var(--fg) r g b / 7%);
+  --settings-separator-strong: rgb(from var(--fg) r g b / 11%);
   --settings-accent: var(--accent, #0078d4);
   --settings-blue: #56c2ff;
   --settings-red: #ff6363;
   --settings-green: #59d499;
-  --settings-focus-ring: 1px solid rgba(255, 255, 255, 0.5);
+  --settings-focus-ring: 1px solid rgb(from var(--fg) r g b / 50%);
   --settings-shadow-panel:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 1px rgb(from var(--fg) r g b / 20%), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
     0 20px 25px -5px rgba(0, 0, 0, 0.2);
-  --settings-popover: #3a3a3a;
+  --settings-popover: color-mix(in srgb, var(--fg) 12%, var(--color-window-bg));
 
   display: flex;
   height: 100%;

@@ -24,7 +24,7 @@ import { registerAllCommandHotkeys } from "../commandConfig";
 import { installSystemAccent } from "./systemAccent";
 import { installSettingsPush, syncFromBackend, useSetting } from "../settings/store";
 import { POP_TO_ROOT_BY_LABEL } from "../settings/persistence";
-import { applyTheme, themeByName } from "./themes";
+import { applyTheme, clearThemeOverride, resolveThemeName, themeByName } from "./themes";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
 import {
   hudStore,
@@ -283,12 +283,17 @@ export function MainWindow() {
   useEffect(() => {
     const query = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
-      const name = followSystemAppearance ? (query.matches ? themeDark : themeLight) : themeDark;
-      applyTheme(themeByName(name));
+      const theme = themeByName(resolveThemeName(followSystemAppearance, query.matches, themeDark, themeLight));
+      applyTheme(theme);
+      void ipcRequest("settings.setChromeAppearance", { light: theme?.appearance === "light" }, { module: "frontend" }).catch(() => undefined);
     };
     apply();
-    query.addEventListener("change", apply);
-    return () => query.removeEventListener("change", apply);
+    const onChange = () => {
+      clearThemeOverride();
+      apply();
+    };
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
   }, [followSystemAppearance, themeDark, themeLight]);
 
   // Interface Size zooms the whole window like Raycast's `--spx` (1 / 1.1 / 1.2).

@@ -85,17 +85,45 @@ const THEME_VARIABLES: Array<[string, keyof ThemeDefinition]> = [
   ["--green", "green"],
 ];
 
+// Picking a theme row applies that theme immediately (Raycast's live preview) and stays until
+// the OS appearance flips.
+let activeOverride: string | null = null;
+
+export function setActiveThemeOverride(name: string | null): void {
+  activeOverride = name;
+}
+
+export function resolveThemeName(followSystem: boolean, systemDark: boolean, darkTheme: string, lightTheme: string): string {
+  if (activeOverride) return activeOverride;
+  if (!followSystem) return darkTheme;
+  return systemDark ? darkTheme : lightTheme;
+}
+
+export function clearThemeOverride(): void {
+  activeOverride = null;
+}
+
 /** Raycast Dark is base.css's compiled-in default; clearing restores it exactly. */
 export function applyTheme(theme: ThemeDefinition | null): void {
   const style = document.documentElement.style;
   if (!theme || theme.id === "bundled-raycast-dark") {
     for (const [variable] of THEME_VARIABLES) style.removeProperty(variable);
     style.setProperty("--theme-backdrop-base", "#333333");
+    style.removeProperty("--color-window-base");
     document.documentElement.removeAttribute("data-theme-appearance");
     return;
   }
   for (const [variable, key] of THEME_VARIABLES) style.setProperty(variable, theme[key] as string);
   style.setProperty("--theme-backdrop-base", theme.appearance === "light" ? "#ffffff" : "#333333");
+  // The launcher's frosted panel (::before) paints this at 92% opacity — it IS the visible
+  // background, so it must carry the theme hue (dark blends into the graphite base, light lifts
+  // toward the theme paper).
+  style.setProperty(
+    "--color-window-base",
+    theme.appearance === "light"
+      ? `color-mix(in srgb, ${theme.background} 85%, #ffffff)`
+      : `color-mix(in srgb, ${theme.background} 45%, #262626)`,
+  );
   document.documentElement.setAttribute("data-theme-appearance", theme.appearance);
 }
 
