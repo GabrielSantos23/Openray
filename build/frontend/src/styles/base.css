@@ -83,10 +83,10 @@
   --color-surface-list-selection: var(--fg-10);
   --color-surface-list-hover: var(--fg-5);
   --color-surface-control: var(--fg-10);
-  --color-surface-input-field: #ffffff0d;
-  --color-surface-action-bar: #ffffff0d;
-  --color-surface-inner-panel: #ffffff1a;
-  --color-panel-backdrop: #333;
+  --color-surface-input-field: var(--fg-5);
+  --color-surface-action-bar: var(--fg-5);
+  --color-surface-inner-panel: var(--fg-10);
+  --color-panel-backdrop: var(--color-window-bg);
   --color-brand-red: var(--color-brand);
 
   /* ---- radii, spacing, blur (windows scale) ----------------------------------------- */

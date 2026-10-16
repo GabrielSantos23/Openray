@@ -203,15 +203,6 @@ export function MainWindow() {
   const [argumentValues, setArgumentValues] = useState<ArgumentValues>({});
   const [argumentErrors, setArgumentErrors] = useState<string[]>([]);
   const [argumentFocusIndex, setArgumentFocusIndex] = useState(0);
-  // Search history state
-  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem("raycast-mini:search-history");
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
   // Pop to root timeout state ("Immediately" = 0 resets on hide; "After N seconds" = N * 1000).
   const [popToRootTimer, setPopToRootTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const popToRootTimeout = popToRootSeconds <= 0 ? 0 : popToRootSeconds * 1000;
@@ -1515,6 +1506,9 @@ export function MainWindow() {
       const key = event.key;
       if (key === "Escape") return; // dedicated Escape handler below
       if (key.toLowerCase() === "k" && (event.ctrlKey || event.metaKey)) {
+        // Compact mode with an empty search bar shows no list, so there is no row to act on —
+        // Ctrl+K must do nothing (Raycast's compact window behaves the same).
+        if (windowMode === "compact" && searchText.trim() === "") return;
         event.preventDefault();
         openRootActionPanel(entries[selectedIndex]);
         return;
@@ -1523,14 +1517,6 @@ export function MainWindow() {
         event.preventDefault();
         setSelectedIndex((index) => Math.min(index + 1, entries.length - 1));
       } else if (key === "ArrowUp" || (key === "Tab" && event.shiftKey)) {
-        // Up arrow in empty search bar shows search history
-        if (searchText.trim() === "" && searchHistory.length > 0) {
-          event.preventDefault();
-          const lastQuery = searchHistory[searchHistory.length - 1];
-          setSearchText(lastQuery);
-          setSearchHistory((prev) => prev.slice(0, -1)); // Remove last item as it's now active
-          return;
-        }
         event.preventDefault();
         setSelectedIndex((index) => Math.max(index - 1, 0));
       } else if (event.altKey && !event.ctrlKey && !event.metaKey && key.length === 1) {
@@ -1558,28 +1544,10 @@ export function MainWindow() {
           }
         }
       } else if (key === "Enter") {
-        // Up arrow in empty search bar shows search history
-        if (searchText.trim() === "" && searchHistory.length > 0) {
-          event.preventDefault();
-          const lastQuery = searchHistory[searchHistory.length - 1];
-          setSearchText(lastQuery);
-          setSearchHistory((prev) => prev.slice(0, -1)); // Remove last item as it's now active
-          return;
-        }
-        event.preventDefault();
-        setSelectedIndex((index) => Math.max(index - 1, 0));
-      } else if (key === "Enter") {
         if (panelOpenRef.current) return;
         const entry = entries[selectedIndex];
         if (!entry) return;
         event.preventDefault();
-        // Save search history
-        if (searchText.trim() !== "") {
-          setSearchHistory((prev) => {
-            const filtered = prev.filter((q) => q !== searchText.trim());
-            return [...filtered, searchText.trim()].slice(-50); // Keep last 50
-          });
-        }
         if (entry.kind === "application") openApplicationEntry(entry.application);
         else if (entry.kind === "quicklink") openQuicklinkRow(entry.quicklink);
         else if (entry.kind === "internal") setSelected(entry);
@@ -1634,7 +1602,7 @@ export function MainWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry, showToast, closeMainWindow, refreshFocus, openGameEntry, navigationBindings]);
+  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry, showToast, closeMainWindow, refreshFocus, openGameEntry, navigationBindings, windowMode, searchText]);
 
   // Escape per the Escape Key Behavior setting: "Navigate back or close window" closes at the root
   // (command views pop back on their own); "Close window and pop to root" intercepts every Escape
