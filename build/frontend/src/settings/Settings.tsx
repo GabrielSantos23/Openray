@@ -329,7 +329,7 @@ export function Settings() {
   return (
     <ShortcutsFilterContext.Provider value={shortcutsContext}>
     <div className="settings-window">
-<Titlebar page={page} onNavigate={navigate} actions={page.id === "shortcuts" ? <ShortcutsTitlebarActions /> : null} />
+<Titlebar onNavigate={navigate} actions={page.id === "shortcuts" ? <ShortcutsTitlebarActions /> : null} />
       <div className="settings-chrome">
         <Sidebar
           route={route}
@@ -395,7 +395,7 @@ export function Settings() {
 }
 
 /** The in-page titlebar: sidebar "Settings" label, back/forward, page title, caption buttons. */
-function Titlebar({ page, onNavigate, actions }: { page: PageDefinition; onNavigate: (pageId: string) => void; actions?: ReactNode }) {
+function Titlebar({ onNavigate, actions }: { onNavigate: (pageId: string) => void; actions?: ReactNode }) {
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
 
@@ -440,7 +440,6 @@ function Titlebar({ page, onNavigate, actions }: { page: PageDefinition; onNavig
         >
           <RaycastIcon name="chevron-right" size={12} />
         </button>
-        <span className="settings-titlebar__page">{page.title}</span>
       </div>
       {actions ? (
         <div
@@ -558,9 +557,7 @@ function Sidebar({
           <div className="settings-sidebar__content" onKeyDown={onNavKeyDown}>
             <div className="settings-sidebar__group" ref={navRef}>
               <div className="settings-account">
-                <span className="settings-account__avatar">
-                  <RaycastIcon name="person" size={20} />
-                </span>
+                <span className="settings-account__avatar" />
                 <span className="settings-account__text">
                   <span className="settings-account__name">RaycastMini</span>
                   <span className="settings-account__subtitle">Account</span>
@@ -623,8 +620,8 @@ function SidebarLink({
 }) {
   return (
     <button type="button" className="settings-navlink" data-active={active} onClick={() => onNavigate(pageId)}>
-      <span className="settings-navlink__icon">
-        <RaycastIcon name={icon} size={18} />
+      <span className="settings-navlink__icon" data-tile={pageId}>
+        <RaycastIcon name={icon} size={12} />
       </span>
       <span className="settings-navlink__label">{title}</span>
       {pro ? <span className="settings-badge">Pro</span> : null}

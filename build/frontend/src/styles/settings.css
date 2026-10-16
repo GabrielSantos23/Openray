@@ -34,6 +34,20 @@
     inset 0 0 0 1px rgb(from var(--fg) r g b / 20%), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
     0 20px 25px -5px rgba(0, 0, 0, 0.2);
   --settings-popover: color-mix(in srgb, var(--fg) 12%, var(--color-window-bg));
+  --settings-pro: #4da3ff;
+  --settings-pro-bg: rgba(77, 163, 255, 0.15);
+  --settings-card: rgb(from var(--fg) r g b / 3%);
+  --settings-sidebar-selected: var(--settings-fg-10);
+  --settings-sidebar-search: rgb(from var(--fg) r g b / 11%);
+  --settings-check-border: rgb(from var(--fg) r g b / 25%);
+  --settings-check-bg: rgb(from var(--fg) r g b / 2%);
+  --settings-row-hover: rgb(from var(--fg) r g b / 3%);
+  --settings-tile-gradient: linear-gradient(180deg, #4a4a4a, #333333);
+  --settings-tile-red: #ff6363;
+  --settings-tile-blue: #4da3ff;
+  --settings-tile-green: #59d499;
+  --settings-tile-orange: #ff9f0a;
+  --settings-tile-purple: #bf5af2;
 }
 
 .settings-window {
@@ -62,6 +76,20 @@
     inset 0 0 0 1px rgb(from var(--fg) r g b / 20%), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
     0 20px 25px -5px rgba(0, 0, 0, 0.2);
   --settings-popover: color-mix(in srgb, var(--fg) 12%, var(--color-window-bg));
+  --settings-pro: #4da3ff;
+  --settings-pro-bg: rgba(77, 163, 255, 0.15);
+  --settings-card: rgb(from var(--fg) r g b / 3%);
+  --settings-sidebar-selected: var(--settings-fg-10);
+  --settings-sidebar-search: rgb(from var(--fg) r g b / 11%);
+  --settings-check-border: rgb(from var(--fg) r g b / 25%);
+  --settings-check-bg: rgb(from var(--fg) r g b / 2%);
+  --settings-row-hover: rgb(from var(--fg) r g b / 3%);
+  --settings-tile-gradient: linear-gradient(180deg, #4a4a4a, #333333);
+  --settings-tile-red: #ff6363;
+  --settings-tile-blue: #4da3ff;
+  --settings-tile-green: #59d499;
+  --settings-tile-orange: #ff9f0a;
+  --settings-tile-purple: #bf5af2;
 
   display: flex;
   height: 100%;
@@ -104,7 +132,7 @@
 }
 
 .settings-titlebar__sidebarLabel {
-  width: var(--settings-sidebar-width);
+  width: 233px;
   flex: none;
   padding-left: var(--space-16);
   color: var(--settings-text-secondary);
@@ -144,29 +172,23 @@
   cursor: default;
 }
 
-.settings-titlebar__page {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--settings-text-primary);
-  font-family: "Segoe UI Variable", "Segoe UI", InterVariable, sans-serif;
-}
-
 .settings-titlebar__caption {
   margin-left: auto;
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: var(--space-16);
   flex: none;
+  padding-right: var(--space-12);
 }
 
 .settings-caption-button {
-  width: 46px;
-  height: var(--window-header-height);
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 0;
+  border-radius: var(--radius-6);
   background: none;
   color: var(--settings-text-secondary);
   cursor: pointer;
@@ -185,8 +207,7 @@
 /* ---- sidebar ----------------------------------------------------------------------------- */
 
 .settings-sidebar {
-  --settings-sidebar-width: 232px;
-  width: var(--settings-sidebar-width);
+  width: 233px;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -227,7 +248,7 @@
 
 .settings-sidebar__search {
   flex: none;
-  padding: var(--space-12) var(--space-12) var(--space-4) var(--space-10);
+  padding: var(--space-12) 13px var(--space-4);
 }
 
 .settings-searchField {
@@ -236,13 +257,17 @@
   gap: var(--space-8);
   height: var(--space-32);
   padding: 0 var(--space-8);
-  border-radius: var(--radius-8);
-  background: var(--settings-fg-10);
+  border-radius: var(--radius-6);
+  background: var(--settings-sidebar-search);
   color: var(--settings-text-primary);
 }
 
 .settings-searchField:focus-within {
-  box-shadow: inset 0 0 0 1px var(--settings-fg-20);
+  box-shadow: none;
+}
+
+.settings-searchField__input {
+  font-size: 14px;
 }
 
 .settings-searchField__icon {
@@ -284,36 +309,41 @@
   flex: 1;
   min-height: 0;
   overflow: hidden auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--settings-fg-20) transparent;
+  scrollbar-width: none;
+}
+
+.settings-sidebar__scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .settings-sidebar__content {
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
-  padding: var(--space-8) var(--space-10) var(--space-10);
+  padding: var(--space-8) 13px var(--space-16);
 }
 
 .settings-sidebar__group {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 
 .settings-navlink {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: var(--space-12);
   width: 100%;
-  height: var(--space-32);
+  height: 34px;
   flex: none;
-  padding: 0 var(--space-6);
+  padding: 0 10px;
   border: 0;
-  border-radius: var(--radius-8);
+  border-radius: var(--radius-6);
   background: none;
   color: var(--settings-text-primary);
   font: inherit;
+  font-size: 14px;
+  font-weight: var(--font-weight-500);
   text-align: left;
   cursor: pointer;
   user-select: none;
@@ -324,7 +354,7 @@
 }
 
 .settings-navlink[data-active="true"] {
-  background: var(--settings-fg-10);
+  background: var(--settings-sidebar-selected);
 }
 
 .settings-navlink:focus-visible {
@@ -333,13 +363,43 @@
 }
 
 .settings-navlink__icon {
-  width: var(--icon-22, 22px);
-  height: var(--icon-22, 22px);
+  width: 20px;
+  height: 20px;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--settings-text-primary);
+  border-radius: 5px;
+  background: var(--settings-tile-gradient);
+  color: #ffffff;
+}
+
+.settings-navlink__icon[data-tile="ai"] { background: var(--settings-tile-red); }
+.settings-navlink__icon[data-tile="browser"],
+.settings-navlink__icon[data-tile="dictation"],
+.settings-navlink__icon[data-tile="emoji-symbols"],
+.settings-navlink__icon[data-tile="file-search"],
+.settings-navlink__icon[data-tile="navigation"] { background: var(--settings-tile-blue); }
+.settings-navlink__icon[data-tile="clipboard-history"] { background: var(--settings-tile-orange); }
+.settings-navlink__icon[data-tile="developer"] { background: var(--settings-tile-green); }
+.settings-navlink__icon[data-tile="quicklinks"] { background: var(--settings-tile-purple); }
+.settings-navlink__icon[data-tile="applications"] {
+  background-color: #f2f2f2;
+  background-image:
+    linear-gradient(var(--settings-tile-red), var(--settings-tile-red)),
+    linear-gradient(var(--settings-tile-blue), var(--settings-tile-blue)),
+    linear-gradient(#ffcf3f, #ffcf3f),
+    linear-gradient(var(--settings-tile-green), var(--settings-tile-green));
+  background-size: 7px 7px;
+  background-position: 3px 3px, 10px 3px, 3px 10px, 10px 10px;
+  background-repeat: no-repeat;
+  color: transparent;
+}
+
+.settings-navlink--result .settings-navlink__icon {
+  border-radius: 0;
+  background: none;
+  color: var(--settings-text-tertiary);
 }
 
 .settings-navlink__label {
@@ -354,12 +414,12 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  height: var(--space-16);
-  padding: 0 var(--space-8);
-  border-radius: var(--radius-full);
-  background: rgba(86, 194, 255, 0.1);
-  color: var(--settings-blue);
-  font-size: var(--font-size-11);
+  padding: 2px var(--space-8);
+  border-radius: var(--radius-6);
+  background: var(--settings-pro-bg);
+  color: var(--settings-pro);
+  font-size: 12px;
+  font-weight: var(--font-weight-500);
 }
 
 .settings-navlink__resultText {
@@ -400,16 +460,24 @@
 }
 
 .settings-account__avatar {
-  width: var(--space-40);
-  height: var(--space-40);
+  width: var(--space-32);
+  height: var(--space-32);
   flex: none;
   border-radius: var(--radius-full);
-  background: var(--settings-fg-10);
+  background: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  color: var(--settings-text-tertiary);
+}
+
+.settings-account__name {
+  font-size: 14px;
+  font-weight: var(--font-weight-500);
+}
+
+.settings-account__subtitle {
+  font-size: 12px;
 }
 
 .settings-account__name {
@@ -1669,42 +1737,55 @@
   box-shadow: inset 0 2px 0 0 var(--accent);
 }
 
-/* Shortcuts page: category groups with a Name / Alias / Hotkey table, per Raycast. */
+/* Shortcuts page: one bordered card per category, Raycast's Applications table. */
+.settings-page:has(.settings-shortcuts) {
+  gap: 0;
+  padding-bottom: 0;
+}
+
+.settings-shortcuts {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 .settings-titlebar__actions {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  margin-right: var(--space-4);
+  gap: var(--space-8);
+  margin-right: var(--space-8);
 }
 
 .settings-shortcuts__titlebar {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-8);
 }
 
+/* Collapsed: square bordered magnifier button; expands into the input. */
 .settings-shortcuts__search {
   display: inline-flex;
   align-items: center;
-  width: 26px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-6);
-  background: var(--settings-dropdown);
-  border: 1px solid var(--settings-dropdown-border, var(--settings-fg-20));
+  border: 1px solid var(--settings-dropdown-border);
+  background: none;
   overflow: hidden;
   transition: width 200ms var(--easing-ease-out-expo), background-color 120ms var(--easing-ease-out-expo);
 }
 
 .settings-shortcuts__search[data-open="true"] {
   width: 210px;
+  background: var(--settings-dropdown);
 }
 
 .settings-shortcuts__searchToggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   flex: none;
   border: 0;
   background: none;
@@ -1719,13 +1800,13 @@
 .settings-shortcuts__searchInput {
   flex: 1;
   min-width: 0;
-  padding: 0 8px 0 2px;
+  padding: 0 10px 0 2px;
   border: 0;
   outline: 0;
   background: none;
   color: var(--settings-text);
   font: inherit;
-  font-size: var(--font-size-12);
+  font-size: 13px;
   opacity: 0;
   transition: opacity 160ms var(--easing-ease-out-expo);
 }
@@ -1742,14 +1823,14 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--settings-dropdown-border, var(--settings-fg-20));
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--settings-dropdown-border);
   border-radius: var(--radius-6);
-  background: var(--settings-dropdown);
+  background: none;
   color: var(--settings-text);
   font: inherit;
-  font-size: var(--font-size-12);
+  font-size: 13px;
   cursor: pointer;
   transition: background-color 120ms var(--easing-ease-out-expo);
 }
@@ -1761,11 +1842,12 @@
 .settings-shortcuts__filterChevron {
   display: inline-flex;
   align-items: center;
+  color: var(--settings-text-secondary);
   transition: transform 180ms var(--easing-ease-out-expo);
 }
 
 .settings-shortcuts__filterTrigger[data-open="true"] .settings-shortcuts__filterChevron {
-  transform: rotate(90deg);
+  transform: rotate(180deg);
 }
 
 .settings-shortcuts__filterMenu .settings-menu__item input[type="checkbox"] {
@@ -1788,62 +1870,114 @@
 }
 
 .settings-shortcuts__group {
-  margin-bottom: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--space-16);
+  border: 1px solid var(--settings-separator);
+  border-radius: 12px;
+  background: var(--settings-card);
+  overflow: hidden;
+}
+
+.settings-shortcuts__group:last-child {
+  flex: 1;
+  margin-bottom: 0;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
 }
 
 .settings-shortcuts__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-8);
-  background: var(--settings-card);
+  height: 46px;
+  flex: none;
+  padding: 0 12px;
 }
 
 .settings-shortcuts__categoryTrigger {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-8);
+  padding: 4px 6px;
+  margin-left: -6px;
   border: 0;
+  border-radius: var(--radius-6);
   background: none;
   color: var(--settings-text);
   font: inherit;
-  font-size: var(--font-size-13);
+  font-size: 14px;
   font-weight: var(--font-weight-600);
   cursor: pointer;
+}
+
+.settings-shortcuts__categoryTrigger:hover {
+  background: var(--settings-fg-5);
+}
+
+/* The Applications tile: four small colored squares on a light chip. */
+.settings-shortcuts__appGrid {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 4px;
+  background-color: #f2f2f2;
+  background-image:
+    linear-gradient(var(--settings-tile-red), var(--settings-tile-red)),
+    linear-gradient(var(--settings-tile-blue), var(--settings-tile-blue)),
+    linear-gradient(#ffcf3f, #ffcf3f),
+    linear-gradient(var(--settings-tile-green), var(--settings-tile-green));
+  background-size: 6px 6px;
+  background-position: 2px 2px, 8px 2px, 2px 8px, 8px 8px;
+  background-repeat: no-repeat;
 }
 
 .settings-shortcuts__categoryIcon {
   display: inline-flex;
   align-items: center;
-  color: var(--settings-text);
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--settings-text-secondary);
 }
 
+.settings-shortcuts__categoryChevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--settings-text-secondary);
+  transition: transform 180ms var(--easing-ease-out-expo);
+}
+
+.settings-shortcuts__categoryTrigger[data-open="true"] .settings-shortcuts__categoryChevron {
+  transform: rotate(180deg);
+}
+
+/* Header control styled as the indeterminate checkbox on Raycast's card. */
 .settings-shortcuts__collapse {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 0;
-  border-radius: var(--radius-6);
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  padding: 0;
+  border: 1px solid var(--settings-check-border);
+  border-radius: 4px;
   background: none;
   color: var(--settings-text-secondary);
   cursor: pointer;
 }
 
-.settings-shortcuts__collapse:hover {
-  background: var(--settings-dropdown);
-  color: var(--settings-text);
-}
-
 .settings-shortcuts__columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px 200px 28px;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  grid-template-columns: minmax(0, 1fr) 110px 150px 30px;
+  align-items: center;
+  min-height: 28px;
+  margin-top: var(--space-8);
+  padding: 0 12px;
   color: var(--settings-text-secondary);
-  font-size: var(--font-size-11);
+  font-size: 12px;
+  font-weight: var(--font-weight-600);
 }
 
 .settings-shortcuts__rows {
@@ -1854,27 +1988,35 @@
 
 .settings-shortcuts__row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px 200px 28px;
+  grid-template-columns: minmax(0, 1fr) 110px 150px 30px;
   align-items: center;
-  gap: var(--space-4);
-  padding: 6px var(--space-4);
-  min-height: 40px;
-  border-radius: var(--radius-6);
+  height: 46px;
+  padding: 0 12px;
+  position: relative;
+}
+
+.settings-shortcuts__row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--settings-separator);
+}
+
+.settings-shortcuts__row:last-child::after {
+  display: none;
 }
 
 .settings-shortcuts__row:hover {
-  background: var(--settings-row-hover, var(--settings-fg-5));
-}
-
-.settings-shortcuts__row:hover .settings-shortcuts__alias,
-.settings-shortcuts__row:hover .settings-shortcuts__hotkey {
-  opacity: 1;
+  background: var(--settings-row-hover);
 }
 
 .settings-shortcuts__name {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-12);
   min-width: 0;
 }
 
@@ -1882,8 +2024,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   flex: none;
 }
 
@@ -1897,53 +2039,72 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--font-size-13);
+  font-size: 14px;
 }
 
 .settings-shortcuts__alias {
   width: 100%;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border: 0;
   border-radius: var(--radius-6);
   background: none;
-  color: var(--settings-text);
+  color: var(--settings-text-secondary);
   font: inherit;
-  font-size: var(--font-size-12);
-  opacity: 0.65;
+  font-size: 14px;
 }
 
 .settings-shortcuts__alias::placeholder {
   color: var(--settings-text-secondary);
-  opacity: 0.7;
+  opacity: 1;
 }
 
 .settings-shortcuts__alias:focus {
-  outline: none;
-  background: var(--settings-dropdown);
-  opacity: 1;
+  outline: var(--settings-focus-ring);
 }
 
 .settings-shortcuts__hotkey {
   justify-self: start;
-  opacity: 0.85;
 }
 
-.settings-shortcuts__hotkey:focus-within {
-  opacity: 1;
+/* Alias and Record Hotkey are plain secondary text: no color or weight change on hover. */
+.settings-shortcuts__row .settings-hotkeyTrigger {
+  height: 26px;
+  font-size: 14px;
+  color: var(--settings-text-secondary);
+}
+
+.settings-shortcuts__row .settings-hotkeyTrigger:hover {
+  background: none;
 }
 
 .settings-shortcuts__enabled {
   justify-self: end;
-  accent-color: var(--accent);
-  width: 14px;
-  height: 14px;
-  margin: 0;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 4px 0 0;
+  border: 1px solid var(--settings-check-border);
+  border-radius: 4px;
+  background-color: var(--settings-check-bg);
+  cursor: pointer;
+}
+
+.settings-shortcuts__enabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 11px;
+}
+
+.settings-shortcuts__enabled:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .settings-shortcuts__emptyRow {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) 12px;
   color: var(--settings-text-secondary);
-  font-size: var(--font-size-12);
+  font-size: 12px;
 }
 
 .settings-shortcuts__empty {

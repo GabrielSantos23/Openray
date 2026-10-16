@@ -219,7 +219,7 @@ export function ShortcutsPage() {
               aria-label={collapsed ? "Expand" : "Collapse"}
               onClick={() => setCollapsed((state) => !state)}
             >
-              <RaycastIcon name={collapsed ? "plus" : "minus"} size={11} />
+              <RaycastIcon name={collapsed ? "plus" : "minus"} size={10} />
             </button>
           </header>
           {!collapsed ? (
@@ -346,13 +346,20 @@ function ShortcutsCategorySelect({ current }: { current: ShortcutCategory }) {
         className="settings-shortcuts__categoryTrigger"
         aria-haspopup="listbox"
         aria-expanded={open}
+        data-open={open ? "true" : undefined}
         onClick={() => setOpen((state) => !state)}
       >
-        <span className="settings-shortcuts__categoryIcon">
-          <RaycastIcon name={categoryMeta(current).icon} size={13} />
-        </span>
+        {current === "Applications" ? (
+          <span className="settings-shortcuts__appGrid" />
+        ) : (
+          <span className="settings-shortcuts__categoryIcon">
+            <RaycastIcon name={categoryMeta(current).icon} size={14} />
+          </span>
+        )}
         {current}
-        <RaycastIcon name="chevron-right" size={10} />
+        <span className="settings-shortcuts__categoryChevron">
+          <RaycastIcon name="chevron-down" size={12} />
+        </span>
       </button>
       {open && popupRect
         ? createPortal(
@@ -430,7 +437,7 @@ export function ShortcutsTitlebarActions() {
           aria-label="Search shortcuts"
           onClick={() => setSearchOpen(true)}
         >
-          <RaycastIcon name="magnifying-glass" size={12} />
+          <RaycastIcon name="magnifying-glass" size={14} />
         </button>
         <input
           ref={searchInputRef}
@@ -462,7 +469,7 @@ export function ShortcutsTitlebarActions() {
       >
         {label}
         <span className="settings-shortcuts__filterChevron">
-          <RaycastIcon name="chevron-right" size={10} />
+          <RaycastIcon name="chevron-down" size={12} />
         </span>
       </button>
       {open && popupRect

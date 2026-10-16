@@ -128,6 +128,7 @@ const REGISTRY: Record<string, IconComponent> = {
   "magnifying-glass": Search,
   "apple-logo": Bird,
   "chevron-right": ChevronRight,
+  "chevron-down": ChevronDown,
   calculator: Calculator,
   globe: Globe,
   switch: ArrowLeftRight,
