@@ -22,7 +22,7 @@ import AlertHost from "../AlertHost";
 import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "../testHooks";
 import { registerAllCommandHotkeys } from "../commandConfig";
 import { installSystemAccent } from "./systemAccent";
-import { installSettingsPush, syncFromBackend, useSetting } from "../settings/store";
+import { installSettingsPush, syncFromBackend, updateSettings, useSetting } from "../settings/store";
 import { POP_TO_ROOT_BY_LABEL } from "../settings/persistence";
 import { applyTheme, clearThemeOverride, resolveThemeName, themeByName } from "./themes";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
@@ -280,21 +280,23 @@ export function MainWindow() {
   const followSystemAppearance = useSetting("follow-system-appearance") !== false;
   const themeDark = String(useSetting("theme-dark") ?? "Raycast Dark");
   const themeLight = String(useSetting("theme-light") ?? "Raycast Light");
+  const storedActiveTheme = String(useSetting("active-theme") ?? "");
   useEffect(() => {
     const query = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
-      const theme = themeByName(resolveThemeName(followSystemAppearance, query.matches, themeDark, themeLight));
+      const theme = themeByName(storedActiveTheme || resolveThemeName(followSystemAppearance, query.matches, themeDark, themeLight));
       applyTheme(theme);
       void ipcRequest("settings.setChromeAppearance", { light: theme?.appearance === "light" }, { module: "frontend" }).catch(() => undefined);
     };
     apply();
     const onChange = () => {
       clearThemeOverride();
+      updateSettings({ "active-theme": "" });
       apply();
     };
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
-  }, [followSystemAppearance, themeDark, themeLight]);
+  }, [followSystemAppearance, themeDark, themeLight, storedActiveTheme]);
 
   // Interface Size zooms the whole window like Raycast's `--spx` (1 / 1.1 / 1.2).
   useEffect(() => {

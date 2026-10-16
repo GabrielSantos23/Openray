@@ -120,7 +120,6 @@ export const PAGES: readonly PageDefinition[] = [
         rows: [
           { id: "open-at-login", title: "Open at Login", control: "switch" },
           { id: "show-in-menu-bar", title: "Show in System Tray", control: "switch" },
-          { id: "automatically-show-taskbar", title: "Automatically Show the Taskbar", description: "Automatically show a hidden taskbar while Raycast is open.", control: "switch", unavailable: true },
           { id: "raycast-hotkey", title: "Raycast Hotkey", control: "hotkey", value: RAYCASTMINI_DEFAULT_HOTKEY },
         ],
       },
@@ -131,14 +130,6 @@ export const PAGES: readonly PageDefinition[] = [
           { id: "follow-system-appearance", title: "Follow System Appearance", control: "switch" },
           { id: "theme-dark", title: "Dark Theme", control: "select", options: DARK_THEMES },
           { id: "theme-light", title: "Light Theme", control: "select", options: LIGHT_THEMES },
-          {
-            id: "theme-studio",
-            title: "Theme Studio",
-            description: "Edit or create themes for Raycast",
-            control: "action",
-            action: "Upgrade to Pro",
-            unavailable: true,
-          },
           {
             id: "interface-size",
             title: "Interface Size",

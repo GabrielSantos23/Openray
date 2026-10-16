@@ -122,6 +122,7 @@ export const DEFAULTS: SettingsMap = {
   "automatically-show-taskbar": false,
   "raycast-hotkey": "Ctrl + Alt + Space",
   "replace-start-menu": false,
+  "active-theme": "",
   "show-raycast-on": "Screen containing mouse",
   "pop-to-root-search": "After 90 seconds",
   "root-search-sensitivity": "High",

@@ -110,10 +110,11 @@ export function Settings() {
   const followSystemAppearance = useSetting("follow-system-appearance") !== false;
   const themeDark = String(useSetting("theme-dark") ?? "Raycast Dark");
   const themeLight = String(useSetting("theme-light") ?? "Raycast Light");
+  const storedActiveTheme = String(useSetting("active-theme") ?? "");
   useEffect(() => {
     const query = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => {
-      const theme = themeByName(resolveThemeName(followSystemAppearance, query.matches, themeDark, themeLight));
+      const theme = themeByName(storedActiveTheme || resolveThemeName(followSystemAppearance, query.matches, themeDark, themeLight));
       applyTheme(theme);
       void ipcRequest("settings.setChromeAppearance", { light: theme?.appearance === "light" }, { module: "frontend" }).catch(() => undefined);
     };
@@ -124,7 +125,7 @@ export function Settings() {
     };
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
-  }, [followSystemAppearance, themeDark, themeLight]);
+  }, [followSystemAppearance, themeDark, themeLight, storedActiveTheme]);
 
   // Escape Key Closes Window (Keyboard page): Escape dismisses the Settings window.
   const escapeClosesWindow = useSetting("escape-key-closes-window") !== false;
@@ -206,6 +207,18 @@ export function Settings() {
     (id: string, next: SettingsValue) => {
       if (id === "theme-dark" || id === "theme-light") {
         setActiveThemeOverride(String(next));
+        // The launcher cannot see this window's local override; persist the pick so the main app
+        // applies the manually chosen theme regardless of the OS appearance.
+        mergeValues({ [id]: next });
+        void updateSettings({ [id]: next, "active-theme": String(next) });
+        applyTheme(themeByName(String(next)));
+        void ipcRequest("settings.setChromeAppearance", { light: themeByName(String(next))?.appearance === "light" }, { module: "frontend" }).catch(() => undefined);
+        return;
+      }
+      if (id === "follow-system-appearance") {
+        setActiveThemeOverride(null);
+        mergeValues({ [id]: next });
+        void updateSettings({ [id]: next, "active-theme": "" });
       }
       const generalKeys = new Set([
         "open-at-login",
