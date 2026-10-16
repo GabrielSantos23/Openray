@@ -50,10 +50,12 @@ import {
   TASKBAR_POSITION_LABEL,
   TRANSLATOR_ROW_IDS,
   formatFilterRows,
-  parseFallbackCommands,
   parseFilterRows,
   persistSettings,
   type ClipboardFilter,
+  FALLBACK_CATALOG,
+  parseFallbackSpecs,
+  type FallbackCommandSpec,
 } from "./persistence";
 import {
   Button,
@@ -65,6 +67,8 @@ import {
   Switch,
   WindowModeCards,
   VisualShortcut,
+  useDismiss,
+  usePopupRect,
 } from "./controls";
 import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
 import { ExtensionPreferences } from "./ExtensionPreferences";
@@ -277,13 +281,6 @@ export function Settings() {
 
   const runAction = useCallback((id: string) => {
     runLegacyAction(id, values, mergeValues);
-    if (id === "reset-search-history") {
-      window.localStorage.removeItem("raycast-mini:search-history");
-      window.dispatchEvent(
-        new CustomEvent("raycast-mini:settings-toast", { detail: { title: "Search history cleared" } }),
-      );
-      return;
-    }
     if (id === "reset-all-rankings") {
       void ipc
         .backend("usage.resetAllAppUsage", {}, { module: "backend" })
@@ -635,6 +632,13 @@ function Row({
   const [expanded, setExpanded] = useState(false);
   const descriptionClampable = Boolean(row.description && row.description.length > 140);
 
+  if (row.control === "fallbackAdd") {
+    return <FallbackAddRow value={value} onValueChange={onValueChange} />;
+  }
+  if (row.control === "fallbackList") {
+    return <FallbackListRow value={value} onValueChange={onValueChange} />;
+  }
+
   const right = (): ReactNode => {
     switch (row.control) {
       case "switch":
@@ -747,6 +751,117 @@ function Row({
         </div>
       </div>
       <div className="settings-row__right">{right()}</div>
+    </div>
+  );
+}
+
+/** Launcher > Fallback Commands: the "Add Fallback Command" row with its picker menu. */
+function FallbackAddRow({
+  value,
+  onValueChange,
+}: {
+  value: SettingsValue | undefined;
+  onValueChange: (next: SettingsValue) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useDismiss(open, useCallback(() => setOpen(false), []), rootRef);
+  const popupRect = usePopupRect(open, triggerRef, "bottom");
+  const current = parseFallbackSpecs(value);
+  const available = FALLBACK_CATALOG.filter((item) => !current.some((entry) => entry.id === item.id));
+
+  const add = (spec: FallbackCommandSpec) => {
+    onValueChange(JSON.stringify([...current, spec]));
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  return (
+    <span className="settings-fallback" ref={rootRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="settings-fallback__add"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Add Fallback Command"
+        data-empty={available.length === 0 ? "true" : undefined}
+        onClick={() => setOpen((state) => !state)}
+      >
+        <span className="settings-fallback__icon">
+          <RaycastIcon name="plus" size={13} />
+        </span>
+        Add Fallback Command
+      </button>
+      {open && popupRect
+        ? createPortal(
+            <div
+              className="settings-menu"
+              role="listbox"
+              aria-label="Add Fallback Command"
+              style={{
+                left: Math.min(popupRect.left, window.innerWidth - 300),
+                top: popupRect.top,
+                minWidth: 300,
+              }}
+            >
+              {available.map((spec) => (
+                <button
+                  key={spec.id}
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  className="settings-menu__item"
+                  onClick={() => add(spec)}
+                >
+                  <span className="settings-fallback__icon">
+                    <RaycastIcon name={spec.icon} size={14} />
+                  </span>
+                  <span>{spec.title}</span>
+                  <span className="settings-fallback__provider">{spec.provider}</span>
+                </button>
+              ))}
+              {available.length === 0 ? <div className="settings-menu__section">All fallback commands added</div> : null}
+            </div>,
+            document.body,
+          )
+        : null}
+    </span>
+  );
+}
+
+/** Launcher > Fallback Commands: the added commands, provider label on the right, hover remove. */
+function FallbackListRow({
+  value,
+  onValueChange,
+}: {
+  value: SettingsValue | undefined;
+  onValueChange: (next: SettingsValue) => void;
+}) {
+  const items = parseFallbackSpecs(value);
+  if (items.length === 0) return null;
+  return (
+    <div className="settings-fallback__list">
+      {items.map((item) => (
+        <div key={item.id} className="settings-fallback__item" data-row-id={`fallback:${item.id}`}>
+          <span className="settings-row__left">
+            <span className="settings-fallback__icon">
+              <RaycastIcon name={item.icon} size={14} />
+            </span>
+            <span className="settings-row__title">{item.title}</span>
+          </span>
+          <span className="settings-row__right">
+            <span className="settings-row__value">{item.provider}</span>
+            <IconButton
+              icon="trash"
+              size={12}
+              title={`Remove ${item.title}`}
+              onClick={() => onValueChange(JSON.stringify(items.filter((entry) => entry.id !== item.id)))}
+            />
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -956,11 +1071,13 @@ function routeLegacyRow(id: string, next: SettingsValue, values: SettingsMap): v
     const patch: Record<string, unknown> =
       id === "include-files-in-root-search"
         ? { showInRootSearch: Boolean(next) }
-        : id === "file-search-include-hidden"
-          ? { includeHiddenFiles: Boolean(next) }
-          : id === "file-search-respect-ignore-files"
-            ? { respectIgnoreFiles: Boolean(next) }
-            : { ignore: String(next).split(",").map((item) => item.trim()).filter(Boolean) };
+        : id === "search-file-contents-in-root-search"
+          ? { contentSearch: Boolean(next), contentSearchInRootSearch: Boolean(next) }
+          : id === "file-search-include-hidden"
+            ? { includeHiddenFiles: Boolean(next) }
+            : id === "file-search-respect-ignore-files"
+              ? { respectIgnoreFiles: Boolean(next) }
+              : { ignore: String(next).split(",").map((item) => item.trim()).filter(Boolean) };
     void ipc
       .backend("fileSearch.setSettings", patch, { module: "backend" })
       .catch((error: unknown) => toaster("Couldn't save that setting", error instanceof Error ? error.message : undefined));
@@ -1075,12 +1192,14 @@ function routeLegacyRow(id: string, next: SettingsValue, values: SettingsMap): v
     window.dispatchEvent(new CustomEvent("raycast-mini:root-search-sensitivity-changed", { detail: sensitivity }));
     return;
   }
-  if (id === "fallback-commands-list" || id === "fallback-commands-enabled") {
-    const list = values["fallback-commands-list"] ?? "";
-    const enabled = values["fallback-commands-enabled"] ?? true;
-    const commands = parseFallbackCommands(String(list), Boolean(enabled));
-    window.localStorage.setItem("raycast-mini:fallback-commands", JSON.stringify(commands));
-    window.dispatchEvent(new CustomEvent("raycast-mini:fallback-commands-changed", { detail: commands }));
+  if (id === "fallback-commands") {
+    // The launcher reads its copy through the localStorage channel (it may not have the
+    // settings-store push yet when the window is hidden).
+    const json = typeof next === "string" ? next : "[]";
+    window.localStorage.setItem("raycast-mini:fallback-commands", json);
+    window.dispatchEvent(
+      new CustomEvent("raycast-mini:fallback-commands-changed", { detail: parseFallbackSpecs(json) }),
+    );
     return;
   }
 }
@@ -1097,6 +1216,7 @@ function runLegacyAction(
     if (!settings) return;
     mergeValues({
       "include-files-in-root-search": settings.showInRootSearch,
+      "search-file-contents-in-root-search": settings.contentSearchInRootSearch,
       "file-search-ignore-patterns": settings.ignore.join(", "),
       "file-search-include-hidden": settings.includeHiddenFiles,
       "file-search-respect-ignore-files": settings.respectIgnoreFiles,

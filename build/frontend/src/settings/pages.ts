@@ -18,6 +18,8 @@ export type ControlKind =
   | "text"
   | "interfaceSize"
   | "windowMode"
+  | "fallbackAdd"
+  | "fallbackList"
   | "none";/** The version the launcher reports everywhere else, kept in one place. */
 export const VERSION = "2.4.0.0";
 export const HOST_NAME = "This Computer";
@@ -195,13 +197,6 @@ export const PAGES: readonly PageDefinition[] = [
             control: "select",
             options: ["Low", "Medium", "High"],
           },
-          {
-            id: "reset-search-history",
-            title: "Search History",
-            description: "Clear recent searches restored when pressing the up arrow in Root Search.",
-            control: "action",
-            action: "Reset",
-          },
         ],
       },
       {
@@ -213,29 +208,15 @@ export const PAGES: readonly PageDefinition[] = [
             id: "search-file-contents-in-root-search",
             title: "Include File Content search results in Root Search",
             control: "switch",
-            unavailable: true,
           },
-          { id: "include-contacts-in-root-search", title: "Include Contacts in Root Search", control: "switch", unavailable: true },
-          { id: "include-agents-in-root-search", title: "Include Agents in Root Search", control: "switch", unavailable: true },
         ],
       },
       {
         id: "fallback-commands",
         title: "Fallback Commands",
-        description: "Commands shown when root search has no results. One per line: Title | Subtitle | URL (URL opens in browser).",
         rows: [
-          {
-            id: "fallback-commands-list",
-            title: "Fallback Commands",
-            description: "One per line: Title | Subtitle | URL",
-            control: "textarea",
-          },
-          {
-            id: "fallback-commands-enabled",
-            title: "Enable Fallback Commands",
-            description: "Show fallback commands when no results match.",
-            control: "switch",
-          },
+          { id: "add-fallback-command", title: "Add Fallback Command", control: "fallbackAdd" },
+          { id: "fallback-commands-items", title: "Fallback Commands", control: "fallbackList" },
         ],
       },
     ],

@@ -31,6 +31,7 @@ export const CALCULATOR_ROW_IDS = new Set(["calculator-rem-to-px"]);
 /** File Search rows persist to the Node store (`file-search-settings.json`). */
 export const FILE_SEARCH_ROW_IDS = new Set([
   "include-files-in-root-search",
+  "search-file-contents-in-root-search",
   "file-search-scopes",
   "file-search-ignore-patterns",
   "file-search-include-hidden",
@@ -151,8 +152,13 @@ export const DEFAULTS: SettingsMap = {
   "clipboard-update-history-after-action": true,
   "clipboard-add-newline-after-paste": true,
   "clipboard-paste-sequence-timeout": "60",
-  "fallback-commands-list": "Search Web | Search the web for \"{query}\" | https://www.google.com/search?q={query}\nSearch GitHub | Search GitHub for \"{query}\" | https://github.com/search?q={query}",
-  "fallback-commands-enabled": true,
+  "fallback-commands": JSON.stringify([
+    { id: "cmd:snippets/search", kind: "command", title: "Search Snippets", provider: "Snippets", icon: "text", area: "snippets", command: "search" },
+    { id: "cmd:store/browse", kind: "command", title: "Store", provider: "Raycast", icon: "extension", area: "store", command: "browse" },
+    { id: "web:google", kind: "url", title: "Google Search", provider: "Web Searches", icon: "globe", url: "https://www.google.com/search?q={query}" },
+    { id: "web:duckduckgo", kind: "url", title: "DuckDuckGo Search", provider: "Web Searches", icon: "globe", url: "https://duckduckgo.com/?q={query}" },
+    { id: "web:bing", kind: "url", title: "Bing", provider: "Web Searches", icon: "globe", url: "https://www.bing.com/search?q={query}" },
+  ]),
   "snippets-enable-expansion": true,
   "snippets-expansion-mode": "Immediately",
   "snippets-expand-within-words": false,
@@ -267,37 +273,49 @@ export function formatFilterRows(filters: ClipboardFilter[]): string {
     .join("\n");
 }
 
-export function parseFallbackCommands(text: string, enabled: boolean): FallbackCommand[] {
-  if (!enabled) return [];
-  const commands: FallbackCommand[] = [];
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index];
-    const parts = line.split("|").map((p) => p.trim());
-    if (parts.length < 2) continue;
-    const title = parts[0];
-    const subtitle = parts[1] ?? "";
-    const url = parts[2] ?? "";
-    commands.push({
-      id: `fallback-${index}`,
-      title,
-      subtitle,
-      keywords: [title.toLowerCase(), subtitle.toLowerCase()].filter(Boolean),
-      action: (query: string) => {
-        const finalUrl = url.replace(/\{query\}/g, encodeURIComponent(query));
-        window.open(finalUrl, "_blank", "noopener");
-      },
-    });
-  }
-  return commands;
+/** One fallback command as stored in the `fallback-commands` setting (JSON array). */
+export interface FallbackCommandSpec {
+  id: string;
+  kind: "url" | "command";
+  title: string;
+  provider: string;
+  icon: string;
+  url?: string;
+  area?: string;
+  command?: string;
 }
 
-export interface FallbackCommand {
-  id: string;
-  title: string;
-  subtitle: string;
-  keywords: string[];
-  action: (query: string) => void;
+/** The commands the picker offers — only ones Raycast Mini can actually run. */
+export const FALLBACK_CATALOG: FallbackCommandSpec[] = [
+  { id: "cmd:quicklinks/search", kind: "command", title: "Search Quicklinks", provider: "Quicklinks", icon: "link", area: "quicklinks", command: "search" },
+  { id: "cmd:snippets/search", kind: "command", title: "Search Snippets", provider: "Snippets", icon: "text", area: "snippets", command: "search" },
+  { id: "cmd:store/browse", kind: "command", title: "Store", provider: "Raycast", icon: "extension", area: "store", command: "browse" },
+  { id: "cmd:notes/search", kind: "command", title: "Search Notes", provider: "Notes", icon: "blank-document", area: "notes", command: "search" },
+  { id: "cmd:file-search/searchFiles", kind: "command", title: "Search Files", provider: "File Search", icon: "folder-search", area: "file-search", command: "searchFiles" },
+  { id: "cmd:translator/translate", kind: "command", title: "Translate", provider: "Translation", icon: "Globe", area: "translator", command: "translate" },
+  { id: "web:google", kind: "url", title: "Google Search", provider: "Web Searches", icon: "globe", url: "https://www.google.com/search?q={query}" },
+  { id: "web:duckduckgo", kind: "url", title: "DuckDuckGo Search", provider: "Web Searches", icon: "globe", url: "https://duckduckgo.com/?q={query}" },
+  { id: "web:bing", kind: "url", title: "Bing", provider: "Web Searches", icon: "globe", url: "https://www.bing.com/search?q={query}" },
+  { id: "web:github", kind: "url", title: "GitHub Search", provider: "Web Searches", icon: "globe", url: "https://github.com/search?q={query}" },
+  { id: "web:youtube", kind: "url", title: "YouTube Search", provider: "Web Searches", icon: "globe", url: "https://www.youtube.com/results?search_query={query}" },
+  { id: "web:wikipedia", kind: "url", title: "Wikipedia", provider: "Web Searches", icon: "globe", url: "https://en.wikipedia.org/w/index.php?search={query}" },
+];
+
+export function parseFallbackSpecs(value: unknown): FallbackCommandSpec[] {
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is FallbackCommandSpec =>
+        typeof item === "object" && item !== null &&
+        typeof (item as FallbackCommandSpec).id === "string" &&
+        typeof (item as FallbackCommandSpec).title === "string" &&
+        typeof (item as FallbackCommandSpec).provider === "string",
+    );
+  } catch {
+    return [];
+  }
 }
 
 /** Single-row clipboard settings, each mapping onto one `clipboard.setPreference` key. */

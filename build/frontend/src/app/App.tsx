@@ -75,6 +75,7 @@ import {
   type FileSearchResult,
   generateKeywords,
 } from "../matching";
+import { type FallbackCommandSpec } from "../settings/persistence";
 import {
   fetchFileResults,
   fetchFileSettings,
@@ -174,7 +175,6 @@ export function MainWindow() {
   const windowMode = String(useSetting("window-mode") ?? "expanded");
   const showFavoritesCompact = useSetting("show-favorites-in-compact-mode") !== false;
   const [usageScores, setUsageScores] = useState<Map<string, number>>(new Map());
-  const [fallbackCommands, setFallbackCommands] = useState<FallbackCommand[]>([]);
   // File Search: settings and index state live in the backend; the results cache is per query.
   const [fileSearchSettings, setFileSearchSettings] = useState<FileSearchSettings | null>(null);
   const [fileIndexState, setFileIndexState] = useState<FileIndexState | null>(null);
@@ -314,24 +314,49 @@ export function MainWindow() {
     void ipcRequest("window.setLauncherHeight", request, { module: "frontend" }).catch(() => undefined);
   }, [windowMode, compactListVisible]);
 
-  // Load fallback commands from localStorage and listen for changes from Settings window
-  useEffect(() => {
-    const stored = localStorage.getItem("raycast-mini:fallback-commands");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as FallbackCommand[];
-        setFallbackCommands(parsed.filter((cmd) => cmd.id && cmd.title));
-      } catch {
-        // Ignore parse errors
-      }
-    }
+  // Fallback commands arrive as serializable specs from the Launcher settings page; the actions
+  // are rebuilt here because closures cannot cross the settings JSON boundary.
+  const buildFallbackCommands = useCallback((specs: FallbackCommandSpec[]): FallbackCommand[] => {
+    return specs.map((spec) => ({
+      id: spec.id,
+      title: spec.title,
+      subtitle: spec.provider,
+      keywords: [spec.title.toLowerCase(), spec.provider.toLowerCase()].filter(Boolean),
+      action:
+        spec.kind === "url" && spec.url
+          ? (query: string) => {
+              window.open(spec.url!.replace("{query}", encodeURIComponent(query)), "_blank", "noopener");
+            }
+          : (query: string) => {
+              if (query.trim()) setSearchText(query);
+              setSelected(
+                internalCommandEntry(
+                  (spec.area ?? "quicklinks") as Parameters<typeof internalCommandEntry>[0],
+                  (spec.command ?? "search") as Parameters<typeof internalCommandEntry>[1],
+                ),
+              );
+            },
+    }));
+  }, []);
 
-    const handleFallbackChange = (event: CustomEvent<FallbackCommand[]>) => {
-      setFallbackCommands(event.detail);
+  const [fallbackSpecs, setFallbackSpecs] = useState<FallbackCommandSpec[]>(() => {
+    try {
+      const stored = localStorage.getItem("raycast-mini:fallback-commands");
+      return stored ? (JSON.parse(stored) as FallbackCommandSpec[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const handleFallbackChange = (event: CustomEvent<FallbackCommandSpec[]>) => {
+      setFallbackSpecs(event.detail);
     };
     window.addEventListener("raycast-mini:fallback-commands-changed", handleFallbackChange as EventListener);
     return () => window.removeEventListener("raycast-mini:fallback-commands-changed", handleFallbackChange as EventListener);
   }, []);
+
+  const fallbackCommands = useMemo(() => buildFallbackCommands(fallbackSpecs), [fallbackSpecs, buildFallbackCommands]);
 
   // File Search — debounced backend query while `Include Files in Root Search` is on.
   useEffect(() => {

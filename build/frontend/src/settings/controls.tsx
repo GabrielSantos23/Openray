@@ -29,7 +29,7 @@ function asSections(options: readonly (string | SelectOption)[] | undefined, sec
   return [{ title: "", options: normalized }];
 }
 
-function useDismiss(open: boolean, onClose: () => void, rootRef: React.RefObject<HTMLElement | null>) {
+export function useDismiss(open: boolean, onClose: () => void, rootRef: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: MouseEvent) => {
@@ -45,7 +45,7 @@ function useDismiss(open: boolean, onClose: () => void, rootRef: React.RefObject
 }
 
 /** Anchors a portal popup under (or over) the trigger rect, clamped to the viewport. */
-function usePopupRect(open: boolean, triggerRef: React.RefObject<HTMLElement | null>, placement: "bottom" | "top") {
+export function usePopupRect(open: boolean, triggerRef: React.RefObject<HTMLElement | null>, placement: "bottom" | "top") {
   const [rect, setRect] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
     if (!open) {
