@@ -76,7 +76,8 @@ function createGames({ dispatch, dataRoot } = {}) {
       const response = await dispatch("applications.getAll", {});
       const applications = (response?.value ?? []).map((payload) => ({
         ...payload,
-        isGame: Boolean(flags.games[payload.id]),
+        // The host classifies games by install location; the JSON flags hold manual overrides.
+        isGame: Boolean(flags.games[payload.id]) || Boolean(payload.isGame),
         hidden: Boolean(flags.hidden[payload.id]),
       }));
       return { games: applications.filter((payload) => payload.isGame && !payload.hidden) };

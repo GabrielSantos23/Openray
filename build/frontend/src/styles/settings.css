@@ -48,6 +48,7 @@
   --settings-tile-green: #59d499;
   --settings-tile-orange: #ff9f0a;
   --settings-tile-purple: #bf5af2;
+  --settings-header-height: 34px;
 }
 
 .settings-window {
@@ -90,6 +91,7 @@
   --settings-tile-green: #59d499;
   --settings-tile-orange: #ff9f0a;
   --settings-tile-purple: #bf5af2;
+  --settings-header-height: 34px;
 
   display: flex;
   height: 100%;
@@ -113,7 +115,9 @@
 .settings-titlebar {
   position: absolute;
   inset: 0 0 auto 0;
-  height: var(--window-header-height);
+  height: var(--settings-header-height);
+  background: var(--settings-fg-5);
+  border-bottom: 1px solid var(--settings-separator-strong);
   display: flex;
   align-items: center;
   padding: 0 var(--space-8) 0 0;
@@ -240,10 +244,9 @@
 /* The sidebar's titlebar strip is drawn by the chrome overlay; this spacer keeps the search
    below the 40px header. */
 .settings-sidebar__spacer {
-  height: var(--window-header-height);
+  height: var(--settings-header-height);
   flex: none;
   background: var(--settings-fg-5);
-  border-bottom: 1px solid var(--settings-separator-strong);
 }
 
 .settings-sidebar__search {
@@ -509,8 +512,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  height: var(--window-header-height);
-  min-height: var(--window-header-height);
+  height: var(--settings-header-height);
+  min-height: var(--settings-header-height);
   flex: none;
   padding: 0 var(--space-16);
 }
@@ -1932,14 +1935,22 @@
   background-repeat: no-repeat;
 }
 
-.settings-shortcuts__categoryIcon {
+.settings-shortcuts__catTile {
+  width: 20px;
+  height: 20px;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  color: var(--settings-text-secondary);
+  border-radius: 5px;
+  background: var(--settings-tile-gradient);
+  color: #ffffff;
 }
+
+.settings-shortcuts__catTile--extensions { background: linear-gradient(180deg, #ff6b5e, #d63a2f); }
+.settings-shortcuts__catTile--games { background: linear-gradient(180deg, #2f9dc6, #16718f); }
+.settings-shortcuts__catTile--quicklinks { background: linear-gradient(180deg, #b06ef7, #7d3ce0); }
+.settings-shortcuts__catTile--windows { background: none; }
 
 .settings-shortcuts__categoryChevron {
   display: inline-flex;

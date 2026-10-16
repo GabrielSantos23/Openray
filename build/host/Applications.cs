@@ -38,7 +38,8 @@ public sealed record ApplicationEntry(
     string? Disambiguator,
     bool IsMsix,
     bool IsRunning,
-    string? Icon = null);
+    string? Icon = null,
+    bool IsGame = false);
 
 public static class Applications
 {
@@ -52,6 +53,7 @@ public static class Applications
         id = app.Id,
         isRunning = app.IsRunning,
         icon = app.Icon,
+        isGame = app.IsGame,
     };
 
     /// <summary>Shortcuts Raycast never surfaces in the root search: uninstallers, help, docs.</summary>
@@ -326,6 +328,15 @@ public static class Applications
 
         var iconsMs = scanStart.ElapsedMilliseconds;
 
+        // Game classification: Raycast's store index flags games by content type; the closest
+        // signal on disk is the install location — game launchers install into their own library
+        // roots, so anything under a known root is a game.
+        var gameRoots = GameLibraryRoots();
+        for (var index = 0; index < list.Count; index++)
+        {
+            if (IsGamePath(list[index].Path, gameRoots)) list[index] = list[index] with { IsGame = true };
+        }
+
         WriteSnapshot(list);
         RaycastMini.Launcher.App.Log.Write(
             $"[applications] shortcuts={shortcuts} skippedNotExe={skippedTargets} skippedJunk={skippedJunk} " +
@@ -335,8 +346,83 @@ public static class Applications
         return list;
     }
 
-    private static IEnumerable<ApplicationEntry> EnumerateAppPaths(HashSet<string> runningPaths)
+    /// <summary>Install roots that only contain games: Steam libraries, Epic manifests, GOG and Xbox folders.</summary>
+    private static HashSet<string> GameLibraryRoots()
     {
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void AddRoot(string? path)
+        {
+            if (!string.IsNullOrWhiteSpace(path)) roots.Add(System.IO.Path.GetFullPath(path).TrimEnd('\\'));
+        }
+
+        var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        var vdf = System.IO.Path.Combine(programFilesX86, "Steam", "steamapps", "libraryfolders.vdf");
+        try
+        {
+            if (File.Exists(vdf))
+            {
+                foreach (var line in File.ReadAllLines(vdf))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(line, "\"path\"\\s+\"([^\"]+)\"");
+                    if (match.Success)
+                    {
+                        AddRoot(System.IO.Path.Combine(match.Groups[1].Value.Replace("\\\\", "\\"), "steamapps", "common"));
+                    }
+                }
+            }
+        }
+        catch
+        {
+            /* unreadable library file — the other roots still apply */
+        }
+
+        var epicManifests = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "Epic", "EpicGamesLauncher", "Data", "Manifests");
+        try
+        {
+            if (Directory.Exists(epicManifests))
+            {
+                foreach (var manifest in Directory.EnumerateFiles(epicManifests, "*.item"))
+                {
+                    try
+                    {
+                        var json = File.ReadAllText(manifest);
+                        var match = System.Text.RegularExpressions.Regex.Match(json, "\"InstallLocation\"\\s*:\\s*\"([^\"]+)\"");
+                        if (match.Success && match.Groups[1].Value.Length > 3)
+                        {
+                            AddRoot(match.Groups[1].Value.Replace("\\\\", "\\"));
+                        }
+                    }
+                    catch
+                    {
+                        /* skip unreadable manifest */
+                    }
+                }
+            }
+        }
+        catch
+        {
+            /* no Epic install */
+        }
+
+        AddRoot(System.IO.Path.Combine(programFilesX86, "GOG Galaxy", "Games"));
+        AddRoot(@"C:\GOG Games");
+        AddRoot(@"C:\XboxGames");
+        return roots;
+    }
+
+    private static bool IsGamePath(string? path, HashSet<string> roots)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        foreach (var root in roots)
+        {
+            if (path.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static IEnumerable<ApplicationEntry> EnumerateAppPaths(HashSet<string> runningPaths)    {
         var results = new List<ApplicationEntry>();
         var keys = new[]
         {

@@ -26,6 +26,8 @@ export interface ApplicationPayload {
   bundleId?: string | null;
   disambiguator?: string | null;
   isRunning: boolean;
+  /** True when the install location is inside a game library (Steam/Epic/GOG/Xbox). */
+  isGame?: boolean;
   /** PNG data URL extracted from the target's shell icon; null when none could be extracted. */
   icon?: string | null;
 }

@@ -27,6 +27,7 @@ import {
   writeShortcutDisabled,
 } from "../commandConfig";
 import { HotkeyRecorder, SearchField, useDismiss, usePopupRect } from "./controls";
+import { WindowsSettingsIcon } from "./brandIcons";
 
 export type ShortcutCategory = "Applications" | "Extensions" | "Games" | "Quicklinks" | "System";
 
@@ -95,7 +96,7 @@ export function ShortcutsPage() {
   useEffect(() => {
     const next: ShortcutRow[] = [];
     for (const app of applications) {
-      const isGame = gameIds.has(app.payload.id);
+      const isGame = gameIds.has(app.payload.id) || app.payload.isGame === true;
       next.push({
         key: appConfigKey(app.payload.id),
         category: isGame ? "Games" : "Applications",
@@ -349,14 +350,8 @@ function ShortcutsCategorySelect({ current }: { current: ShortcutCategory }) {
         data-open={open ? "true" : undefined}
         onClick={() => setOpen((state) => !state)}
       >
-        {current === "Applications" ? (
-          <span className="settings-shortcuts__appGrid" />
-        ) : (
-          <span className="settings-shortcuts__categoryIcon">
-            <RaycastIcon name={categoryMeta(current).icon} size={14} />
-          </span>
-        )}
-        {current}
+        <CategoryTile category={current} />
+        {categoryLabel(current)}
         <span className="settings-shortcuts__categoryChevron">
           <RaycastIcon name="chevron-down" size={12} />
         </span>
@@ -366,10 +361,8 @@ function ShortcutsCategorySelect({ current }: { current: ShortcutCategory }) {
             <div className="settings-menu" role="listbox" aria-label="Category" style={{ left: popupRect.left, top: popupRect.top, minWidth: 200 }}>
               {categories.map((category) => (
                 <button key={category} type="button" role="option" aria-selected={category === current} className="settings-menu__item" onClick={() => pick(category)}>
-                  <span className="settings-shortcuts__categoryIcon">
-                    <RaycastIcon name={categoryMeta(category).icon} size={13} />
-                  </span>
-                  <span>{category}</span>
+                  <CategoryTile category={category} />
+                  <span>{categoryLabel(category)}</span>
                 </button>
               ))}
             </div>,
@@ -395,6 +388,28 @@ function categoryMeta(category: ShortcutCategory): { icon: string } {
   }
 }
 
+/** Raycast labels the system-commands group "Windows Settings" and marks it with the gear logo. */
+function categoryLabel(category: ShortcutCategory): string {
+  return category === "System" ? "Windows Settings" : category;
+}
+
+/** The colored 20px tile shown next to each category name (Raycast's multicolor headers). */
+function CategoryTile({ category }: { category: ShortcutCategory }) {
+  if (category === "Applications") return <span className="settings-shortcuts__appGrid" />;
+  if (category === "System") {
+    return (
+      <span className="settings-shortcuts__catTile settings-shortcuts__catTile--windows">
+        <WindowsSettingsIcon size={17} />
+      </span>
+    );
+  }
+  return (
+    <span className={`settings-shortcuts__catTile settings-shortcuts__catTile--${category.toLowerCase()}`}>
+      <RaycastIcon name={categoryMeta(category).icon} size={12} />
+    </span>
+  );
+}
+
 /** Title-bar slot: the boxed search field and the Modifications/Categories filter dropdown. */
 export function ShortcutsTitlebarActions() {
   const context = useContext(ShortcutsFilterContext);
@@ -405,7 +420,7 @@ export function ShortcutsTitlebarActions() {
   const popupRect = usePopupRect(open, triggerRef, "bottom");
   if (!context) return null;
   const { filter, setFilter } = context;
-  const label = filter.categories.length === 1 ? filter.categories[0] : "All categories";
+  const label = filter.categories.length === 1 ? categoryLabel(filter.categories[0]) : "All categories";
 
   const toggleCategory = (category: ShortcutCategory) => {
     const has = filter.categories.includes(category);
@@ -511,8 +526,8 @@ export function ShortcutsTitlebarActions() {
                   <span className="settings-shortcuts__filterCheck">
                     <input type="checkbox" checked={filter.categories.includes(category)} readOnly tabIndex={-1} />
                   </span>
-                  <RaycastIcon name={categoryMeta(category).icon} size={13} />
-                  <span>{category}</span>
+                  <CategoryTile category={category} />
+                  <span>{categoryLabel(category)}</span>
                 </button>
               ))}
             </div>,
