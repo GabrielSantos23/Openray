@@ -831,7 +831,8 @@ function FallbackAddRow({
   );
 }
 
-/** Launcher > Fallback Commands: the added commands, provider label on the right, hover remove. */
+/** Launcher > Fallback Commands: the added commands — hover shows a grip handle (drag to
+    reorder) on the left and a minus button (remove) on the right, per Raycast's list. */
 function FallbackListRow({
   value,
   onValueChange,
@@ -840,12 +841,54 @@ function FallbackListRow({
   onValueChange: (next: SettingsValue) => void;
 }) {
   const items = parseFallbackSpecs(value);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
   if (items.length === 0) return null;
+
+  const reorder = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) return;
+    const next = [...items];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onValueChange(JSON.stringify(next));
+  };
+
   return (
     <div className="settings-fallback__list">
-      {items.map((item) => (
-        <div key={item.id} className="settings-fallback__item" data-row-id={`fallback:${item.id}`}>
+      {items.map((item, index) => (
+        <div
+          key={item.id}
+          className="settings-fallback__item"
+          data-row-id={`fallback:${item.id}`}
+          data-drag-over={overIndex === index && dragIndex !== null && dragIndex !== index ? "true" : undefined}
+          draggable={dragIndex === index}
+          onDragStart={() => setDragIndex(index)}
+          onDragEnd={() => {
+            setDragIndex(null);
+            setOverIndex(null);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setOverIndex(index);
+          }}
+          onDragLeave={() => setOverIndex((state) => (state === index ? null : state))}
+          onDrop={(event) => {
+            event.preventDefault();
+            reorder(dragIndex ?? index, index);
+            setDragIndex(null);
+            setOverIndex(null);
+          }}
+        >
           <span className="settings-row__left">
+            <span
+              className="settings-fallback__grip"
+              title="Drag to reorder"
+              onMouseDown={() => setDragIndex(index)}
+              onMouseUp={() => setDragIndex((state) => (state === index ? null : state))}
+            >
+              <RaycastIcon name="grip-vertical" size={13} />
+            </span>
             <span className="settings-fallback__icon">
               <RaycastIcon name={item.icon} size={14} />
             </span>
@@ -854,7 +897,7 @@ function FallbackListRow({
           <span className="settings-row__right">
             <span className="settings-row__value">{item.provider}</span>
             <IconButton
-              icon="trash"
+              icon="minus"
               size={12}
               title={`Remove ${item.title}`}
               onClick={() => onValueChange(JSON.stringify(items.filter((entry) => entry.id !== item.id)))}
