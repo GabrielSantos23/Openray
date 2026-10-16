@@ -967,7 +967,7 @@ internal static class MsixCache
         var script =
             "Get-AppxPackage | Where-Object { $_.PackageFamilyName } | " +
             "ForEach-Object { [pscustomobject]@{ " +
-            "Name = $_.Name; DisplayName = $(if ($_.Name) { $_.Name } else { '' }); " +
+            "Name = $_.Name; DisplayName = $(if ($_.DisplayName) { $_.DisplayName } elseif ($_.Name) { $_.Name } else { '' }); " +
             "Family = $_.PackageFamilyName; InstallLocation = $_.InstallLocation; " +
             "AppId = $(try { (Get-AppxPackageManifest $_).Package.Applications.Application.Id } catch { '' }) } } | " +
             "ConvertTo-Json -Compress -Depth 4";
@@ -998,11 +998,24 @@ internal static class MsixCache
             {
                 try
                 {
-                    var name = item.TryGetProperty("Name", out var nameElement) ? nameElement.GetString() : null;
+                    var name = item.TryGetProperty("DisplayName", out var displayNameElement) && !string.IsNullOrWhiteSpace(displayNameElement.GetString())
+                        ? displayNameElement.GetString()
+                        : item.TryGetProperty("Name", out var nameElement) ? nameElement.GetString() : null;
                     var family = item.TryGetProperty("Family", out var familyElement) ? familyElement.GetString() : null;
-                    var location = item.TryGetProperty("InstallLocation", out var locationElement) ? locationElement.GetString() : null;
+                    var location = item.TryGetProperty("InstallLocation", out var locationElement2) ? locationElement2.GetString() : null;
                     var appId = item.TryGetProperty("AppId", out var appIdElement) ? appIdElement.GetString() : null;
                     if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(family)) continue;
+                    // The manifest's display name is a resource the non-interactive query cannot
+                    // resolve; whatever still looks like a package id (Publisher.App, a GUID) is
+                    // an unpackaged friendly name we cannot show — skip it (Start Menu shortcuts
+                    // and the uninstall registry already list those apps properly).
+                    var looksLikePackageId = name.Contains('.') || name.Contains('-') || Guid.TryParse(name, out _);
+                    if (looksLikePackageId) continue;
+                    // Framework packages have no launchable Application entry, and Windows'
+                    // SystemApps components are not user-facing apps (Raycast excludes them too).
+                    if (string.IsNullOrWhiteSpace(appId)) continue;
+                    var installLocation = item.TryGetProperty("InstallLocation", out var locationElement) ? locationElement.GetString() : null;
+                    if (installLocation is not null && installLocation.Contains(@"\SystemApps\", StringComparison.OrdinalIgnoreCase)) continue;
                     var bundleId = string.IsNullOrWhiteSpace(appId) ? family : $"{family}!{appId}";
                     result.Add(new ApplicationEntry(
                         $"msix:{family}",

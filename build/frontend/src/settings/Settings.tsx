@@ -442,7 +442,16 @@ function Titlebar({ page, onNavigate, actions }: { page: PageDefinition; onNavig
         </button>
         <span className="settings-titlebar__page">{page.title}</span>
       </div>
-      {actions ? <div className="settings-titlebar__actions">{actions}</div> : null}
+      {actions ? (
+        <div
+          className="settings-titlebar__actions"
+          // The titlebar root starts a native drag on mousedown; without this the search field
+          // and the filter dropdown can never receive a click.
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          {actions}
+        </div>
+      ) : null}
       <div className="settings-titlebar__caption">
         <button
           type="button"
