@@ -137,8 +137,48 @@ public static class ClipboardHistory
         if (shouldCloseWindow) App.RequestHideMainWindow();
 
         // Raycast restores the user's previous clipboard contents once the paste has been delivered.
-        RestoreClipboard(backup);
+        RestoreClipboardAfterPasteRead(destination, backup);
         return new { ok = true };
+    }
+
+    /// <summary>
+    /// The target reads the clipboard when it processes the Ctrl+V — on its own message loop,
+    /// strictly after this call returns. Restoring the backup right away would put the previous
+    /// item back before the read, so every paste delivered the last copied item instead of the
+    /// selected entry. Wait until a window of the target's process is seen holding the clipboard
+    /// open (the read), then restore once it is done; if it never opens (some readers go through
+    /// OLE's own window), the timeout falls back to a fixed grace period.
+    /// </summary>
+    private static void RestoreClipboardAfterPasteRead(IntPtr destination, ClipboardBackup? backup)
+    {
+        _ = GetWindowThreadProcessId(destination, out var targetPid);
+        var deadline = Environment.TickCount64 + 2000;
+        var sawRead = false;
+        while (Environment.TickCount64 < deadline)
+        {
+            var open = GetOpenClipboardWindow();
+            if (open != IntPtr.Zero)
+            {
+                _ = GetWindowThreadProcessId(open, out var openPid);
+                if (openPid == targetPid)
+                {
+                    sawRead = true;
+                    var settle = Environment.TickCount64 + 100;
+                    while (Environment.TickCount64 < settle)
+                    {
+                        var stillOpen = GetOpenClipboardWindow();
+                        if (stillOpen == IntPtr.Zero) break;
+                        _ = GetWindowThreadProcessId(stillOpen, out var stillPid);
+                        if (stillPid != targetPid) break;
+                        Thread.Sleep(10);
+                    }
+                    break;
+                }
+            }
+            Thread.Sleep(15);
+        }
+        if (!sawRead) Thread.Sleep(400);
+        RestoreClipboard(backup);
     }
 
     private sealed record ClipboardRepresentationPayload(string MimeType, string? Text, string? Path, string? Base64);
