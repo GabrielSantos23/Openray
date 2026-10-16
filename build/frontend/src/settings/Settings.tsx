@@ -76,6 +76,9 @@ import { applyPreset, readStoredHotkeys } from "../windowManagement";
 import { WM_COMMANDS } from "../wm-commands";
 import { getSettings, installSettingsPush, syncFromBackend, updateSettings, useSetting, useSettings } from "./store";
 
+/** Both fallback rows read and write the single `fallback-commands` JSON value. */
+const FALLBACK_VALUE_ROW_IDS = new Set(["add-fallback-command", "fallback-commands-items"]);
+
 /** The launcher default; Raycast's own default (Win key) is not interceptable here. */
 const RAYCASTMINI_DEFAULT_HOTKEY = "Alt + Space";
 
@@ -358,9 +361,9 @@ export function Settings() {
                             }}>
                               <Row
                                 row={row}
-                                value={values[row.id]}
+                                value={FALLBACK_VALUE_ROW_IDS.has(row.id) ? values["fallback-commands"] : values[row.id]}
                                 highlight={highlightRow === row.id}
-                                onValueChange={(next) => setValue(row.id, next)}
+                                onValueChange={(next) => setValue(FALLBACK_VALUE_ROW_IDS.has(row.id) ? "fallback-commands" : row.id, next)}
                                 onAction={() => runAction(row.id)}
                                 allValues={values}
                                 dynamicOptions={translatorDynamicOptions}
