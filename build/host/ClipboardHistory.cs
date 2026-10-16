@@ -137,7 +137,9 @@ public static class ClipboardHistory
         if (shouldCloseWindow) App.RequestHideMainWindow();
 
         // Raycast restores the user's previous clipboard contents once the paste has been delivered.
-        RestoreClipboardAfterPasteRead(destination, backup);
+        // Fire-and-forget: the wait would otherwise park the UI thread for up to ~2.5s, freezing
+        // a reopen of the launcher that comes right after the paste.
+        _ = Task.Run(() => RestoreClipboardAfterPasteRead(destination, backup));
         return new { ok = true };
     }
 
