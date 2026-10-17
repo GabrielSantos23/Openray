@@ -1215,6 +1215,20 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out NativePoint point);
 
+    /// <summary>
+    /// Settings → General → "Replay Onboarding": re-shows the launcher and pushes the onboarding
+    /// event into the renderer, where the App mounts the flow again.
+    /// </summary>
+    internal void ShowOnboarding()
+    {
+        ShowMainWindow();
+        _ = _webView.Dispatcher.InvokeAsync(async () =>
+        {
+            await _webView.CoreWebView2.ExecuteScriptAsync(
+                "window.dispatchEvent(new CustomEvent('raycast-mini:show-onboarding'));");
+        });
+    }
+
     /// <summary>Tells the renderer the window was hidden/shown so it can run pop-to-root timers.</summary>
     private void PostVisibility(bool visible)
     {
@@ -1262,6 +1276,7 @@ public partial class MainWindow : Window
         }
         _settingsWindow = new SettingsWindow(
             _backend.FrontendRoot,
+            this,
             (method, data) => ((App)System.Windows.Application.Current).RequestBackendAsync(method, data),
             (method, data) => DispatchIpcAsync(method, string.Empty, data, isBackend: false));
         _settingsWindow.Show();

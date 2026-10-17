@@ -1116,13 +1116,24 @@ async function runRowAction(row: RowDefinition): Promise<void> {
   };
   const target = links[row.id];
   if (target) window.open(target, "_blank", "noopener");
+
+  if (row.id === "replay-onboarding") {
+    // The settings WebView has no host-object bridge; the plain WebMessage reaches the host's
+    // WebMessageReceived handler, which shows the launcher and replays the onboarding flow.
+    (window as unknown as { chrome?: { webview?: { postMessage: (message: string) => void } } }).chrome?.webview?.postMessage("raycast-mini:show-onboarding");
+    window.dispatchEvent(
+      new CustomEvent("raycast-mini:settings-toast", {
+        detail: { title: "Onboarding reopened in the launcher" },
+      }),
+    );
+    return;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
 // General/Keyboard rows apply at runtime through the host. Failures throw so the caller can roll
 // the switch back (Raycast's openAtLogin rollback + toast).
 // ---------------------------------------------------------------------------------------------
-
 async function applyGeneralSetting(id: string, next: SettingsValue): Promise<void> {
   switch (id) {
     case "open-at-login":

@@ -122,7 +122,15 @@ export const PAGES: readonly PageDefinition[] = [
         rows: [
           { id: "open-at-login", title: "Open at Login", control: "switch" },
           { id: "show-in-menu-bar", title: "Show in System Tray", control: "switch" },
+          { id: "automatically-show-taskbar", title: "Automatically Show the Taskbar", control: "switch" },
           { id: "openray-hotkey", title: "Openray Hotkey", control: "hotkey", value: OPENRAY_DEFAULT_HOTKEY },
+          {
+            id: "replay-onboarding",
+            title: "Replay Onboarding",
+            description: "Show the first-run setup flow again in the launcher.",
+            control: "action",
+            action: "Show onboarding",
+          },
         ],
       },
       {

@@ -12,6 +12,7 @@ import { looksLikeFilePath } from "../fileSearch";
 import { WM_COMMANDS } from "../windowManagement";
 import { generateKeywords, rankEntriesWithFallbacks, type FallbackCommand, type FileSearchResult, type Sensitivity } from "../matching";
 import type { InlineSectionResult } from "../inlineSections";
+import { DEFAULT_FEATURE_FLAGS, type FeatureFlagId, type FeatureFlags } from "../onboarding/features";
 import {
   CLIPBOARD_COMMAND,
   CLIPBOARD_FAVORITE_KEY,
@@ -72,6 +73,16 @@ export const GAMES_COMMANDS: ReadonlyArray<{ command: string; title: string; des
   { command: "searchGames", title: "Game Launcher", description: "Launch games from Steam, Epic, Xbox, Riot, and more.", keywords: ["game", "games"] },
 ];
 
+/** Onboarding feature flags → internal command area. Areas absent here have no command rows. */
+const AREA_FLAG: Record<string, FeatureFlagId> = {
+  quicklinks: "quicklinks",
+  snippets: "snippets",
+  calculator: "calculator",
+  translator: "translator",
+  "file-search": "fileSearch",
+  notes: "notes",
+};
+
 export function buildSections(
   query: string,
   applications: ApplicationCommand[],
@@ -92,7 +103,8 @@ export function buildSections(
   gameApps: ApplicationCommand[],
   colorEntry: ColorEntry | null = null,
   disabledAreas: string[] = [],
-  updateEntry: UpdateEntry | null = null
+  updateEntry: UpdateEntry | null = null,
+  features: FeatureFlags = DEFAULT_FEATURE_FLAGS
 ): RootSection[] {
   const off = (area: string) => disabledAreas.includes(area);  // Build searchable entries for all applications
   const appAliases = readAppAliases();
@@ -126,7 +138,7 @@ export function buildSections(
   const internalCommandSearchables: SearchableEntry[] = INTERNAL_COMMANDS.filter(
     (definition) => !isShortcutDisabled(internalConfigKey(definition.area, definition.command)),
   )
-    .filter((definition) => !off(definition.area))
+    .filter((definition) => !off(definition.area) && features[AREA_FLAG[definition.area]] !== false)
     .filter((definition) => !(definition.area === "clipboard-history" && definition.command === "history"))
     .map((definition) => ({
     title: definition.title,
@@ -142,7 +154,9 @@ export function buildSections(
 
   // Window Management commands: every row applies to the previously focused window; the two
   // argument commands open the args view instead of running directly.
-  const windowManagementSearchables: SearchableEntry[] = WM_COMMANDS.map((definition) => ({
+  const windowManagementSearchables: SearchableEntry[] = (
+    features.windowManagement ? WM_COMMANDS : []
+  ).map((definition) => ({
     title: definition.title,
     subtitle: definition.description,
     keywords: definition.keywords,
@@ -155,8 +169,12 @@ export function buildSections(
   // run directly. Ephemeral rows only exist while a session does.
   const sessionVisible = (needsSession?: boolean, needsPaused?: boolean) =>
     !needsSession || (focusSession !== null && (!needsPaused || focusSession.status === "paused"));
-  const focusSearchables: SearchableEntry[] = FOCUS_COMMANDS.filter((definition) =>
-    sessionVisible(definition.needsSession, definition.needsPaused),
+  const focusSearchables: SearchableEntry[] = (
+    features.focus
+      ? FOCUS_COMMANDS.filter((definition) =>
+          sessionVisible(definition.needsSession, definition.needsPaused),
+        )
+      : []
   ).map((definition) => ({
     title: definition.title,
     subtitle: definition.description,
@@ -346,12 +364,16 @@ export function buildSections(
   // `Create Note` ships `fallbackStatus: "available"`, so it leads the fallback suggestions.
   const fallbackEntries: RootEntry[] = showFallbacks
     ? [
-        {
-          kind: "internal" as const,
-          area: "notes",
-          command: "create" as const,
-          commandId: "notes/create",
-        },
+        ...(features.notes
+          ? [
+              {
+                kind: "internal" as const,
+                area: "notes" as const,
+                command: "create" as const,
+                commandId: "notes/create",
+              },
+            ]
+          : []),
         ...fallbackCommands.map((cmd) => ({ kind: "fallback" as const, command: cmd })),
       ]
     : [];
@@ -372,12 +394,15 @@ export function buildSections(
   if (explorerEntry) fileEntries.push(explorerEntry);
 
   // Inline section results - group by type
-  const quicklinkCreateEntries: QuicklinkCreateEntry[] = isLikelyUrl(query)
-    ? [{ kind: "quicklink-create", link: query.trim() }]
+  const quicklinkCreateEntries: QuicklinkCreateEntry[] =
+    features.quicklinks && isLikelyUrl(query)
+      ? [{ kind: "quicklink-create", link: query.trim() }]
+      : [];
+  const snippetEntries = features.snippets
+    ? inlineResults
+        .filter((r) => r.type === "snippet")
+        .map((result) => ({ kind: "inline" as const, result }))
     : [];
-  const snippetEntries = inlineResults
-    .filter((r) => r.type === "snippet")
-    .map((result) => ({ kind: "inline" as const, result }));
   const webSearchEntries = inlineResults
     .filter((r) => r.type === "web-search")
     .map((result) => ({ kind: "inline" as const, result }));
@@ -405,7 +430,7 @@ export function buildSections(
 
   // Calculator section (highest priority) - the ephemeral row appears whenever the search term
   // evaluates; it is not a searchable command (rootSearch matching:'always').
-  const calculatorEntries: RootEntry[] = calculatorEntry ? [calculatorEntry] : [];
+  const calculatorEntries: RootEntry[] = features.calculator && calculatorEntry ? [calculatorEntry] : [];
   if (calculatorEntries.length > 0) {
     sections.push({ id: "calculator", title: "Calculator", icon: "calculator", entries: calculatorEntries });
   }
@@ -417,7 +442,7 @@ export function buildSections(
 
   // Translate section: the ephemeral quick-translate row (`rootSearch:{section:'translate',
   // when:'searching', matching:'always'}`), matched against the backend parser.
-  const translateEntries: RootEntry[] = translateEntry ? [translateEntry] : [];
+  const translateEntries: RootEntry[] = features.translator && translateEntry ? [translateEntry] : [];
   if (translateEntries.length > 0) {
     sections.push({ id: "translate", title: "Translate", icon: "Globe", entries: translateEntries });
   }
@@ -437,8 +462,7 @@ export function buildSections(
   // Focus section: the dynamic `session` row (rootSearch:{section:'focus',when:'empty'}) shows
   // with an empty query while a session runs; the Focus view/ephemeral commands file under
   // Commands. The Game Launcher command gets the same treatment under its own area.
-  if (!searching && focusSession && !off("raycast-focus")) {
-    sections.push({
+  if (!searching && focusSession && !off("raycast-focus") && features.focus !== false) {    sections.push({
       id: "focus",
       title: "Focus",
       icon: "bulls-eye",
@@ -460,7 +484,7 @@ export function buildSections(
   const quicklinkRowsShown = searching
     ? regularResults.filter((r) => r.entry.rootEntry.kind === "quicklink").map((r) => r.entry.rootEntry)
     : [];
-  const customTranslateRowsShown = searching
+  const customTranslateRowsShown = features.translator && searching
     ? regularResults.filter((r) => r.entry.rootEntry.kind === "translator-command").map((r) => r.entry.rootEntry)
     : [];
   if (!off("quicklinks") && (quicklinkCreateEntries.length > 0 || quicklinkRowsShown.length > 0)) {
@@ -478,8 +502,7 @@ export function buildSections(
   }
 
   // Files section (after commands, before fallback); the indexing row keeps it visible alone.
-  if (showFilesInRoot && !off("file-search") && fileEntries.length > 0) {
-    sections.push({ id: "files", title: "Files", icon: "file-text", entries: fileEntries });
+  if (showFilesInRoot && !off("file-search") && features.fileSearch !== false && fileEntries.length > 0) {    sections.push({ id: "files", title: "Files", icon: "file-text", entries: fileEntries });
   }
 
   // Web search suggestions (lowest priority)

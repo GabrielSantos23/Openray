@@ -29,6 +29,11 @@ public sealed class SettingsWindow : Window
     private readonly WebView2 _webView = new();
     private readonly WebViewBridge _bridge;
     private readonly string _frontendRoot;
+    // Reference back to the launcher, so the Settings renderer can ask it to replay onboarding
+    // (the settings WebView has no host-object bridge of its own — a plain WebMessage is the
+    // only channel it needs).
+    private readonly MainWindow? _mainWindow;
+    private const string ShowOnboardingMessage = "raycast-mini:show-onboarding";
     private readonly string _boundsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Openray", "settings-window.json");
@@ -37,10 +42,12 @@ public sealed class SettingsWindow : Window
 
     public SettingsWindow(
         string frontendRoot,
+        MainWindow? mainWindow = null,
         Func<string, System.Text.Json.JsonElement?, Task<System.Text.Json.JsonElement?>>? backendDispatch = null,
         Func<string, System.Text.Json.JsonElement?, Task<System.Text.Json.JsonElement?>>? frontendDispatch = null)
     {
         _frontendRoot = frontendRoot;
+        _mainWindow = mainWindow;
 
         Title = "Openray Settings";
         Width = DefaultWidth;
@@ -164,6 +171,14 @@ public sealed class SettingsWindow : Window
         _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             "raycast.mini", _frontendRoot, CoreWebView2HostResourceAccessKind.Allow);
         WebView2Permissions.AllowClipboardRead(_webView.CoreWebView2);
+
+        // Renderer → host: the only message the settings page sends is the onboarding replay
+        // request (Settings → General → "Replay Onboarding").
+        _webView.CoreWebView2.WebMessageReceived += (_, args) =>
+        {
+            if (args.TryGetWebMessageAsString() != ShowOnboardingMessage) return;
+            _mainWindow?.Dispatcher.Invoke(() => _mainWindow.ShowOnboarding());
+        };
 
         var html = Path.Combine(_frontendRoot, "dist", "settings.html");
         _webView.CoreWebView2.Navigate(

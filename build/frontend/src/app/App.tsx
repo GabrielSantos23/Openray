@@ -92,6 +92,17 @@ import {
 } from "../fileSearch";
 import { getInlineSectionResults, loadInlineSectionSettings, type InlineSectionResult, type InlineSectionSettings } from "../inlineSections";
 import {
+  FEATURE_FLAGS_CHANGED_EVENT,
+  SHOW_ONBOARDING_EVENT,
+  isOnboardingCompleted,
+  loadFeatureFlags,
+  markOnboardingCompleted,
+  saveFeatureFlags,
+  type FeatureFlags,
+} from "../onboarding/features";
+import { Onboarding } from "../onboarding/Onboarding";
+import { saveInlineSectionSettings } from "../inlineSections";
+import {
   getCommandArguments,
   validateArguments,
   getDefaultArgumentValues,
@@ -216,6 +227,10 @@ export function MainWindow() {
   // Action panel for a file result row (Ctrl+K on the Files section).
   const [filePanel, setFilePanel] = useState<FileSearchRow | null>(null);
   const [inlineSectionSettings, setInlineSectionSettings] = useState(() => loadInlineSectionSettings());
+  // Onboarding: feature flags gate root-search sections (buildSections); the flow shows on first
+  // start and can be replayed from Settings → General (host pushes SHOW_ONBOARDING_EVENT).
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(() => loadFeatureFlags());
+  const [onboardingOpen, setOnboardingOpen] = useState(() => !isOnboardingCompleted());
   const [inlineResults, setInlineResults] = useState<InlineSectionResult[]>([]);
   // Action panel for the ephemeral calculator row (Ctrl+K on the split row).
   const [calculatorPanel, setCalculatorPanel] = useState<CalculatorEntry | null>(null);
@@ -662,6 +677,24 @@ export function MainWindow() {
     window.addEventListener("openray:inline-section-settings-changed", handleSettingsChange as EventListener);
     return () => window.removeEventListener("openray:inline-section-settings-changed", handleSettingsChange as EventListener);
   }, []);
+
+  // Onboarding: the host pushes SHOW_ONBOARDING_EVENT (Settings → General replay) into this
+  // document; flags changed from the flow's finish step arrive as FEATURE_FLAGS_CHANGED_EVENT.
+  useEffect(() => {
+    const handleShowOnboarding = () => setOnboardingOpen(true);
+    const handleFlagsChanged = (event: CustomEvent<FeatureFlags>) => setFeatureFlags(event.detail);
+    window.addEventListener(SHOW_ONBOARDING_EVENT, handleShowOnboarding as EventListener);
+    window.addEventListener(FEATURE_FLAGS_CHANGED_EVENT, handleFlagsChanged as EventListener);
+    return () => {
+      window.removeEventListener(SHOW_ONBOARDING_EVENT, handleShowOnboarding as EventListener);
+      window.removeEventListener(FEATURE_FLAGS_CHANGED_EVENT, handleFlagsChanged as EventListener);
+    };
+  }, []);
+  // Capture-phase Escape (below) closes the launcher; while onboarding owns the screen it must not.
+  const onboardingOpenRef = useRef(onboardingOpen);
+  useEffect(() => {
+    onboardingOpenRef.current = onboardingOpen;
+  }, [onboardingOpen]);
 
   // Pop to root on hide: Raycast resets to root search after the window has been closed for the
   // configured timeout ("Pop to Root Search"). Hiding starts the timer; showing cancels it. Both
@@ -1133,8 +1166,8 @@ export function MainWindow() {
   }, [updateState]);
 
   const sections = useMemo(
-    () => buildSections(searchText, extensionEnabled.applications ? applications : [], extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, extensionEnabled["file-search"] ? fileResults : [], inlineResults, extensionEnabled.quicklinks ? quicklinkRows : [], extensionEnabled.calculator ? calculatorEntry : null, extensionEnabled.translator ? translateEntry : null, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false, extensionEnabled.focus ? focusState?.session ?? null : null, extensionEnabled.games ? gameApps : [], colorEntry, disabledAreas, updateEntry),
-    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings, focusState, gameApps, colorEntry, disabledAreas, updateEntry],
+    () => buildSections(searchText, extensionEnabled.applications ? applications : [], extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, extensionEnabled["file-search"] ? fileResults : [], inlineResults, extensionEnabled.quicklinks ? quicklinkRows : [], extensionEnabled.calculator ? calculatorEntry : null, extensionEnabled.translator ? translateEntry : null, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false, extensionEnabled.focus ? focusState?.session ?? null : null, extensionEnabled.games ? gameApps : [], colorEntry, disabledAreas, updateEntry, featureFlags),
+    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings, focusState, gameApps, colorEntry, disabledAreas, updateEntry, featureFlags],
   );
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
@@ -2014,6 +2047,7 @@ export function MainWindow() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (onboardingOpenRef.current) return;
       if (panelOpenRef.current || selected) return;
       event.preventDefault();
       closeMainWindow();
@@ -3305,6 +3339,34 @@ export function MainWindow() {
       />
 
       <AlertHost />
+
+      {onboardingOpen ? (
+        <Onboarding
+          initialFlags={featureFlags}
+          onComplete={(flags) => {
+            saveFeatureFlags(flags);
+            // Keep the existing inline-section gates in agreement with the onboarding toggles.
+            saveInlineSectionSettings({
+              ...inlineSectionSettings,
+              calculator: flags.calculator,
+              translate: flags.translator,
+              snippets: flags.snippets,
+            });
+            setInlineSectionSettings((previous) => ({
+              ...previous,
+              calculator: flags.calculator,
+              translate: flags.translator,
+              snippets: flags.snippets,
+            }));
+            markOnboardingCompleted();
+            setOnboardingOpen(false);
+          }}
+          onSkip={() => {
+            markOnboardingCompleted();
+            setOnboardingOpen(false);
+          }}
+        />
+      ) : null}
 
     </div>
   );

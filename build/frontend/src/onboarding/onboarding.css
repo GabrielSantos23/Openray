@@ -1,0 +1,576 @@
+/* Onboarding — Raycast for Windows style: near-black canvas with a soft radial vignette,
+ * large centred light-grey display type, red brand accent reserved for the progress dashes
+ * and small accents, dark elevated buttons, segmented dashes bottom-left with a back chevron.
+ *
+ * Contrast: secondary copy #9a9a9a on the near-black canvas and #1c1c1e cards clears 4.5:1;
+ * primary button labels are light on dark grey. */
+
+.ob {
+  --ob-bg: #0d0d0d;
+  --ob-card: #1a1a1c;
+  --ob-card-strong: #232326;
+  --ob-border: rgba(255, 255, 255, 0.09);
+  --ob-border-strong: rgba(255, 255, 255, 0.16);
+  --ob-fg: #e9e9e9;
+  --ob-muted: #9a9a9a;
+  --ob-brand: #ff6363;
+  --ob-button: #2e2e31;
+  --ob-button-hover: #3a3a3e;
+  --ob-radius: 14px;
+  --ob-radius-sm: 10px;
+
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 14px 20px 14px;
+  color: var(--ob-fg);
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 30%, rgba(255, 99, 99, 0.045), transparent 60%),
+    radial-gradient(ellipse 70% 55% at 50% 20%, #1d1d1f, transparent 70%),
+    var(--ob-bg);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---- top bar: skip ----------------------------------------------------------- */
+
+.ob__top {
+  display: flex;
+  justify-content: flex-end;
+  position: relative;
+  min-height: 26px;
+}
+
+.ob__skip {
+  border: none;
+  background: none;
+  color: var(--ob-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.ob__skip:hover,
+.ob__skip:focus-visible {
+  color: var(--ob-fg);
+}
+
+/* ---- type --------------------------------------------------------------------- */
+
+.ob__title {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ob-fg);
+  text-align: center;
+}
+
+.ob__support {
+  margin: 10px auto 0;
+  font-size: 13.5px;
+  color: var(--ob-muted);
+  max-width: 56ch;
+  text-align: center;
+}
+
+.ob__support--hint {
+  margin-top: 10px;
+  font-size: 12.5px;
+}
+
+/* ---- icon tiles ---------------------------------------------------------------- */
+
+.ob__tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-card-strong);
+  border: 1px solid var(--ob-border);
+  color: #c9c9c9;
+}
+
+.ob__tile--lg {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--ob-radius-sm);
+}
+
+.ob__tile-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.ob__tile--lg .ob__tile-icon {
+  width: 21px;
+  height: 21px;
+}
+
+/* ---- cards ---------------------------------------------------------------------- */
+
+.ob__card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px;
+  border-radius: var(--ob-radius);
+  background: var(--ob-card);
+  border: 1px solid var(--ob-border);
+  list-style: none;
+}
+
+.ob__card-title {
+  font-weight: 600;
+  color: var(--ob-fg);
+}
+
+.ob__card-desc {
+  font-size: 12px;
+  color: var(--ob-muted);
+}
+
+/* ---- steps ------------------------------------------------------------------------ */
+
+.ob__step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  animation: ob-enter 220ms ease-out;
+}
+
+@keyframes ob-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Welcome step: centred hero like the "Welcome to Raycast for Windows" slide. */
+.ob__step--welcome {
+  align-items: center;
+  text-align: center;
+}
+
+.ob__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-top: 14px;
+  border-radius: 14px;
+  color: #dedede;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 99, 99, 0.14), transparent 65%),
+    var(--ob-card-strong);
+  border: 1px solid var(--ob-border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.ob__mark-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.ob__step--welcome .ob__title {
+  margin-top: 14px;
+}
+
+.ob__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 0;
+  width: 100%;
+}
+
+.ob__grid .ob__card {
+  align-items: flex-start;
+}
+
+.ob__grid .ob__tile {
+  margin-bottom: 3px;
+}
+
+/* ---- store step --------------------------------------------------------------------- */
+
+.ob__step--store {
+  padding-top: 10px;
+  text-align: left;
+}
+
+.ob__store-body {
+  display: flex;
+  flex: 1;
+  gap: 26px;
+  align-items: center;
+  min-height: 0;
+}
+
+.ob__store-copy {
+  width: 42%;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ob__store-copy .ob__title,
+.ob__store-copy .ob__support {
+  text-align: left;
+  margin-left: 0;
+}
+
+.ob__panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--ob-radius);
+  background: var(--ob-card);
+  border: 1px solid var(--ob-border);
+  min-width: 0;
+}
+
+.ob__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 34px;
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-card-strong);
+  border: 1px solid var(--ob-border);
+}
+
+.ob__search:focus-within {
+  border-color: var(--ob-border-strong);
+}
+
+.ob__search-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--ob-muted);
+  flex: none;
+}
+
+.ob__search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--ob-fg);
+  font-size: 13px;
+  outline: none;
+}
+
+.ob__search-input::placeholder {
+  color: var(--ob-muted);
+}
+
+.ob__ext-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ob__ext {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--ob-radius-sm);
+  background: var(--ob-card-strong);
+  border: 1px solid var(--ob-border);
+}
+
+.ob__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 7px;
+  background: #2c2c2f;
+  color: #d6d6d6;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.ob__ext-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ob__ext-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ob__ext-desc {
+  font-size: 11.5px;
+  color: var(--ob-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ob__ext-empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--ob-muted);
+}
+
+/* ---- feature toggles step ------------------------------------------------------------ */
+
+.ob__toggles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.ob__card--row {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.ob__card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ob__switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--ob-border-strong);
+  background: var(--ob-card-strong);
+  cursor: pointer;
+  padding: 0;
+}
+
+.ob__switch--on {
+  background: var(--ob-brand);
+  border-color: transparent;
+}
+
+.ob__switch:focus-visible {
+  outline: 2px solid var(--ob-brand);
+  outline-offset: 2px;
+}
+
+.ob__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #8b8b8b;
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+.ob__switch--on .ob__knob {
+  transform: translateX(16px);
+  background: #ffffff;
+}
+
+/* ---- footer: back chevron + dashes left, actions right -------------------------------- */
+
+.ob__footer {
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ob__footer-spacer {
+  flex: 1;
+}
+
+.ob__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--ob-muted);
+  cursor: pointer;
+}
+
+.ob__back:hover,
+.ob__back:focus-visible {
+  color: var(--ob-fg);
+  background: var(--ob-card-strong);
+}
+
+.ob__progress {
+  display: flex;
+  gap: 5px;
+}
+
+.ob__dot {
+  width: 20px;
+  height: 3px;
+  border-radius: 999px;
+  background: #3a3a3d;
+  transition: background 160ms ease;
+}
+
+.ob__dot--active {
+  background: var(--ob-brand);
+}
+
+.ob__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.ob__actions-group {
+  display: flex;
+  gap: 10px;
+}
+
+/* ---- buttons ---------------------------------------------------------------------------- */
+
+.ob__button {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--ob-radius-sm);
+  border: 1px solid var(--ob-border);
+  background: var(--ob-button);
+  color: var(--ob-fg);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 80ms ease;
+}
+
+.ob__button:hover {
+  background: var(--ob-button-hover);
+}
+
+.ob__button:active {
+  transform: translateY(1px);
+}
+
+.ob__button:focus-visible {
+  outline: 1.5px solid color-mix(in oklab, var(--ob-brand) 65%, transparent);
+  outline-offset: 2px;
+}
+
+.ob__button--primary {
+  background: #3d3d41;
+  border-color: var(--ob-border-strong);
+}
+
+.ob__button--primary:hover {
+  background: #49494e;
+}
+
+.ob__button--accent {
+  background: var(--ob-button);
+  border-color: var(--ob-border-strong);
+  color: var(--ob-fg);
+}
+
+.ob__button--accent:hover {
+  background: var(--ob-button-hover);
+}
+
+.ob__button--installed {
+  background: transparent;
+  border-color: var(--ob-border);
+  color: var(--ob-muted);
+  cursor: default;
+}
+
+.ob__button--installed:hover {
+  background: transparent;
+}
+
+/* ---- small launcher window (720x480) ------------------------------------------------------ */
+
+@media (max-height: 520px) {
+  .ob {
+    padding: 10px 18px 12px;
+  }
+
+  .ob__title {
+    font-size: 26px;
+  }
+
+  .ob__mark {
+    width: 44px;
+    height: 44px;
+    margin-top: 6px;
+  }
+
+  .ob__mark-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .ob__step--welcome .ob__title {
+    margin-top: 8px;
+  }
+
+  .ob__grid {
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .ob__card {
+    padding: 10px;
+  }
+
+  .ob__toggles {
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .ob__card--row {
+    padding: 8px 10px;
+  }
+}
