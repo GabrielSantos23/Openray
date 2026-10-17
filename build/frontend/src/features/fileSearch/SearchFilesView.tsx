@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ipc, onNotification } from "../../ipc";
 import { ActionPanel, type ActionGroup } from "../../ActionPanel";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { LoadingBar } from "../../LoadingBar";
 import { CommandFooter } from "../../commandChrome";
 import { alertStore } from "../../alertStore";
@@ -339,7 +339,7 @@ function SearchFiles({
                       }}
                     >
                       <span className="icon" aria-hidden>
-                        <RaycastIcon name={fileIconFor(row.contentType)} size={16} />
+                        <OpenrayIcon name={fileIconFor(row.contentType)} size={16} />
                       </span>
                       <span className="list__text">
                         <span className="list__title">{row.name}</span>
@@ -524,7 +524,7 @@ function DropdownMenu({
         onClick={() => onOpenChange(!open)}
       >
         {label}
-        <RaycastIcon name="chevron-right" size={13} className="translate-language__chevron" />
+        <OpenrayIcon name="chevron-right" size={13} className="translate-language__chevron" />
       </button>
       {open ? (
         <div className="settings-menu translate-menu translate-menu--header" role="listbox">
@@ -540,7 +540,7 @@ function DropdownMenu({
               }}
             >
               <span>{option.label}</span>
-              {option.value === value ? <RaycastIcon name="check" size={14} /> : null}
+              {option.value === value ? <OpenrayIcon name="check" size={14} /> : null}
             </button>
           ))}
         </div>

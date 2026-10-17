@@ -3,7 +3,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 /// <summary>
 /// OCR for clipboard images, on Raycast's own terms.

@@ -1,4 +1,4 @@
-// FlowKey UiTree -> RaycastMini `ray-*` render model adapter.
+// FlowKey UiTree -> Openray `ray-*` render model adapter.
 //
 // The renderer consumes `{ kind: "commandView", navigationStack: { body } }` models (see
 // build/api/src/runtime/model.ts types). FlowKey trees carry their own vocabulary; this module is

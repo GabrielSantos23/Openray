@@ -13,8 +13,8 @@ public class WEnum {
 }
 '@
 Add-Type -TypeDefinition $src -Language CSharp
-$ids = @(Get-Process RaycastMini -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-foreach ($p in Get-Process RaycastMini -ErrorAction SilentlyContinue) { "pid $($p.Id) mw=$($p.MainWindowHandle)" }
+$ids = @(Get-Process Openray -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+foreach ($p in Get-Process Openray -ErrorAction SilentlyContinue) { "pid $($p.Id) mw=$($p.MainWindowHandle)" }
 $found = @()
 $cb = {
   param($h, $l)

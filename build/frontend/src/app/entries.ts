@@ -113,7 +113,7 @@ export const INTERNAL_EXTENSION_META: Record<InternalArea, { title: string; icon
   calculator: { title: "Calculator", icon: "calculator", tile: "command-tile--calculator" },
   translator: { title: "Translator", icon: "Globe", tile: "command-tile--translator" },
   "file-search": { title: "File Search", icon: "folder-search", tile: "command-tile--filesearch" },
-  notes: { title: "Raycast Notes", icon: "blank-document", tile: "command-tile--notes" },
+  notes: { title: "Openray Notes", icon: "blank-document", tile: "command-tile--notes" },
   store: { title: "Store", icon: "extension", tile: "command-tile--store" },
   "clipboard-history": { title: "Clipboard History", icon: "copy-clipboard", tile: "command-tile--clipboard" },
 };
@@ -134,7 +134,7 @@ export const INTERNAL_COMMANDS: ReadonlyArray<{
   { area: "snippets", command: "search", title: "Search Snippets", keywords: ["snippets"] },
   { area: "translator", command: "translate", title: "Translate", keywords: ["translator", "translate", "translation"] },
   { area: "file-search", command: "searchFiles", title: "Search Files", keywords: ["file search", "find files", "explorer"] },
-  { area: "notes", command: "open", title: "Raycast Notes", keywords: ["notes", "note"] },
+  { area: "notes", command: "open", title: "Openray Notes", keywords: ["notes", "note"] },
   { area: "notes", command: "create", title: "Create Note", keywords: ["notes", "new note"] },
   { area: "notes", command: "search", title: "Search Notes", keywords: ["notes", "search notes"] },
   { area: "store", command: "browse", title: "Store", keywords: ["store", "extensions", "marketplace", "install"] },

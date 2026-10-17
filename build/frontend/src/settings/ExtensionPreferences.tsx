@@ -1,7 +1,7 @@
 // The Extensions settings page: per installed extension — the command list with aliases and
 // hotkeys, and (FlowKey) the manifest's preference fields with values persisted in localStorage
-// (`raycast-mini:flowkey-preferences`, applied at launch). Aliases/hotkeys stay in localStorage
-// (`raycast-mini:command-aliases` / `-command-hotkeys`), hotkeys registered with the host.
+// (`openray:flowkey-preferences`, applied at launch). Aliases/hotkeys stay in localStorage
+// (`openray:command-aliases` / `-command-hotkeys`), hotkeys registered with the host.
 
 import { useCallback, useEffect, useState } from "react";
 import { ipc } from "../ipc";

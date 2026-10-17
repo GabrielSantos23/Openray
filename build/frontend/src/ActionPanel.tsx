@@ -15,7 +15,7 @@
 // `general` / `favorites` / `copy` / `configure` / `app-management` (see `applications.ts`).
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RaycastIcon } from "./icons";
+import { OpenrayIcon } from "./icons";
 import type { ViewAction } from "./useExtensionCommand";
 
 export interface ActionGroup {
@@ -139,7 +139,7 @@ export function ActionPanel({ open, groups, onClose, onRun, title }: ActionPanel
 
         {/* Raycast's action panel always carries its own filter ("Search for actions…"). */}
         <div className="action-panel__filter">
-          <RaycastIcon name="magnifying-glass" size={14} />
+          <OpenrayIcon name="magnifying-glass" size={14} />
           <input
             ref={filterRef}
             value={filter}
@@ -176,7 +176,7 @@ export function ActionPanel({ open, groups, onClose, onRun, title }: ActionPanel
                       }}
                     >
                       <span className={`action-panel__icon action-panel__icon--${iconKind(action)}`} aria-hidden>
-                        {action.icon ? <ActionModelIcon icon={action.icon} fallbackTitle={action.title} /> : <RaycastIcon name={iconKeyFor(action.title)} size={15} />}
+                        {action.icon ? <ActionModelIcon icon={action.icon} fallbackTitle={action.title} /> : <OpenrayIcon name={iconKeyFor(action.title)} size={15} />}
                       </span>
                       <span className="action-panel__label">{action.title}</span>
                       {action.shortcut ? (
@@ -221,12 +221,12 @@ export function ActionModelIcon({ icon, fallbackTitle }: { icon: unknown; fallba
     return <span style={{ fontSize: 13, lineHeight: 1 }}>{decodeURIComponent(source.slice("emoji://".length))}</span>;
   }
   if (typeof source === "string" && source.startsWith("icon://")) {
-    return <RaycastIcon name={source.slice("icon://".length).replace(/\.png$/, "")} size={15} />;
+    return <OpenrayIcon name={source.slice("icon://".length).replace(/\.png$/, "")} size={15} />;
   }
   if (typeof source === "string" && (/^(https?:|data:|file:)/.test(source) || /\.(png|jpe?g|gif|svg|webp|ico)$/i.test(source))) {
     return <img src={source} width={15} height={15} alt="" style={{ objectFit: "contain", borderRadius: 3 }} />;
   }
-  return <RaycastIcon name={iconKeyFor(fallbackTitle)} size={15} />;
+  return <OpenrayIcon name={iconKeyFor(fallbackTitle)} size={15} />;
 }
 
 /**
@@ -234,7 +234,7 @@ export function ActionModelIcon({ icon, fallbackTitle }: { icon: unknown; fallba
  * (`internal-extensions-C7AXi5Nw.js`): `app-window-list`, `folder`, `copy-clipboard`, `shield-04`,
  * `person`, `clock`, `x-mark-circle`, `eye-disabled`, `arrow-clockwise`, `trash`, `star`, `cog`,
  * `game-controller`. All of them are Lucide icon names under a different spelling, which
- * `RaycastIcon` resolves.
+ * `OpenrayIcon` resolves.
  */
 const ACTION_ICON_KEYS: Record<string, string> = {
   "Open Application": "app-window-list",

@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent 
 import { ipc, ipcRequest, onNotification } from "../../ipc";
 import { ActionPanel, type ActionGroup } from "../../ActionPanel";
 import AlertHost from "../../AlertHost";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { toastStore } from "../../toastStore";
 import { countWords, noteDeeplink, relativeOpened, type NoteEntry } from "../../notes";
 
@@ -34,8 +34,8 @@ function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-const COUNTER_MODE_KEY = "raycast-notes-counter-mode";
-const FORMAT_BAR_KEY = "raycast-notes-format-bar-visible";
+const COUNTER_MODE_KEY = "openray-notes-counter-mode";
+const FORMAT_BAR_KEY = "openray-notes-format-bar-visible";
 
 function readCounterMode(): "words" | "characters" {
   try {
@@ -793,7 +793,7 @@ export function NotesPage() {
           { id: "notes:zoomReset", title: "Reset Zoom", itemId: "" },
           { id: "notes:zoomIn", title: "Zoom In", itemId: "" },
           { id: "notes:zoomOut", title: "Zoom Out", itemId: "" },
-          { id: "notes:settings", title: "Open Raycast Notes Settings", itemId: "" },
+          { id: "notes:settings", title: "Open Openray Notes Settings", itemId: "" },
         ],
       },
       {
@@ -957,7 +957,7 @@ export function NotesPage() {
             title="Browse Notes (Ctrl P)"
             aria-label="Browse Notes"
           >
-            <RaycastIcon name="folder-search" size={15} />
+            <OpenrayIcon name="folder-search" size={15} />
           </button>
           <button type="button" className="notes-icon-button" onClick={newNote} title="Create Note (Ctrl N)" aria-label="Create Note">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

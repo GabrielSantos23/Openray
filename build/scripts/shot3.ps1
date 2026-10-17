@@ -17,8 +17,8 @@ public class WEnum {
 '@
 Add-Type -TypeDefinition $src -Language CSharp
 Add-Type -AssemblyName System.Drawing
-$ids = @(Get-Process RaycastMini -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-if (-not $ids) { Write-Error "no RaycastMini process"; exit 1 }
+$ids = @(Get-Process Openray -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+if (-not $ids) { Write-Error "no Openray process"; exit 1 }
 $script:hits = New-Object System.Collections.ArrayList
 $action = {
   param($h)

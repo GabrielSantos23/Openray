@@ -12,7 +12,7 @@
 //   * categories are `text`, `link`, `email`, `color`, `image`, `file`.
 //
 // Storage is local-only: `node:sqlite` (Node 22.5+, no native module to ship) at
-// `%LOCALAPPDATA%\RaycastMini\clipboard-history.sqlite`.
+// `%LOCALAPPDATA%\Openray\clipboard-history.sqlite`.
 
 "use strict";
 
@@ -170,7 +170,7 @@ function isLink(value) {
 function createClipboardStore(options = {}) {
   const dataRoot =
     options.dataRoot ??
-    path.join(process.env.LOCALAPPDATA ?? os.homedir(), "RaycastMini");
+    path.join(process.env.LOCALAPPDATA ?? os.homedir(), "Openray");
   const databasePath = options.databasePath ?? path.join(dataRoot, "clipboard-history.sqlite");
   const cacheRoot = options.cacheRoot ?? path.join(dataRoot, "clipboard-cache");
 

@@ -1,4 +1,4 @@
-# Installs a FlowKey extension into RaycastMini's extensions root (replaces the Store's
+# Installs a FlowKey extension into Openray's extensions root (replaces the Store's
 # install-extension.ps1, removed in the FlowKey migration M2).
 #
 # Usage:  install-flowkey.ps1 <path-to-extension-dir>
@@ -6,7 +6,7 @@
 #   so the bundle in the install tree is current. Copies manifest.json, the bundle (manifest.entry
 #   or main.js), src-free assets and package files into <root>\<manifest.id>.
 #
-# The extensions root is $env:RAYCAST_MINI_EXTENSIONS_ROOT or %LOCALAPPDATA%\RaycastMini\extensions.
+# The extensions root is $env:OPENRAY_EXTENSIONS_ROOT or %LOCALAPPDATA%\Openray\extensions.
 param(
     [Parameter(Mandatory = $true)][string]$ExtensionDir
 )
@@ -31,9 +31,9 @@ if (Test-Path $buildScript) {
     Pop-Location
 }
 
-$root = $env:RAYCAST_MINI_EXTENSIONS_ROOT
+$root = $env:OPENRAY_EXTENSIONS_ROOT
 if (-not $root) {
-    $root = Join-Path $env:LOCALAPPDATA "RaycastMini\extensions"
+    $root = Join-Path $env:LOCALAPPDATA "Openray\extensions"
 }
 New-Item -ItemType Directory -Force -Path $root | Out-Null
 $target = Join-Path $root $manifest.id
@@ -54,4 +54,4 @@ if (Test-Path $assets) {
     Copy-Item $assets (Join-Path $target "assets") -Recurse -Force
 }
 
-Write-Host "==> installed. Restart RaycastMini to pick it up."
+Write-Host "==> installed. Restart Openray to pick it up."

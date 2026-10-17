@@ -138,7 +138,7 @@ function toAppRules(appIds) {
 }
 
 function createFocus({ pushToFrontend, dispatch, dataRoot, now = Date.now } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const databasePath = path.join(root, "focus-categories.sqlite");
   const sessionPath = path.join(root, "focus-session.json");
 
@@ -325,7 +325,7 @@ function createFocus({ pushToFrontend, dispatch, dataRoot, now = Date.now } = {}
       title: typeof input.title === "string" && input.title.trim() !== "" ? input.title.trim() : DEFAULT_TITLE,
       mode: input.mode === "allow" ? "allow" : "block",
       categoryIds: normalizeList(input.categoryIds),
-      raycastAppIds: normalizeList(input.raycastAppIds),
+      openrayAppIds: normalizeList(input.openrayAppIds),
       websiteHosts: normalizeList(input.websiteHosts),
       allowAllOnEmptyWebsiteAllowlist: input.allowAllOnEmptyWebsiteAllowlist === true,
       snoozeDurationMs: typeof input.snoozeDurationMs === "number" && Number.isFinite(input.snoozeDurationMs) && input.snoozeDurationMs > 0
@@ -338,16 +338,16 @@ function createFocus({ pushToFrontend, dispatch, dataRoot, now = Date.now } = {}
   async function normalizeSessionStartInput(input) {
     const categoryIds = normalizeList(input.categoryIds);
     const websiteHosts = normalizeList(input.websiteHosts);
-    const raycastAppIds = normalizeList(input.raycastAppIds);
+    const openrayAppIds = normalizeList(input.openrayAppIds);
     if (categoryIds.length === 0) {
-      return { ...input, categoryIds, websiteHosts, raycastAppIds };
+      return { ...input, categoryIds, websiteHosts, openrayAppIds };
     }
     const resolved = resolveCategoryFilters(categoryIds);
     return {
       ...input,
       categoryIds,
       websiteHosts: normalizeList([...websiteHosts, ...resolved.websiteHosts]),
-      raycastAppIds: normalizeList([...raycastAppIds, ...resolved.applicationIds]),
+      openrayAppIds: normalizeList([...openrayAppIds, ...resolved.applicationIds]),
     };
   }
 
@@ -375,7 +375,7 @@ function createFocus({ pushToFrontend, dispatch, dataRoot, now = Date.now } = {}
       durationMs: isTimedSession(current) ? Math.max(0, current.targetEndAtMs - current.startedAtMs) : null,
       title: current.hostConfiguration.title,
       mode: current.hostConfiguration.mode,
-      appRules: toAppRules(current.hostConfiguration.raycastAppIds),
+      appRules: toAppRules(current.hostConfiguration.openrayAppIds),
       restoreAppsWhenSessionEnds: current.hostConfiguration.restoreAppsWhenSessionEnds,
       playSound: preferences.playSound === true,
       snoozeDurationMs: current.hostConfiguration.snoozeDurationMs ?? preferences.snoozeDurationMs ?? 180000,
@@ -387,7 +387,7 @@ function createFocus({ pushToFrontend, dispatch, dataRoot, now = Date.now } = {}
       title: current.hostConfiguration.title,
       mode: current.hostConfiguration.mode,
       categoryIds: current.hostConfiguration.categoryIds,
-      raycastAppIds: current.hostConfiguration.raycastAppIds,
+      openrayAppIds: current.hostConfiguration.openrayAppIds,
       websiteHosts: current.hostConfiguration.websiteHosts,
       allowAllOnEmptyWebsiteAllowlist: current.hostConfiguration.allowAllOnEmptyWebsiteAllowlist,
       snoozeDurationMs: current.hostConfiguration.snoozeDurationMs,

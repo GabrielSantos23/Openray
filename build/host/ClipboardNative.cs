@@ -7,7 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public static class ClipboardNative
 {

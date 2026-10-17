@@ -12,7 +12,7 @@
 using System.Text.Json;
 using Windows.Media.Control;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public static class MediaControl
 {

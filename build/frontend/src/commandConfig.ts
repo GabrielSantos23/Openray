@@ -10,18 +10,18 @@ import { updateSettings } from "./settings/store";
 // The Settings window runs in its own WebView2 profile, so its localStorage is invisible to the
 // launcher. All per-command config therefore lives in the settings store (backend-persisted,
 // pushed to both windows via `settings.changed` and mirrored into each window's localStorage
-// under `raycast-mini:settings`); the legacy localStorage keys remain as a read fallback.
-const STORE_KEY = "raycast-mini:settings";
+// under `openray:settings`); the legacy localStorage keys remain as a read fallback.
+const STORE_KEY = "openray:settings";
 const ALIASES_STORE_KEY = "command-aliases";
 const HOTKEYS_STORE_KEY = "command-hotkeys";
 const APP_ALIASES_STORE_KEY = "app-aliases";
 const QUICKLINK_ALIASES_STORE_KEY = "quicklink-aliases";
 const DISABLED_STORE_KEY = "shortcuts-disabled";
-const ALIASES_KEY = "raycast-mini:command-aliases";
-const HOTKEYS_KEY = "raycast-mini:command-hotkeys";
-const APP_ALIASES_KEY = "raycast-mini:app-aliases";
-const QUICKLINK_ALIASES_KEY = "raycast-mini:quicklink-aliases";
-const DISABLED_KEY = "raycast-mini:shortcuts-disabled";
+const ALIASES_KEY = "openray:command-aliases";
+const HOTKEYS_KEY = "openray:command-hotkeys";
+const APP_ALIASES_KEY = "openray:app-aliases";
+const QUICKLINK_ALIASES_KEY = "openray:quicklink-aliases";
+const DISABLED_KEY = "openray:shortcuts-disabled";
 
 /** `command:<uuid>/<name>` — the same key shape favorites use. */
 export type CommandConfigKey = string;

@@ -4,7 +4,7 @@
 // artifacts are documented as deltas in the spec.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import {
   DEFAULT_START_INPUT,
   DURATION_SUGGESTIONS,
@@ -53,7 +53,7 @@ function ViewShell({ title, onBack, children, footer, footerLeft }: ViewShellPro
       <footer className="window__footer">
         {footerLeft ?? (
           <button type="button" className="footer-icon-button" aria-label="Back" onClick={onBack}>
-            <RaycastIcon name="arrow-clockwise" size={16} />
+            <OpenrayIcon name="arrow-clockwise" size={16} />
           </button>
         )}
         <span className="footer__spacer" />
@@ -68,9 +68,9 @@ function FocusFooterLeft() {
   return (
     <span className="focus-footer__left">
       <span className="command-tile command-tile--focus focus-footer__mark" aria-hidden>
-        <RaycastIcon name="clock" size={13} />
+        <OpenrayIcon name="clock" size={13} />
       </span>
-      <span className="focus-footer__name">Raycast Focus</span>
+      <span className="focus-footer__name">Openray Focus</span>
     </span>
   );
 }
@@ -160,8 +160,8 @@ export function FocusFormView({
           const catsRes = await searchFocusCategories("").catch(() => ({ categories: [] }));
           setCategories(catsRes.categories.filter((c) => input.categoryIds.includes(c.categoryId)));
         }
-        if (input.raycastAppIds && input.raycastAppIds.length > 0) {
-          const matchingApps = allApps.filter((a) => input.raycastAppIds.includes(a.payload.id)).map((a) => a.payload);
+        if (input.openrayAppIds && input.openrayAppIds.length > 0) {
+          const matchingApps = allApps.filter((a) => input.openrayAppIds.includes(a.payload.id)).map((a) => a.payload);
           setApps(matchingApps);
         }
       })
@@ -216,7 +216,7 @@ export function FocusFormView({
       title: title.trim() !== "" ? title.trim() : "Focus session",
       mode,
       categoryIds: categories.map((category) => category.categoryId),
-      raycastAppIds: apps.map((app) => app.id),
+      openrayAppIds: apps.map((app) => app.id),
       websiteHosts: websites,
       allowAllOnEmptyWebsiteAllowlist: false,
       snoozeDurationMs: preferences.snoozeDurationMs,
@@ -402,7 +402,7 @@ export function FocusFormView({
               <div className="focus-form__chips">
                 {categories.map((category) => (
                   <span key={`cat:${category.categoryId}`} className="focus-chip">
-                    <RaycastIcon name={category.icon} size={12} />
+                    <OpenrayIcon name={category.icon} size={12} />
                     <span className="focus-chip__label">{category.title}</span>
                     <button
                       type="button"
@@ -663,7 +663,7 @@ export function FocusCategoriesView({
                           onDoubleClick={() => (category.kind === "custom" ? openForm("edit", category) : openForm("open", category))}
                         >
                           <span className="icon" aria-hidden>
-                            <RaycastIcon name={category.icon} size={16} />
+                            <OpenrayIcon name={category.icon} size={16} />
                           </span>
                           <span className="list__text">
                             <span className="list__title">{category.title}</span>
@@ -684,7 +684,7 @@ export function FocusCategoriesView({
 
       <footer className="window__footer">
         <button type="button" className="footer-icon-button" aria-label="Back" onClick={onBack}>
-          <RaycastIcon name="arrow-clockwise" size={16} />
+          <OpenrayIcon name="arrow-clockwise" size={16} />
         </button>
         <span className="footer__spacer" />
         <button type="button" className="footer-action footer-action--kbd" onClick={runPrimary}>

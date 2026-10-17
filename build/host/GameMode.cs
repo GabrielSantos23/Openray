@@ -12,7 +12,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public static class GameMode
 {

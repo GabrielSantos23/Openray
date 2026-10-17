@@ -169,7 +169,7 @@ Before Deleting Quicklinks`. The view also lists static commands and per-quickli
 
 | Item | Decision | Why |
 | --- | --- | --- |
-| Storage | `%LOCALAPPDATA%\RaycastMini\quicklinks.sqlite`, table `quicklinks` (id, name, link, icon, open_with, tags JSON, pinned_order, open_count, created_at, updated_at) | Matches the clone's per-extension SQLite convention (clipboard history). |
+| Storage | `%LOCALAPPDATA%\Openray\quicklinks.sqlite`, table `quicklinks` (id, name, link, icon, open_with, tags JSON, pinned_order, open_count, created_at, updated_at) | Matches the clone's per-extension SQLite convention (clipboard history). |
 | Placeholder engine | Reimplemented from the spec'd behavior in backend JS (`build/backend/src/placeholders.js`), shared by Quicklinks, Snippets and the Calculator resolver; frontend calls it over IPC | One engine, testable in the backend suite; the backend resolves during snippet auto-expansion when the frontend may be hidden. Resolvers: `argument`, `clipboard`, `date`, `time`, `datetime`, `day`, `uuid`, `calculator`, `selection`, `cursor`, `snippet`. No `browser-tab`, no `ai`, no fallback `??` (flag-gated and off in Raycast). |
 | Library | The 16 hardcoded Featured quicklinks only; no `duckduckgo.com/bang.js` fetch | Local-first rule: only currency rates and the translator may use the network. |
 | Link previews | Dropped (`showPreviews` row omitted from the settings page) | Requires Raycast's preview service; no local equivalent. |

@@ -13,7 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public sealed class SnippetMatcher
 {

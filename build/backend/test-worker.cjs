@@ -14,7 +14,7 @@ const buildRoot = path.join(__dirname, "..");
 const extensionsRoot = path.join(buildRoot, "extensions");
 
 const backend = createBackend({
-  pipeName: "raycast-mini-test",
+  pipeName: "openray-test",
   frontendRoot: path.join(buildRoot, "frontend"),
   extensionsRoot,
 });

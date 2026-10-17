@@ -63,7 +63,7 @@ export function getDefaultArgumentValues(args: ArgumentDefinition[]): ArgumentVa
 }
 
 // Argument history storage
-const ARGUMENT_HISTORY_KEY = "raycast-mini:argument-history";
+const ARGUMENT_HISTORY_KEY = "openray:argument-history";
 
 export interface ArgumentHistoryEntry {
   commandId: string;

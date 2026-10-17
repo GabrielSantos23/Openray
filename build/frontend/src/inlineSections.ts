@@ -27,7 +27,7 @@ const DEFAULT_SNIPPETS: Snippet[] = [
 
 export function loadSnippets(): Snippet[] {
   try {
-    const stored = localStorage.getItem("raycast-mini:snippets");
+    const stored = localStorage.getItem("openray:snippets");
     if (stored) {
       return JSON.parse(stored) as Snippet[];
     }
@@ -39,7 +39,7 @@ export function loadSnippets(): Snippet[] {
 
 export function saveSnippets(snippets: Snippet[]): void {
   try {
-    localStorage.setItem("raycast-mini:snippets", JSON.stringify(snippets));
+    localStorage.setItem("openray:snippets", JSON.stringify(snippets));
   } catch {
     // Ignore errors
   }
@@ -144,7 +144,7 @@ export const DEFAULT_INLINE_SECTION_SETTINGS: InlineSectionSettings = {
 
 export function loadInlineSectionSettings(): InlineSectionSettings {
   try {
-    const stored = localStorage.getItem("raycast-mini:inline-section-settings");
+    const stored = localStorage.getItem("openray:inline-section-settings");
     if (stored) {
       return { ...DEFAULT_INLINE_SECTION_SETTINGS, ...JSON.parse(stored) };
     }
@@ -156,7 +156,7 @@ export function loadInlineSectionSettings(): InlineSectionSettings {
 
 export function saveInlineSectionSettings(settings: InlineSectionSettings): void {
   try {
-    localStorage.setItem("raycast-mini:inline-section-settings", JSON.stringify(settings));
+    localStorage.setItem("openray:inline-section-settings", JSON.stringify(settings));
   } catch {
     // Ignore errors
   }

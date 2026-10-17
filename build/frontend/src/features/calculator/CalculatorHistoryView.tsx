@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionPanel, type ActionGroup } from "../../ActionPanel";
 import { ipc, onNotification } from "../../ipc";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { CommandFooter } from "../../commandChrome";
 
 interface HistoryEntry {
@@ -437,7 +437,7 @@ export function CalculatorHistoryView({
           }}
         >
           <span className="icon" aria-hidden>
-            <RaycastIcon name={categoryIcon(entry.category)} size={16} />
+            <OpenrayIcon name={categoryIcon(entry.category)} size={16} />
           </span>
           <span className="list__text calc-history-row__text">
             <span className="list__title">{entry.expression}</span>
@@ -445,7 +445,7 @@ export function CalculatorHistoryView({
           <span className="calc-history-row__answer">{entry.answer}</span>
           {entry.pinned !== null ? (
             <span className="list__favorite" title="Pinned">
-              <RaycastIcon name="tack" size={13} />
+              <OpenrayIcon name="tack" size={13} />
             </span>
           ) : null}
         </button>
@@ -514,7 +514,7 @@ export function CalculatorHistoryView({
                       ) : null}
                     </span>
                     <span className="calc-row__divider" aria-hidden>
-                      <RaycastIcon name="chevron-right" size={14} />
+                      <OpenrayIcon name="chevron-right" size={14} />
                     </span>
                     <span className="calc-row__right">
                       <span className="calc-row__answer">{live.evaluation.answer}</span>

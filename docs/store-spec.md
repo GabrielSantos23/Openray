@@ -89,7 +89,7 @@ There is no per-API static gating at runtime — everything is canAccess + real 
 
 Store listing objects carry: `id`, `title`, `description`, `author` (`{name, handle}`), `owner`, `categories`, `platforms`, `download_count`, `updated_at` (unix seconds — stored as the extension `version`), `source_url`, `readme_url`, `store_url`, `access`, `commands` (with titles), `aiToo…` (AI-related flags), `kill_listed_at`. Updates: `store_listings/latest` filtered by installed uuids, compared by `updated_at` (`Kd.checkForExtensionUpdates`); kill-listed extensions are uninstalled with settings during update ("Removed because this extension was withdrawn from the Store").
 
-## 8. What we mirror vs decide (for RaycastMini)
+## 8. What we mirror vs decide (for Openray)
 
 Mirrored as-is (already in the clone, now evidence-confirmed): bundled node process over named pipe; worker_threads with the API bundle as worker program; NODE_PATH-provided `@raycast/api`; `nativeCallback {callbackId, data}`; dev/prod worker pools; ~100 MB heap cap; preference objects `value ?? default`; LocalStorage dir per extension uuid.
 
@@ -99,7 +99,7 @@ Our decisions (deltas):
 |---|---|---|
 | D1 | Catalog from GitHub `raycast/extensions` (sparse checkout, pinned commit), not Raycast's store API | Task requirement; no Raycast account/auth needed; local-first |
 | D2 | Build at install time with esbuild (`npm install` + bundle per command to `<cmd>.js`, externalize `@raycast/api`/`react`) | Real app installs prebuilt zips we cannot produce; dev-mode flow (`hCr` = `npm install && npm run dev`, CLI uses esbuild) shows esbuild is the official bundler |
-| D3 | Install root `%LOCALAPPDATA%\RaycastMini\extensions\<uuid>` (existing clone root) | Clone's data dir convention; isolation from the real app |
+| D3 | Install root `%LOCALAPPDATA%\Openray\extensions\<uuid>` (existing clone root) | Clone's data dir convention; isolation from the real app |
 | D4 | `environment.canAccess`: false for AI, betterAI models, BrowserExtension permissions, WindowManagement; true otherwise — exact routing of the real `canAccess` | Confirmed real behavior; unsupported ⇒ false |
 | D5 | No compatibility gating at runtime beyond canAccess; unsupported API calls throw a typed error naming the call | Task policy; real app has no runtime gating either |
 | D6 | Tools listed in manifests are ignored (not built, not registered, never block install) | Task policy |

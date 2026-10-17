@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-const outDir = mkdtempSync(join(tmpdir(), "raycast-mini-notes-"));
+const outDir = mkdtempSync(join(tmpdir(), "openray-notes-"));
 const notesFile = join(outDir, "notes.cjs");
 
 const bundled = await build({
@@ -102,7 +102,7 @@ test("relativeOpened reads back like the Browse subtitle", () => {
 });
 
 test("noteDeeplink uses the documented clone scheme", () => {
-  assert.equal(notes.noteDeeplink("abc-123"), "raycast-mini://notes/abc-123");
+  assert.equal(notes.noteDeeplink("abc-123"), "openray://notes/abc-123");
 });
 
 test("countWords counts non-empty whitespace-separated runs", () => {

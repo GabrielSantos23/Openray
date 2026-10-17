@@ -3,7 +3,7 @@
 //
 // The backend owns the session state machine; this class owns the Windows half:
 //   - the blocking watch loop — a blocked app that comes to the foreground is covered by a
-//     fullscreen overlay ("X has been blocked by Raycast Mini" + a Snooze button). Switching
+//     fullscreen overlay ("X has been blocked by Openray" + a Snooze button). Switching
 //     focus away closes the blocked app (graceful -> force), and terminated processes are remembered
 //     so `restoreAppsWhenSessionEnds` can re-launch them.
 //   - the floating Focus panel — a compact 265x40 dark capsule with the two shipped variants:
@@ -25,7 +25,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public static class FocusSession
 {
@@ -321,7 +321,7 @@ public static class FocusSession
         var lower = processName.ToLowerInvariant();
         return lower is "explorer" or "shellexperiencehost" or "searchhost" or "startmenuexperiencehost"
             or "textinputhost" or "taskmgr" or "csrss" or "dwm" or "svchost" or "systemsettings"
-            or "applicationframehost" or "raycast" or "raycastmini" or "conhost";
+            or "applicationframehost" or "raycast" or "openray" or "conhost";
     }
 
     private static DateTime _lastForegroundSampleUtc = DateTime.MinValue;
@@ -1140,7 +1140,7 @@ public sealed class FocusTrayButtonWindow : Window
             uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
             uCallbackMessage = unchecked((uint)WM_TRAYICON),
             hIcon = TrayIcon().Handle,
-            szTip = "Raycast Mini Focus",
+            szTip = "Openray Focus",
         };
         var ok = _added
             ? Shell_NotifyIcon(NIM_MODIFY, ref data)
@@ -1243,7 +1243,7 @@ internal static class IntPtrExtensions
 
 /// <summary>
 /// The fullscreen blocked-app overlay: a dark window covering the blocked app's monitor with
-/// the bullseye mark, "X has been blocked by Raycast Mini", a Snooze button, and
+/// the bullseye mark, "X has been blocked by Openray", a Snooze button, and
 /// "Switching focus to another window will close this app."
 /// </summary>
 public sealed class FocusOverlayWindow : Window
@@ -1354,7 +1354,7 @@ public sealed class FocusOverlayWindow : Window
 
     public void ShowOver(IntPtr foregroundHwnd, string appName)
     {
-        _title.Text = $"{appName} has been blocked by Raycast Mini";
+        _title.Text = $"{appName} has been blocked by Openray";
         _snoozeButton.Content = $"Snooze for {(int)Math.Round(FocusSession.SessionSnoozeMinutes())} minutes";
         AnchorToWindowOf(foregroundHwnd);
         Topmost = true;

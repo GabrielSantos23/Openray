@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS quicklinks (
 `;
 
 function createQuicklinks({ dispatch, pushToFrontend, dataRoot, calculate } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const databasePath = path.join(root, "quicklinks.sqlite");
   const settingsPath = path.join(root, "quicklinks-settings.json");
 

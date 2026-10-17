@@ -1,4 +1,4 @@
-> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not RaycastMini's implementation.
+> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not Openray's implementation.
 
 # Focus, Games, Windows Taskbar — behavioral spec
 
@@ -81,12 +81,12 @@ partly host-native and partly gated; each has its own section and its own scope 
 
 | Item | Decision | Why |
 | --- | --- | --- |
-| Session store | `%LOCALAPPDATA%\RaycastMini\focus-session.json` (active session + last start input + presentation); categories in `%LOCALAPPDATA%\RaycastMini\focus-categories.sqlite` (title, icon, website_hosts, app_ids, builtin) | Only one active session exists in Raycast; JSON is the same convention as settings files. Categories need CRUD + filtering. |
+| Session store | `%LOCALAPPDATA%\Openray\focus-session.json` (active session + last start input + presentation); categories in `%LOCALAPPDATA%\Openray\focus-categories.sqlite` (title, icon, website_hosts, app_ids, builtin) | Only one active session exists in Raycast; JSON is the same convention as settings files. Categories need CRUD + filtering. |
 | App blocking | Host watch loop (500 ms, foreground only): a blocked app that comes to the foreground is NOT closed — a fullscreen black overlay covers it; switching focus to another window while the overlay shows closes the app (graceful → force after 5 s), and terminated apps re-launch on session end when `restoreAppsWhenSessionEnds` is on. Product decision (2026-10-11), overriding the shipped terminate-on-match flow. |
-| Blocked-app surface | Fullscreen overlay (per the blocked app's monitor): bullseye mark, `X has been blocked by Raycast Mini`, a `Snooze for N minutes` button (the session's `snoozeDurationMs`), `Switching focus to another window will close this app.` Snoozing allows the app for that duration. Product decision (2026-10-11) — the user wants the app visible under the overlay, matching the shipped screenshot. |
+| Blocked-app surface | Fullscreen overlay (per the blocked app's monitor): bullseye mark, `X has been blocked by Openray`, a `Snooze for N minutes` button (the session's `snoozeDurationMs`), `Switching focus to another window will close this app.` Snoozing allows the app for that duration. Product decision (2026-10-11) — the user wants the app visible under the overlay, matching the shipped screenshot. |
 | Website blocking | Pending (not implemented) | Requires per-browser URL polling integrations; the mechanism is confirmed but the browser surface is unconfirmed. |
 | Timer panel | Native WPF pill panel (draggable by the 2×3 dot grip) with the two shipped variants: idle shows only the title pill (green mark + session title + remaining time); hovering expands it with the thin progress bar (timed sessions) and the `Pause ⏸ / Complete ✓ / ⋯ / grip` row. ⋯ opens Edit / Cancel / Move to Taskbar / Reset Panel Position; Pause opens the five durations; dark context menus app-wide; the panel is activatable so menus receive clicks. Matches the confirmed FocusSessionPanel screenshots. |
-| `Move to Taskbar` presentation | A real notification-area icon (Shell_NotifyIcon, green Focus badge, tooltip "Raycast Mini Focus"); left/right-click opens the session menu at the mouse — header, Pause (submenu with the five durations), Complete, Cancel, Detach from Taskbar. Implemented 2026-10-11 per the user's screenshots. |
+| `Move to Taskbar` presentation | A real notification-area icon (Shell_NotifyIcon, green Focus badge, tooltip "Openray Focus"); left/right-click opens the session menu at the mouse — header, Pause (submenu with the five durations), Complete, Cancel, Detach from Taskbar. Implemented 2026-10-11 per the user's screenshots. |
 | Duration parsing | Free-text grammar: `Nm`, `Nh`, `Nh Nm`, `Nh30`, `until <time>`, `workday`; suggestions exactly as confirmed; max 24 h enforced | Confirmed suggestions + max duration. |
 | Sounds | Session end plays a system sound when `playSound` is on | `Play Sound` pref confirmed; exact sound unconfirmed. |
 | `Allow all Websites` / website category hosts | Preference stored but non-functional until website blocking lands (row hidden) | Honest pending state instead of a mock toggle. |
@@ -226,7 +226,7 @@ partly host-native and partly gated; each has its own section and its own scope 
 ### Taskbar implementation checklist
 
 - [x] Host: `TaskbarWindow.cs` — AppBar registration, edge anchoring, DPI-aware sizing
-- [x] Taskbar content: clock widget + Raycast Mini toggle button (native WPF markup per decision)
+- [x] Taskbar content: clock widget + Openray toggle button (native WPF markup per decision)
 - [x] Backend: `toggle` handler + settings persistence (`showTaskbar`, `position`)
 - [x] Settings page rows: Show Taskbar Window, Position
 - [x] Tests: toggle handler state, settings round-trip; window placement verified manually
@@ -270,7 +270,7 @@ from the tables above, stated plainly.
   sends them with `focus.startSession`; the host watch loop (2 s) asks matched processes to close
   gracefully and force-kills after a grace period, remembers terminated processes, and re-launches
   them on completion when `restoreAppsWhenSessionEnds` is on. A blocked process pushes
-  `focus.blockedApp` and the launcher toasts `X has been blocked by Raycast Mini` (our decision;
+  `focus.blockedApp` and the launcher toasts `X has been blocked by Openray` (our decision;
   no interactive snooze actions).
 - Timer panel: native WPF borderless topmost draggable panel (bottom-right default) with the
   confirmed controls — progress bar (timed sessions), the confirmed tick granularity
@@ -330,7 +330,7 @@ frecency ranking for `getGame` is not reproduced (the clone filters with the sha
 - `TaskbarWindow.cs`: an edge-anchored topmost WPF strip registered as an application desktop bar
   (SHAppBarMessage ABM_NEW/ABM_SETPOS) so maximized windows respect the reserved edge, with the
   `regular` thickness from the confirmed bar scale (48 px horizontal, 64 px vertical edges) and
-  DPI-aware sizing. Widgets: a live clock and a Raycast Mini button that opens the launcher —
+  DPI-aware sizing. Widgets: a live clock and a Openray button that opens the launcher —
   exactly the decision-table scope; the other five widgets stay pending, not mocked.
 - `toggleTaskbar` (Toggle Taskbar Window, keywords bar/show/hide) flips the persisted
   `showTaskbar` and drives `taskbar.show`/`taskbar.hide` with the confirmed toasts

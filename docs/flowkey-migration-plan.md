@@ -5,7 +5,7 @@ FlowKey library as the only extension API. Reverse engineering of the real Rayca
 parity only. Phase 1 produced the inventory below; Phase 2 executes the milestones in the order the
 plan owner approved (§6), with the adjustments baked in: Store removal comes before the Spotify
 work, the OAuth vault uses a loopback redirect with bring-your-own client id (no raycast.com
-dependency), data migration moves (never deletes) RaycastMini-owned files into a backup folder, and
+dependency), data migration moves (never deletes) Openray-owned files into a backup folder, and
 every milestone ends green with test counts reported.
 
 Sources read for this plan:
@@ -22,10 +22,10 @@ Safety state already applied:
 
 - `feature/store` last commit `7a53739` tagged **`archive/store-final`**. No git remote exists, so
   per the plan owner's adjustment **git bundles** are created before M2 under
-  `C:\Users\gabs\Documents\RaycastMini-backups\` (`raycastmini-archive-store-final.bundle`,
-  `raycastmini-feature-flowkey-lib.bundle`).
+  `C:\Users\gabs\Documents\Openray-backups\` (`openray-archive-store-final.bundle`,
+  `openray-feature-flowkey-lib.bundle`).
 - `main` is fully merged into `feature/store`; the working branch **`feature/flowkey-lib`**
-  (worktree `C:\Users\gabs\.t3\scratch\RaycastMini-flowkey`) branches from it. The main working
+  (worktree `C:\Users\gabs\.t3\scratch\Openray-flowkey`) branches from it. The main working
   directory is never touched. Before every milestone: merge the latest committed `main` into
   `feature/flowkey-lib` and report conflicts (expected: none — main's changes are launcher-side).
 
@@ -69,9 +69,9 @@ Safety state already applied:
   typed unsupported errors) move into the FlowKey contract tests in M1 (§6, acceptance A1).
 - Docs: `docs/store-spec.md`, `docs/api-coverage.md`, `docs/store-implementation-plan.md` marked
   **archived REA records** (they remain the only files allowed to name the excluded strings).
-- Data (RaycastMini-owned only): `%LOCALAPPDATA%\RaycastMini\store.sqlite`,
-  `%LOCALAPPDATA%\RaycastMini\extensions\<handle>` Store installs, and the stray
-  `%LOCALAPPDATA%\RaycastMini\extensions\node_modules`. **Moved, not deleted** — see §6 (M2).
+- Data (Openray-owned only): `%LOCALAPPDATA%\Openray\store.sqlite`,
+  `%LOCALAPPDATA%\Openray\extensions\<handle>` Store installs, and the stray
+  `%LOCALAPPDATA%\Openray\extensions\node_modules`. **Moved, not deleted** — see §6 (M2).
 
 ## 2. `@raycast/api` / `@raycast/utils` inventory
 
@@ -217,7 +217,7 @@ family as auth-required).
   (`command-ux-test` behind the dev flag); the old `store.*` RPC returns a typed "removed" error.
 - **A4 data migration (move, not delete; idempotent; logged)**: move `store.sqlite`, the
   Store-installed extension folders and the stale extensions-root `node_modules` into
-  `%LOCALAPPDATA%\RaycastMini\_removed-store-backup\`, writing `migration-log.json` (source →
+  `%LOCALAPPDATA%\Openray\_removed-store-backup\`, writing `migration-log.json` (source →
   destination per item). Re-running the migration moves nothing and rewrites the log. The folder is
   user-deletable at any time; deleting it only removes the retired Store's data.
 
@@ -245,14 +245,14 @@ test overrides apply. Backend 179/179.
 git grep -I -n -i -E "@raycast/api|@raycast/utils|raycast/extensions|raycast\.com" -- . ":(exclude)docs/store-spec.md" ":(exclude)docs/api-coverage.md" ":(exclude)docs/store-implementation-plan.md" ":(exclude)docs/findings-REA.md" ":(exclude)docs/flowkey-migration-plan.md" ":(exclude)docs/calculator-spec.md" ":(exclude)docs/command-ux-spec.md" ":(exclude)docs/focus-games-taskbar-spec.md" ":(exclude)docs/toast-hud-spec.md" ":(exclude)docs/translator-spec.md"
 ```
 
-  must return zero hits (product name "RaycastMini" is allowed and never matches these patterns).
+  must return zero hits (product name "Openray" is allowed and never matches these patterns).
   Run with output in the final report.
 
 **M4 result (bb0f5cd).** `build/api` deleted (−44k lines), FlowKey is the only worker kind,
 `loadCommand` refuses non-manifest extensions with a typed error, the OAuth redirect origin moved
 to the loopback design ahead of M5a. Shipped links that pointed at raycast.com (Quicklinks guide,
 the default "Raycast Manual" quicklink, About website/community/changelog/feedback) now target
-`github.com/GabrielSantos23/RaycastMini` — adjust if the product home changes. Six REA reference
+`github.com/GabrielSantos23/Openray` — adjust if the product home changes. Six REA reference
 docs carry banners and join the exclusions. **A6 gate: zero hits.** Backend 174/174, frontend
 38/38, build tests 3/3, tsc+vite clean.
 
@@ -312,7 +312,7 @@ views are ever wanted; `image.fetch` downscale.
 git grep -I -n -i -E "@raycast/api|@raycast/utils|raycast/extensions|raycast\.com" -- . ":(exclude)docs/store-spec.md" ":(exclude)docs/api-coverage.md" ":(exclude)docs/store-implementation-plan.md" ":(exclude)docs/findings-REA.md" ":(exclude)docs/flowkey-migration-plan.md" ":(exclude)docs/calculator-spec.md" ":(exclude)docs/command-ux-spec.md" ":(exclude)docs/focus-games-taskbar-spec.md" ":(exclude)docs/toast-hud-spec.md" ":(exclude)docs/translator-spec.md"
 ```
 
-  must return zero hits (product name "RaycastMini" is allowed and never matches these patterns).
+  must return zero hits (product name "Openray" is allowed and never matches these patterns).
   Run with output in the final report.
 
 ### M5 — Spotify
@@ -331,6 +331,6 @@ git grep -I -n -i -E "@raycast/api|@raycast/utils|raycast/extensions|raycast\.co
 ## 7. Final gate
 
 The gate from §6 (A6) runs over all tracked files with the three archived REA docs excluded; zero
-hits required. Product name "RaycastMini" is fine. The command and its (empty) output appear in the
+hits required. Product name "Openray" is fine. The command and its (empty) output appear in the
 final report, together with: what was removed, what was migrated, test counts before/after per
 suite, backup paths, pending items.

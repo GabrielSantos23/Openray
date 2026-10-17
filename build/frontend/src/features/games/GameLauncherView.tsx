@@ -4,7 +4,7 @@
 // Run as Administrator, Show in File Explorer, Copy Path/Name, Treat as Application, Hide Game).
 
 import { useEffect, useMemo, useState } from "react";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { ipc } from "../../ipc";
 import {
   filterGames,
@@ -198,7 +198,7 @@ export function GameLauncherView({
                         onDoubleClick={() => openGame(row.game)}
                       >
                         <span className="icon" aria-hidden>
-                          <RaycastIcon name="game-controller" size={16} />
+                          <OpenrayIcon name="game-controller" size={16} />
                         </span>
                         <span className="list__text">
                           <span className="list__title">{row.game.name}</span>
@@ -219,7 +219,7 @@ export function GameLauncherView({
 
       <footer className="window__footer">
         <button type="button" className="footer-icon-button" aria-label="Back" onClick={onBack}>
-          <RaycastIcon name="arrow-clockwise" size={16} />
+          <OpenrayIcon name="arrow-clockwise" size={16} />
         </button>
         <span className="games-footer__label">Game Launcher</span>
         <span className="footer__spacer" />

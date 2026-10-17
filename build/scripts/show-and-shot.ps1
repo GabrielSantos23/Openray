@@ -12,12 +12,12 @@ public class WShow {
 '@
 Add-Type -TypeDefinition $src -Language CSharp
 Add-Type -AssemblyName System.Drawing
-$proc = Get-Process RaycastMini -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-if (-not $proc) { $proc = Get-Process RaycastMini -ErrorAction SilentlyContinue | Select-Object -First 1 }
+$proc = Get-Process Openray -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+if (-not $proc) { $proc = Get-Process Openray -ErrorAction SilentlyContinue | Select-Object -First 1 }
 if (-not $proc) { Write-Error "no process"; exit 1 }
 $h = $proc.MainWindowHandle
 if ($h -eq [IntPtr]::Zero) {
-  # find the 720x480 "Raycast Mini" window ourselves
+  # find the 720x480 "Openray" window ourselves
   $find = @'
 using System;
 using System.Runtime.InteropServices;
@@ -33,7 +33,7 @@ public class WFind {
     uint pid; GetWindowThreadProcessId(h, out pid);
     if (pid == Target) {
       var sb = new StringBuilder(256); GetWindowText(h, sb, 256);
-      if (sb.ToString() == "Raycast Mini") { Result = h; return false; }
+      if (sb.ToString() == "Openray") { Result = h; return false; }
     }
     return true;
   }

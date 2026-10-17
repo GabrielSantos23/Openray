@@ -2,7 +2,7 @@
 // extension's real icon, its FlowKey preference rows, then the Commands card — alias, hotkey and
 // enable per command, written through the same commandConfig stores the Shortcuts page uses.
 import { useState } from "react";
-import { RaycastIcon } from "../icons";
+import { OpenrayIcon } from "../icons";
 import type { ExtensionSummary } from "../app/entries";
 import { commandConfigKey } from "../commandConfig";
 import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
@@ -49,7 +49,7 @@ export function ExtensionDetailPage({ uuid }: { uuid: string }) {
             <button type="button" className="settings-page__introToggle" onClick={() => setExpanded((state) => !state)}>
               {expanded ? "Show Less" : "Show More"}{" "}
               <span className="settings-page__introToggleChevron" data-expanded={expanded ? "true" : undefined}>
-                <RaycastIcon name="chevron-down" size={10} />
+                <OpenrayIcon name="chevron-down" size={10} />
               </span>
             </button>
           ) : null}

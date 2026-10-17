@@ -20,7 +20,7 @@ import { isDevExtensionsEnabled, overrideTestHooks } from "../testHooks";
 import { readFlowkeyPreferences } from "../features/extensions/preferences";
 import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
 import { ActionPanel, ActionModelIcon, type ActionGroup } from "../ActionPanel";
-import { RaycastIcon } from "../icons";
+import { OpenrayIcon } from "../icons";
 import { ClipboardHistoryView } from "../features/clipboard/ClipboardHistoryView";
 import { QuicklinksView, type QuicklinksCommandName } from "../features/quicklinks/QuicklinksView";
 import { SnippetsView, type SnippetsCommandName } from "../features/snippets/SnippetsView";
@@ -135,8 +135,8 @@ export function CommandSession({
       setSearchText((event as CustomEvent<string>).detail);
       setPanelOpen(false);
     };
-    window.addEventListener("raycast-mini:search", handler);
-    return () => window.removeEventListener("raycast-mini:search", handler);
+    window.addEventListener("openray:search", handler);
+    return () => window.removeEventListener("openray:search", handler);
   }, [setSearchText]);
 
   // `extensionHost.popToRoot` (`Fne`): unwind every page, optionally clearing the search bar.
@@ -577,7 +577,7 @@ export function CommandSession({
               aria-label="Settings"
               onClick={openSettings}
             >
-              <RaycastIcon name="cog" size={16} />
+              <OpenrayIcon name="cog" size={16} />
             </button>
             <span className="footer__spacer" />
           </>
@@ -611,7 +611,7 @@ export function CommandSession({
 }
 
 /**
- * The Notes window entry commands (`Raycast Notes` / `Create Note`): Raycast closes the main
+ * The Notes window entry commands (`Openray Notes` / `Create Note`): Raycast closes the main
  * window and calls `host.raycast.showNotesWindow` — no view exists for these two commands. The
  * selection is reset immediately so the next launcher show lands at the root.
  */

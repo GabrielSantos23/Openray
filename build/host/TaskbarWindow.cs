@@ -14,7 +14,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public static class Taskbar
 {
@@ -87,11 +87,11 @@ public sealed class TaskbarWindow : Window
     private UIElement BuildContent()
     {
         var root = new DockPanel { LastChildFill = false };
-        var raycastButton = new Button
+        var openrayButton = new Button
         {
             Content = new TextBlock
             {
-                Text = "Raycast Mini",
+                Text = "Openray",
                 Foreground = Brushes.White,
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 12,
@@ -102,8 +102,8 @@ public sealed class TaskbarWindow : Window
             Margin = new Thickness(6),
             Cursor = System.Windows.Input.Cursors.Hand,
         };
-        raycastButton.Click += (_, _) => (Application.Current.MainWindow as MainWindow)?.ShowMainWindow();
-        DockPanel.SetDock(raycastButton, Dock.Left);
+        openrayButton.Click += (_, _) => (Application.Current.MainWindow as MainWindow)?.ShowMainWindow();
+        DockPanel.SetDock(openrayButton, Dock.Left);
 
         _clock.Foreground = new SolidColorBrush(Color.FromRgb(0xd9, 0xd9, 0xdc));
         _clock.FontSize = 12;
@@ -111,7 +111,7 @@ public sealed class TaskbarWindow : Window
         _clock.Margin = new Thickness(0, 0, 10, 0);
         DockPanel.SetDock(_clock, Dock.Right);
 
-        root.Children.Add(raycastButton);
+        root.Children.Add(openrayButton);
         root.Children.Add(_clock);
         return root;
     }

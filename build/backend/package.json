@@ -1,8 +1,8 @@
 {
-  "name": "raycast-mini-backend",
+  "name": "openray-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "Node extension host for Raycast Mini: worker pool + named-pipe bridge to the .NET launcher",
+  "description": "Node extension host for Openray: worker pool + named-pipe bridge to the .NET launcher",
   "dependencies": {
     "jsqr": "^1.4.0"
   }

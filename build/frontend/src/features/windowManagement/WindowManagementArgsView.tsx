@@ -2,7 +2,7 @@
 // search bar becomes the argument field, Enter parses with the shipped regexes and applies.
 
 import { useEffect, useRef, useState } from "react";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { parsePositionArgs, parseSizeArgs, runWindowManagementCommand, wmCommandDefinition } from "../../windowManagement";
 
 export function WindowManagementArgsView({
@@ -84,7 +84,7 @@ export function WindowManagementArgsView({
 
       <footer className="window__footer">
         <button type="button" className="footer-icon-button" aria-label="Back" onClick={onBack}>
-          <RaycastIcon name="arrow-clockwise" size={16} />
+          <OpenrayIcon name="arrow-clockwise" size={16} />
         </button>
         <span className="footer__spacer" />
         <button type="button" className="footer-action footer-action--kbd" onClick={apply} data-state={parsed ? "ready" : "disabled"}>

@@ -173,7 +173,7 @@ backend database; the clone picks the documented default in "Our decisions".
 | Item | Decision | Why |
 | --- | --- | --- |
 | List page size | Load all entries for the active filter, no pagination | The clone is local-only with a bounded history; Raycast paginates for a much larger store. Revisit when retention lands. |
-| Database path | `%LOCALAPPDATA%\RaycastMini\clipboard-history.sqlite` | Matches the existing `%LOCALAPPDATA%\RaycastMini\` convention already used for `launcher.log`, `backend.log`, and the WebView2 profile. |
+| Database path | `%LOCALAPPDATA%\Openray\clipboard-history.sqlite` | Matches the existing `%LOCALAPPDATA%\Openray\` convention already used for `launcher.log`, `backend.log`, and the WebView2 profile. |
 | Schema | `clipboard_entries` (id, title, categories JSON, tags JSON, items JSON, source JSON, content_hash, copy_count, created_at, updated_at, pinned_order, pinned_at) plus `clipboard_tags` and `clipboard_filters` | Mirrors the field set the store API exposes. `content_hash` is indexed because every capture looks up by it. |
 | Hash algorithm | MD5, matching Raycast's `createHash("md5")` | Keeps dedupe behavior identical; not a security boundary. |
 | Large-text spill threshold | 30 KB (30 * 1024) | Raycast's `jco` constant. |
@@ -275,7 +275,7 @@ Run `build/scripts/build.ps1` then launch the app and press the global hotkey (`
    the row.
 7. **Large payload** — copy > 30 KB of text (e.g. `powershell -c '1..5000 | % { "line $_" }' | Set-Clipboard`).
    The row still renders, the title is truncated to ~100 characters, and the file is written under
-   `%LOCALAPPDATA%\RaycastMini\clipboard-cache\` with an MD5 name.
+   `%LOCALAPPDATA%\Openray\clipboard-cache\` with an MD5 name.
 8. **Sections** — entries from today, yesterday, this week and older are grouped correctly. Pinned
    entries sit in their own `Pinned` section, above everything else.
 9. **Text filter** — type into the search field; entries narrow down and clear with Escape.
@@ -320,8 +320,8 @@ Run `build/scripts/build.ps1` then launch the app and press the global hotkey (`
 ## Increment 2 — manual test checklist
 
 Settings live in **Settings → Clipboard History**. The store is at
-`%LOCALAPPDATA%\RaycastMini\clipboard-history.sqlite`, cached payloads under
-`%LOCALAPPDATA%\RaycastMini\clipboard-cache\`, and clipboard preferences in
+`%LOCALAPPDATA%\Openray\clipboard-history.sqlite`, cached payloads under
+`%LOCALAPPDATA%\Openray\clipboard-cache\`, and clipboard preferences in
 `clipboard-settings.json` beside the database. Delete both to start from a clean slate.
 
 ### Retention
@@ -338,7 +338,7 @@ Settings live in **Settings → Clipboard History**. The store is at
 6. **Retention change prunes immediately** — with old entries present, switching to 1 Month deletes the
    entries older than a month without a restart.
 7. **12-hour cadence** — leave the launcher running and watch for a second prune in
-   `%LOCALAPPDATA%\RaycastMini\backend.log` roughly every 12 h.
+   `%LOCALAPPDATA%\Openray\backend.log` roughly every 12 h.
 
 ### Cache maintenance
 

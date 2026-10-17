@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { RaycastIcon } from "../icons";
+import { OpenrayIcon } from "../icons";
 import { ipc, ipcRequest, onNotification } from "../ipc";
 import { installSystemAccent } from "../app/systemAccent";
 import { applyTheme, clearThemeOverride, resolveThemeName, setActiveThemeOverride, themeByName } from "../app/themes";
@@ -86,7 +86,7 @@ import { getSettings, installSettingsPush, syncFromBackend, updateSettings, useS
 const FALLBACK_VALUE_ROW_IDS = new Set(["add-fallback-command", "fallback-commands-items"]);
 
 /** The launcher default; Raycast's own default (Win key) is not interceptable here. */
-const RAYCASTMINI_DEFAULT_HOTKEY = "Alt + Space";
+const OPENRAY_DEFAULT_HOTKEY = "Alt + Space";
 
 export function Settings() {
   const [query, setQuery] = useState("");
@@ -244,7 +244,7 @@ export function Settings() {
         "open-at-login",
         "show-in-menu-bar",
         "automatically-show-taskbar",
-        "raycast-hotkey",
+        "openray-hotkey",
         "replace-start-menu",
         "follow-system-appearance",
         "theme-dark",
@@ -252,7 +252,7 @@ export function Settings() {
         "window-mode",
         "show-favorites-in-compact-mode",
         "interface-size",
-        "show-raycast-on",
+        "show-openray-on",
         "pop-to-root-search",
         "root-search-sensitivity",
         "escape-key-behavior",
@@ -270,7 +270,7 @@ export function Settings() {
           updateSettings({ [id]: previous });
           mergeValues({ [id]: previous });
           window.dispatchEvent(
-            new CustomEvent("raycast-mini:settings-toast", {
+            new CustomEvent("openray:settings-toast", {
               detail: {
                 title: error instanceof Error ? error.message : "Failed to update Open at Login",
               },
@@ -297,12 +297,12 @@ export function Settings() {
         .backend("usage.resetAllAppUsage", {}, { module: "backend" })
         .then(() => {
           window.dispatchEvent(
-            new CustomEvent("raycast-mini:settings-toast", { detail: { title: "All rankings reset" } }),
+            new CustomEvent("openray:settings-toast", { detail: { title: "All rankings reset" } }),
           );
         })
         .catch(() => {
           window.dispatchEvent(
-            new CustomEvent("raycast-mini:settings-toast", { detail: { title: "Failed to reset rankings" } }),
+            new CustomEvent("openray:settings-toast", { detail: { title: "Failed to reset rankings" } }),
           );
         });
     }
@@ -443,7 +443,7 @@ function Titlebar({ onNavigate, actions }: { onNavigate: (pageId: string) => voi
           aria-label="Back"
           onClick={() => window.history.back()}
         >
-          <RaycastIcon name="chevron-right" size={12} />
+          <OpenrayIcon name="chevron-right" size={12} />
         </button>
         <button
           type="button"
@@ -453,7 +453,7 @@ function Titlebar({ onNavigate, actions }: { onNavigate: (pageId: string) => voi
           aria-label="Forward"
           onClick={() => window.history.forward()}
         >
-          <RaycastIcon name="chevron-right" size={12} />
+          <OpenrayIcon name="chevron-right" size={12} />
         </button>
       </div>
       {actions ? (
@@ -561,7 +561,7 @@ function Sidebar({
                 }}
               >
                 <span className="settings-navlink__icon">
-                  <RaycastIcon name={result.rowId ? "chevron-right" : (PAGES.find((p) => p.id === result.pageId)?.icon ?? "cog")} size={16} />
+                  <OpenrayIcon name={result.rowId ? "chevron-right" : (PAGES.find((p) => p.id === result.pageId)?.icon ?? "cog")} size={16} />
                 </span>
                 <span className="settings-navlink__resultText">
                   <span className="settings-navlink__label">{result.title}</span>
@@ -576,7 +576,7 @@ function Sidebar({
               <div className="settings-account">
                 <span className="settings-account__avatar" />
                 <span className="settings-account__text">
-                  <span className="settings-account__name">RaycastMini</span>
+                  <span className="settings-account__name">Openray</span>
                   <span className="settings-account__subtitle">Account</span>
                 </span>
               </div>
@@ -655,7 +655,7 @@ function SidebarLink({
   return (
     <button type="button" className="settings-navlink" data-active={active} onClick={() => onNavigate(pageId)}>
       <span className="settings-navlink__icon" data-tile={pageId}>
-        <RaycastIcon name={icon} size={12} />
+        <OpenrayIcon name={icon} size={12} />
       </span>
       <span className="settings-navlink__label">{title}</span>
       {pro ? <span className="settings-badge">Pro</span> : null}
@@ -798,7 +798,7 @@ function Row({
               ) : null}
             </>
           ) : null}
-          {row.unavailable ? <span className="settings-row__unavailable">Not available in RaycastMini</span> : null}
+          {row.unavailable ? <span className="settings-row__unavailable">Not available in Openray</span> : null}
         </div>
       </div>
       <div className="settings-row__right">{right()}</div>
@@ -841,7 +841,7 @@ function FallbackAddRow({
         onClick={() => setOpen((state) => !state)}
       >
         <span className="settings-fallback__icon">
-          <RaycastIcon name="plus" size={13} />
+          <OpenrayIcon name="plus" size={13} />
         </span>
         Add Fallback Command
       </button>
@@ -938,7 +938,7 @@ function FallbackListRow({
               onMouseDown={() => setDragIndex(index)}
               onMouseUp={() => setDragIndex((state) => (state === index ? null : state))}
             >
-              <RaycastIcon name="grip-vertical" size={13} />
+              <OpenrayIcon name="grip-vertical" size={13} />
             </span>
             <span className="settings-fallback__icon">
               <FallbackSpecIcon spec={item} size={14} />
@@ -978,7 +978,7 @@ function HotkeyRow({
     void ipcRequest("settings.replaceStartMenu", { enabled: next }, { module: "frontend" }).catch(() => {
       updateSettings({ "replace-start-menu": !next });
       window.dispatchEvent(
-        new CustomEvent("raycast-mini:settings-toast", {
+        new CustomEvent("openray:settings-toast", {
           detail: { title: next ? "Failed to register the Win key" : "Failed to restore the Start Menu" },
         }),
       );
@@ -986,22 +986,22 @@ function HotkeyRow({
   };
   return (
     <span className="settings-row__right">
-      {row.id === "raycast-hotkey" ? (
+      {row.id === "openray-hotkey" ? (
         <Button
-          title="The Win key will open Raycast instead of the Start Menu. You'll still be able to open the Start Menu from the taskbar."
+          title="The Win key will open Openray instead of the Start Menu. You'll still be able to open the Start Menu from the taskbar."
           onClick={toggleStartMenu}
         >
           {replaceStartMenu ? "Restore Start Menu" : "Replace Start Menu"} <span aria-hidden>⊞</span>
         </Button>
       ) : null}
-      {row.id === "raycast-hotkey" && replaceStartMenu ? (
+      {row.id === "openray-hotkey" && replaceStartMenu ? (
         <VisualShortcut shortcut="Win" />
       ) : (
         <>
-          {!isDefault && row.value && row.id !== "raycast-hotkey" ? (
+          {!isDefault && row.value && row.id !== "openray-hotkey" ? (
             <Button onClick={() => onValueChange(row.value ?? "")}>Restore Default</Button>
           ) : null}
-          <HotkeyRecorder value={value} onChange={onValueChange} footerLabel="Raycast Hotkey" />
+          <HotkeyRecorder value={value} onChange={onValueChange} footerLabel="Openray Hotkey" />
           <IconButton
             icon="arrow-clockwise"
             size={12}
@@ -1054,8 +1054,8 @@ function SettingsToastHost() {
     const handler = (event: Event) => {
       setToast((event as CustomEvent).detail as { title: string; message?: string });
     };
-    window.addEventListener("raycast-mini:settings-toast", handler);
-    return () => window.removeEventListener("raycast-mini:settings-toast", handler);
+    window.addEventListener("openray:settings-toast", handler);
+    return () => window.removeEventListener("openray:settings-toast", handler);
   }, []);
   useEffect(() => {
     if (!toast) return;
@@ -1078,10 +1078,10 @@ function SettingsToastHost() {
 /** Rows whose "action" is a real link or a no-op with a visible outcome. */
 async function runRowAction(row: RowDefinition): Promise<void> {
   const links: Record<string, string> = {
-    website: "https://github.com/GabrielSantos23/RaycastMini",
-    "slack-community": "https://github.com/GabrielSantos23/RaycastMini",
-    "open-changelog": "https://github.com/GabrielSantos23/RaycastMini/releases",
-    "send-feedback": "https://github.com/GabrielSantos23/RaycastMini/issues",
+    website: "https://github.com/GabrielSantos23/Openray",
+    "slack-community": "https://github.com/GabrielSantos23/Openray",
+    "open-changelog": "https://github.com/GabrielSantos23/Openray/releases",
+    "send-feedback": "https://github.com/GabrielSantos23/Openray/issues",
   };
   const target = links[row.id];
   if (target) window.open(target, "_blank", "noopener");
@@ -1103,7 +1103,7 @@ async function applyGeneralSetting(id: string, next: SettingsValue): Promise<voi
     case "automatically-show-taskbar":
       await ipcRequest("settings.automaticallyShowTaskbar", { enabled: Boolean(next) }, { module: "frontend" });
       return;
-    case "raycast-hotkey":
+    case "openray-hotkey":
       await ipcRequest("settings.setGlobalHotkey", { hotkey: String(next) }, { module: "frontend" });
       return;
     case "replace-start-menu":
@@ -1134,13 +1134,13 @@ async function applyGeneralSetting(id: string, next: SettingsValue): Promise<voi
 
 function routeLegacyRow(id: string, next: SettingsValue, values: SettingsMap): void {
   const toaster = (title: string, message?: string) =>
-    window.dispatchEvent(new CustomEvent("raycast-mini:settings-toast", { detail: { title, message } }));
+    window.dispatchEvent(new CustomEvent("openray:settings-toast", { detail: { title, message } }));
 
   if (QUICKLINKS_ROW_IDS.has(id)) {
     if (id === "quicklinks-pass-selected-text") {
       void ipc.backend("quicklinks.setPreference", { key: "passSelectedTextAsArgument", value: Boolean(next) }, { module: "backend" }).catch(() => undefined);
     } else if (id === "quicklinks-warn-before-delete") {
-      window.localStorage.setItem("raycast-mini:quicklinks-warn-delete", next ? "1" : "0");
+      window.localStorage.setItem("openray:quicklinks-warn-delete", next ? "1" : "0");
     }
     return;
   }
@@ -1327,17 +1327,17 @@ function routeLegacyRow(id: string, next: SettingsValue, values: SettingsMap): v
   }
   if (id === "root-search-sensitivity") {
     const sensitivity = SENSITIVITY_MAP[String(next)] ?? "medium";
-    window.localStorage.setItem("raycast-mini:root-search-sensitivity", sensitivity);
-    window.dispatchEvent(new CustomEvent("raycast-mini:root-search-sensitivity-changed", { detail: sensitivity }));
+    window.localStorage.setItem("openray:root-search-sensitivity", sensitivity);
+    window.dispatchEvent(new CustomEvent("openray:root-search-sensitivity-changed", { detail: sensitivity }));
     return;
   }
   if (id === "fallback-commands") {
     // The launcher reads its copy through the localStorage channel (it may not have the
     // settings-store push yet when the window is hidden).
     const json = typeof next === "string" ? next : "[]";
-    window.localStorage.setItem("raycast-mini:fallback-commands", json);
+    window.localStorage.setItem("openray:fallback-commands", json);
     window.dispatchEvent(
-      new CustomEvent("raycast-mini:fallback-commands-changed", { detail: parseFallbackSpecs(json) }),
+      new CustomEvent("openray:fallback-commands-changed", { detail: parseFallbackSpecs(json) }),
     );
     return;
   }
@@ -1349,7 +1349,7 @@ function runLegacyAction(
   mergeValues: (patch: SettingsMap) => void,
 ): void {
   const toaster = (title: string, message?: string) =>
-    window.dispatchEvent(new CustomEvent("raycast-mini:settings-toast", { detail: { title, message } }));
+    window.dispatchEvent(new CustomEvent("openray:settings-toast", { detail: { title, message } }));
 
   const applyFileSearchSettings = (settings: FileSearchSettings | undefined) => {
     if (!settings) return;
@@ -1411,7 +1411,7 @@ function runLegacyAction(
         if (!file) return;
         updateSettings({ "additional-certificate-authorities": file });
         mergeValues({ "additional-certificate-authorities": file });
-        toaster("Certificate added", "The Node backend picks it up the next time Raycast Mini starts.");
+        toaster("Certificate added", "The Node backend picks it up the next time Openray starts.");
       })
       .catch((error: unknown) => toaster("Couldn't add that certificate", error instanceof Error ? error.message : undefined));
     return;
@@ -1492,7 +1492,7 @@ function useLegacyRowMirrors(mergeValues: (patch: SettingsMap) => void): void {
       });
     });
     mergeValues({
-      "quicklinks-warn-before-delete": window.localStorage.getItem("raycast-mini:quicklinks-warn-delete") !== "0",
+      "quicklinks-warn-before-delete": window.localStorage.getItem("openray:quicklinks-warn-delete") !== "0",
     });
 
     void fetch("snippets.getPreferences").then((response) => {

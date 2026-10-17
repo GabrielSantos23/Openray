@@ -1,4 +1,4 @@
-> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not RaycastMini's implementation.
+> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not Openray's implementation.
 
 # Raycast Command UX Spec — navigation, forms, alerts, detail, grid, list
 
@@ -342,7 +342,7 @@ onAction?}`, `Metadata.Separator`. `List.Item.Detail` exists too (`ray-list-item
 Renderer push methods (host → renderer, `module:"frontend"`):
 `extensionHost.render {renderTree, gzipped, sessionId}`, `renderEmpty`, `renderSuspense`,
 `showAlert`, `showToast`, `hideToast`, `showHUD`, `popToRoot {clearSearchBar}`,
-`clearSearchBar {forceScrollToTop}`, `closeMainRaycastWindow`, `commandException`,
+`clearSearchBar {forceScrollToTop}`, `closeMainOpenrayWindow`, `commandException`,
 `openCommandPreferences`, `openExtensionPreferences`.
 
 Renderer → backend requests: `extensionHost.loadCommand`, `unloadEntryPoint`,
@@ -354,7 +354,7 @@ All **[CONFIRMED]** from `index.mjs` handler tables + `main-window-g1Vb1JLY.js` 
 
 ## 9. Implementation status (verified 2026-10-10)
 
-Everything below was verified in the running clone (`RaycastMini.exe --dev-extensions`, the
+Everything below was verified in the running clone (`Openray.exe --dev-extensions`, the
 `command-ux-test` extension) — by automated suites, by driving the real window, and by manual use.
 No mock counts as implemented.
 

@@ -145,7 +145,7 @@ snippets]`. Rows (exact labels/options/descriptions):
 
 | Item | Decision | Why |
 | --- | --- | --- |
-| Storage | `%LOCALAPPDATA%\RaycastMini\snippets.sqlite`, table `snippets` (id, title, keyword, text, tags JSON, pinned_order, copy_count, accessed_at, created_at, updated_at) | Clone convention; mirrors the confirmed field set. `rawContent` is not stored — the clone keeps plain text plus the placeholder markup (single source of truth). |
+| Storage | `%LOCALAPPDATA%\Openray\snippets.sqlite`, table `snippets` (id, title, keyword, text, tags JSON, pinned_order, copy_count, accessed_at, created_at, updated_at) | Clone convention; mirrors the confirmed field set. `rawContent` is not stored — the clone keeps plain text plus the placeholder markup (single source of truth). |
 | Hook | C# low-level keyboard hook (`WH_KEYBOARD_LL`) in the launcher host with a fixed keyword ring buffer sized to the longest registered keyword | Same architecture as Raycast's native hook (low-level hook + precomputed keyword lengths). |
 | Keyword matching | Case-insensitive exact keyword match; with `Expand within Words` off the keyword must be delimited by non-word characters on both sides | Reproduces the property Raycast documents in the settings description; the exact native rules are unconfirmed. |
 | Expansion modes | `Immediately` (expand on match), `After Delimiter (keeping)` / `(discarding)` (wait for Space/Enter/Tab, keep or drop it) | Confirmed option semantics. |

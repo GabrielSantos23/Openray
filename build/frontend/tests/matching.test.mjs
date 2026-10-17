@@ -11,7 +11,7 @@ import { createRequire } from "node:module";
 
 // esbuild.exe cannot write files under the build sandbox, so bundle to memory and let Node
 // persist the output itself.
-const outDir = mkdtempSync(join(tmpdir(), "raycast-mini-matching-"));
+const outDir = mkdtempSync(join(tmpdir(), "openray-matching-"));
 const outFile = join(outDir, "matching.cjs");
 
 const bundled = await build({
@@ -50,7 +50,7 @@ test("an entry without a subtitle never matches a non-empty query (running-apps 
 });
 
 test("reverse prefix still matches: target is a prefix of the query", () => {
-  const ranked = rankEntries([appRow("Raycast", ["raycast"])], "raycast mini", "low", new Map());
+  const ranked = rankEntries([appRow("Raycast", ["raycast"])], "raycastx", "low", new Map());
   assert.deepEqual(ranked.map((row) => row.entry.title), ["Raycast"]);
 });
 

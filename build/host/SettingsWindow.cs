@@ -18,7 +18,7 @@ using System.Windows.Interop;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public sealed class SettingsWindow : Window
 {
@@ -31,7 +31,7 @@ public sealed class SettingsWindow : Window
     private readonly string _frontendRoot;
     private readonly string _boundsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RaycastMini", "settings-window.json");
+        "Openray", "settings-window.json");
 
     private Rect? _restoreBounds;
 
@@ -42,7 +42,7 @@ public sealed class SettingsWindow : Window
     {
         _frontendRoot = frontendRoot;
 
-        Title = "Raycast Mini Settings";
+        Title = "Openray Settings";
         Width = DefaultWidth;
         Height = DefaultHeight;
         MinWidth = 560;

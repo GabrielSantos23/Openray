@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ActionPanel, type ActionGroup } from "../../ActionPanel";
 import { CommandFooter } from "../../commandChrome";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { LoadingBar } from "../../LoadingBar";
 import { ipc } from "../../ipc";
 import {
@@ -79,7 +79,7 @@ function InstalledBadge({ installed }: { installed: boolean }) {
   if (!installed) return null;
   return (
     <span className="store-installed">
-      <RaycastIcon name="Checkmark" size={12} /> Installed
+      <OpenrayIcon name="Checkmark" size={12} /> Installed
     </span>
   );
 }
@@ -108,7 +108,7 @@ function StoreIcon({ name, source, size }: { name: string; source: "github" | "u
   }
   return (
     <span className="store-icon store-icon--fallback" style={{ width: size, height: size }} aria-hidden>
-      <RaycastIcon name="extension" size={Math.round(size * 0.58)} />
+      <OpenrayIcon name="extension" size={Math.round(size * 0.58)} />
     </span>
   );
 }
@@ -428,7 +428,7 @@ export function StoreView({
                 </span>
                 <InstalledBadge installed={entry.installed} />
                 <span className="list__rowActions" aria-hidden>
-                  <RaycastIcon name="chevron-right" size={12} />
+                  <OpenrayIcon name="chevron-right" size={12} />
                 </span>
               </li>
             ))}

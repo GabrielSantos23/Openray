@@ -22,7 +22,7 @@ const DEFAULTS = {
 };
 
 function createAdvanced({ dispatch, dataRoot, settings } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const settingsPath = path.join(root, "store", "settings.json");
   const prefsPath = path.join(root, SETTINGS_FILE);
 
@@ -64,7 +64,7 @@ function createAdvanced({ dispatch, dataRoot, settings } = {}) {
     const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
     const data = Buffer.concat([cipher.update(plain, "utf-8"), cipher.final()]);
     return {
-      format: "raycast-mini-export",
+      format: "openray-export",
       version: 1,
       encrypted: true,
       salt: salt.toString("base64"),
@@ -84,7 +84,7 @@ function createAdvanced({ dispatch, dataRoot, settings } = {}) {
 
   function buildBundle() {
     return {
-      format: "raycast-mini-export",
+      format: "openray-export",
       version: 1,
       exportedAt: new Date().toISOString(),
       settings: readStoreSettings(),
@@ -103,7 +103,7 @@ function createAdvanced({ dispatch, dataRoot, settings } = {}) {
     const keep = prefs.autoDelete === "1" ? 1 : Number(prefs.autoDelete) || 0;
     const files = fs
       .readdirSync(directory)
-      .filter((name) => name.startsWith("raycast-mini-settings-") && name.endsWith(".json"))
+      .filter((name) => name.startsWith("openray-settings-") && name.endsWith(".json"))
       .sort()
       .reverse();
     let removed = 0;
@@ -129,7 +129,7 @@ function createAdvanced({ dispatch, dataRoot, settings } = {}) {
     const secret = passphrase ?? prefs.passphrase ?? "";
     const document = secret ? encrypt(plain, secret) : JSON.parse(plain);
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const file = path.join(target, `raycast-mini-settings-${stamp}.json`);
+    const file = path.join(target, `openray-settings-${stamp}.json`);
     fs.mkdirSync(target, { recursive: true });
     fs.writeFileSync(file, JSON.stringify(document, null, 2));
     prefs.location = target;
@@ -185,13 +185,13 @@ function createAdvanced({ dispatch, dataRoot, settings } = {}) {
       if (!file && typeof dispatch === "function") {
         const picked = await dispatch("fileSystem.showOpenFileDialog", {
           title: "Import Settings",
-          filters: [{ name: "RaycastMini export", extensions: ["json"] }],
+          filters: [{ name: "Openray export", extensions: ["json"] }],
         });
         file = picked?.path ?? null;
       }
       if (!file) return { ok: false, cancelled: true };
       const document = JSON.parse(fs.readFileSync(file, "utf-8"));
-      if (document?.format !== "raycast-mini-export") throw new Error("Not a RaycastMini settings export");
+      if (document?.format !== "openray-export") throw new Error("Not a Openray settings export");
       const plain = decrypt(document, data?.passphrase ?? prefs.passphrase ?? "");
       const bundle = typeof plain === "string" ? JSON.parse(plain) : plain;
       const imported = { settings: bundle.settings ?? {}, mirrors: bundle.mirrors ?? {} };

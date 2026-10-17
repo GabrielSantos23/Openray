@@ -14,7 +14,7 @@ export function isDevExtensions(): boolean {
 
 /** True when the flag came from localStorage instead of the host push. */
 export function isDevExtensionsEnabled(): boolean {
-  return devExtensions || localStorage.getItem("raycast-mini:dev-extensions") === "1";
+  return devExtensions || localStorage.getItem("openray:dev-extensions") === "1";
 }
 
 export interface TestHooks {
@@ -26,16 +26,16 @@ export interface TestHooks {
 }
 
 export function installTestHooks(hooks: TestHooks): void {
-  const existing = (window as unknown as Record<string, unknown>).__raycastMiniTest as
+  const existing = (window as unknown as Record<string, unknown>).__openrayTest as
     | Partial<TestHooks>
     | undefined;
-  (window as unknown as Record<string, unknown>).__raycastMiniTest = { ...existing, ...hooks };
+  (window as unknown as Record<string, unknown>).__openrayTest = { ...existing, ...hooks };
 }
 
 export function overrideTestHooks(hooks: Partial<TestHooks>): void {
-  const existing = (window as unknown as Record<string, unknown>).__raycastMiniTest as
+  const existing = (window as unknown as Record<string, unknown>).__openrayTest as
     | Partial<TestHooks>
     | undefined;
   if (!existing) return;
-  (window as unknown as Record<string, unknown>).__raycastMiniTest = { ...existing, ...hooks };
+  (window as unknown as Record<string, unknown>).__openrayTest = { ...existing, ...hooks };
 }

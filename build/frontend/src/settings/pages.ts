@@ -24,7 +24,7 @@ export type ControlKind =
 export const VERSION = "2.4.0.0";
 export const HOST_NAME = "This Computer";
 /** Raycast's default hotkey is the Win key; the clone's registrable default is Ctrl+Alt+Space. */
-export const RAYCASTMINI_DEFAULT_HOTKEY = "Ctrl + Alt + Space";
+export const OPENRAY_DEFAULT_HOTKEY = "Ctrl + Alt + Space";
 export interface RowDefinition {
   id: string;
   title: string;
@@ -110,7 +110,7 @@ export const PAGES: readonly PageDefinition[] = [
   {
     id: "general",
     title: "General",
-    description: "Configure appearance, startup behavior, and the Raycast hotkey.",
+    description: "Configure appearance, startup behavior, and the Openray hotkey.",
     icon: "general",
     keywords: [
       "appearance", "compact", "favorites", "dark", "expanded", "hotkey", "light", "menu bar",
@@ -122,7 +122,7 @@ export const PAGES: readonly PageDefinition[] = [
         rows: [
           { id: "open-at-login", title: "Open at Login", control: "switch" },
           { id: "show-in-menu-bar", title: "Show in System Tray", control: "switch" },
-          { id: "raycast-hotkey", title: "Raycast Hotkey", control: "hotkey", value: RAYCASTMINI_DEFAULT_HOTKEY },
+          { id: "openray-hotkey", title: "Openray Hotkey", control: "hotkey", value: OPENRAY_DEFAULT_HOTKEY },
         ],
       },
       {
@@ -135,14 +135,14 @@ export const PAGES: readonly PageDefinition[] = [
           {
             id: "interface-size",
             title: "Interface Size",
-            description: "Adjust the size of the Raycast interface",
+            description: "Adjust the size of the Openray interface",
             control: "interfaceSize",
             options: ["1", "1.1", "1.2"],
           },
           {
             id: "window-mode",
             title: "Window Mode",
-            description: "Choose your preferred mode when opening Raycast",
+            description: "Choose your preferred mode when opening Openray",
             control: "windowMode",
             options: ["compact", "expanded"],
           },
@@ -168,15 +168,15 @@ export const PAGES: readonly PageDefinition[] = [
         title: "Behavior",
         rows: [
           {
-            id: "show-raycast-on",
-            title: "Show Raycast on",
+            id: "show-openray-on",
+            title: "Show Openray on",
             control: "select",
             options: ["Screen containing mouse", "Screen with active window", "Primary screen"],
           },
           {
             id: "pop-to-root-search",
             title: "Pop to Root Search",
-            description: "Timeout after which Raycast will reset to root search after closing the window.",
+            description: "Timeout after which Openray will reset to root search after closing the window.",
             control: "select",
             options: [
               "Immediately",
@@ -232,7 +232,7 @@ export const PAGES: readonly PageDefinition[] = [
   {
     id: "shortcuts",
     title: "Shortcuts",
-    description: "Manage command hotkeys and aliases across Raycast.",
+    description: "Manage command hotkeys and aliases across Openray.",
     icon: "shortcuts",
     keywords: ["aliases", "applications", "commands", "extensions", "hotkeys", "keybindings", "keyboard", "quicklinks"],
     sections: [],
@@ -267,7 +267,7 @@ export const PAGES: readonly PageDefinition[] = [
             id: "auto-switch-input-source",
             title: "Auto-switch Input Source",
             description:
-              "Automatically switch to the selected keyboard input source when opening Raycast. The previous input source will be restored when closing.",
+              "Automatically switch to the selected keyboard input source when opening Openray. The previous input source will be restored when closing.",
             control: "select",
             options: ["None"],
             unavailable: true,
@@ -432,7 +432,7 @@ export const PAGES: readonly PageDefinition[] = [
             id: "run-accessibility-helper-elevated",
             title: "Run the Accessibility Helper Elevated",
             description:
-              "Turn this on if global shortcuts, snippet expansion, or copying selected text aren't working on your PC. Raycast then launches its input helper with administrator rights via the Raycast System Service. Requires an administrator account — on standard Windows accounts this has no effect, since Windows can't grant elevation without a password prompt. Takes effect after you restart Raycast.",
+              "Turn this on if global shortcuts, snippet expansion, or copying selected text aren't working on your PC. Openray then launches its input helper with administrator rights via the Openray System Service. Requires an administrator account — on standard Windows accounts this has no effect, since Windows can't grant elevation without a password prompt. Takes effect after you restart Openray.",
             control: "switch",
             unavailable: true,
           },
@@ -446,7 +446,7 @@ export const PAGES: readonly PageDefinition[] = [
           {
             id: "scheduled-backup",
             title: "Scheduled Backup",
-            description: "Automatically export your Raycast settings and data on a schedule.",
+            description: "Automatically export your Openray settings and data on a schedule.",
             control: "select",
             options: ["Off", "Daily", "Weekly", "Monthly"],
             value: "Off",
@@ -497,7 +497,7 @@ export const PAGES: readonly PageDefinition[] = [
     description: "Manage organizations, members, and organization settings.",
     icon: "organizations",
     keywords: ["invite", "members", "organization", "org", "team", "teams", "webhooks"],
-    empty: "Organizations require a signed-in Raycast account.",
+    empty: "Organizations require a signed-in Openray account.",
     sections: [],
   },
   {
@@ -528,7 +528,7 @@ export const PAGES: readonly PageDefinition[] = [
             id: "quicklinks-pass-selected-text",
             title: "Pass Selected Text as Argument",
             description:
-              "When enabled, Raycast will automatically pass selected text from the active application to Quicklinks with a single argument when invoked via hotkey.",
+              "When enabled, Openray will automatically pass selected text from the active application to Quicklinks with a single argument when invoked via hotkey.",
             control: "switch",
           },
           {
@@ -583,7 +583,7 @@ export const PAGES: readonly PageDefinition[] = [
             id: "snippets-response-time",
             title: "Response Time",
             description:
-              "Some systems are capable of faster response times processing clipboard entries. If Raycast doesn't expand your snippets correctly, slower response times might help.",
+              "Some systems are capable of faster response times processing clipboard entries. If Openray doesn't expand your snippets correctly, slower response times might help.",
             control: "select",
             options: ["Instant", "Quick", "Default", "Delayed", "Extended"],
           },
@@ -717,7 +717,7 @@ export const PAGES: readonly PageDefinition[] = [
             id: "file-search-ignore-patterns",
             title: "Ignore Patterns",
             description:
-              "File Search respects .gitignore, .ignore, Git exclude files, and .rayignore by default. Add comma-separated filenames or directories here to ignore them globally in Raycast.",
+              "File Search respects .gitignore, .ignore, Git exclude files, and .rayignore by default. Add comma-separated filenames or directories here to ignore them globally in Openray.",
             control: "textarea-commit",
           },
           {
@@ -821,7 +821,7 @@ export const PAGES: readonly PageDefinition[] = [
   },
   {
     id: "raycast-focus",
-    title: "Raycast Focus",
+    title: "Openray Focus",
     description: "Manage focus sessions and categories.",
     icon: "clock",
     keywords: [
@@ -854,7 +854,7 @@ export const PAGES: readonly PageDefinition[] = [
           {
             id: "focus-restore-apps",
             title: "Restore Terminated Apps",
-            description: "Reopen apps Raycast Focus terminated when the session ends.",
+            description: "Reopen apps Openray Focus terminated when the session ends.",
             control: "switch",
           },
         ],
@@ -874,7 +874,7 @@ export const PAGES: readonly PageDefinition[] = [
           {
             id: "games-game-mode",
             title: "Game Mode",
-            description: "Disable Raycast hotkeys while a game window is detected in the foreground.",
+            description: "Disable Openray hotkeys while a game window is detected in the foreground.",
             control: "switch",
           },
         ],
@@ -910,7 +910,7 @@ export const PAGES: readonly PageDefinition[] = [
   },
   {
     id: "notes",
-    title: "Raycast Notes",
+    title: "Openray Notes",
     description: "Create and manage your notes.",
     icon: "blank-document",
     keywords: ["notes", "note", "escape", "zoom", "editor"],
@@ -1083,7 +1083,7 @@ export const PAGES: readonly PageDefinition[] = [
     description: "Development-only toggles and internal debugging settings.",
     icon: "internal",
     keywords: ["debug", "developer", "feature flags", "internal", "preload", "worker", "raycast api environment"],
-    empty: "No internal settings are available in this build of Raycast Mini.",
+    empty: "No internal settings are available in this build of Openray.",
     sections: [],
   },
   {
@@ -1096,9 +1096,9 @@ export const PAGES: readonly PageDefinition[] = [
       {
         id: "about",
         rows: [
-          { id: "raycast-updates", title: "Raycast Updates", control: "action", action: "Check for Updates", value: VERSION },
+          { id: "openray-updates", title: "Openray Updates", control: "action", action: "Check for Updates", value: VERSION },
           { id: "open-changelog", title: "Open Changelog", control: "action", action: "Open Changelog" },
-          { id: "website", title: "Website", control: "action", action: "github.com/GabrielSantos23/RaycastMini" },
+          { id: "website", title: "Website", control: "action", action: "github.com/GabrielSantos23/Openray" },
           { id: "slack-community", title: "Slack Community", control: "action", action: "Join Slack" },
           { id: "send-feedback", title: "Send Feedback", control: "action", action: "Send Email" },
         ],
@@ -1108,7 +1108,7 @@ export const PAGES: readonly PageDefinition[] = [
   {
     id: "account",
     title: "Account",
-    description: "Manage your Raycast account, AI usage, credits, and plan.",
+    description: "Manage your Openray account, AI usage, credits, and plan.",
     icon: "account",
     keywords: ["account", "balance", "credits", "login", "logout", "pricing", "pro", "sign in", "sign out", "usage"],
     sections: [

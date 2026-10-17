@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionPanel, type ActionGroup } from "../../ActionPanel";
 import { ipc } from "../../ipc";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { CommandFooter } from "../../commandChrome";
 import { LoadingBar } from "../../LoadingBar";
 
@@ -401,7 +401,7 @@ export function TranslateView({ command, seed, showToast, onBack, closeMainWindo
           onClick={() => chooseLanguage(side, language.code)}
         >
           <span className="translate-menu__name">{language.name}</span>
-          {selected ? <RaycastIcon name="Check" size={12} /> : null}
+          {selected ? <OpenrayIcon name="Check" size={12} /> : null}
         </button>
       );
     };
@@ -447,9 +447,9 @@ export function TranslateView({ command, seed, showToast, onBack, closeMainWindo
                 aria-expanded={pickingLanguage === "source"}
                 onClick={() => setPickingLanguage((current) => (current === "source" ? null : "source"))}
               >
-                <RaycastIcon name="flag" size={13} />
+                <OpenrayIcon name="flag" size={13} />
                 <span className="translate-language__label">{effectiveSourceLabel}</span>
-                <RaycastIcon name="chevron-down" size={12} />
+                <OpenrayIcon name="chevron-down" size={12} />
               </button>
               {pickingLanguage === "source" ? renderLanguageDropdown("source") : null}
             </span>
@@ -464,9 +464,9 @@ export function TranslateView({ command, seed, showToast, onBack, closeMainWindo
                 aria-expanded={pickingLanguage === "target"}
                 onClick={() => setPickingLanguage((current) => (current === "target" ? null : "target"))}
               >
-                <RaycastIcon name="flag" size={13} />
+                <OpenrayIcon name="flag" size={13} />
                 <span className="translate-language__label">{targetLabel}</span>
-                <RaycastIcon name="chevron-down" size={12} />
+                <OpenrayIcon name="chevron-down" size={12} />
               </button>
               {pickingLanguage === "target" ? renderLanguageDropdown("target") : null}
             </span>
@@ -496,7 +496,7 @@ export function TranslateView({ command, seed, showToast, onBack, closeMainWindo
           </div>
 
           <button type="button" className="translate-swap" onClick={swapLanguages} aria-label="Swap Languages">
-            <RaycastIcon name="switch" size={15} />
+            <OpenrayIcon name="switch" size={15} />
           </button>
         </div>
       </main>

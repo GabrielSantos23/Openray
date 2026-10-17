@@ -1,5 +1,5 @@
 param(
-    [string]$ProcessName = "RaycastMini",
+    [string]$ProcessName = "Openray",
     [string]$Out = "shot.png",
     [int]$ClickX = -1,
     [int]$ClickY = -1,

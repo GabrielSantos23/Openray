@@ -35,7 +35,7 @@ import {
   type ExtensionToastPayload,
   type ToastState,
 } from "../toastStore";
-import { RaycastIcon } from "../icons";
+import { OpenrayIcon } from "../icons";
 import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
 import { readStoredHotkeys, reregisterStoredHotkeys, runWindowManagementCommand, wmCommandDefinition, wmCommandIcon } from "../windowManagement";
 import {
@@ -251,8 +251,8 @@ export function MainWindow() {
         try {
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key?.startsWith("raycast-mini:usage:")) {
-              const appId = key.slice("raycast-mini:usage:".length);
+            if (key?.startsWith("openray:usage:")) {
+              const appId = key.slice("openray:usage:".length);
               const count = Number.parseInt(localStorage.getItem(key) ?? "0", 10) || 0;
               scores.set(appId, count);
             }
@@ -343,7 +343,7 @@ export function MainWindow() {
 
   const [fallbackSpecs, setFallbackSpecs] = useState<FallbackCommandSpec[]>(() => {
     try {
-      const stored = localStorage.getItem("raycast-mini:fallback-commands");
+      const stored = localStorage.getItem("openray:fallback-commands");
       return stored ? (JSON.parse(stored) as FallbackCommandSpec[]) : [];
     } catch {
       return [];
@@ -354,8 +354,8 @@ export function MainWindow() {
     const handleFallbackChange = (event: CustomEvent<FallbackCommandSpec[]>) => {
       setFallbackSpecs(event.detail);
     };
-    window.addEventListener("raycast-mini:fallback-commands-changed", handleFallbackChange as EventListener);
-    return () => window.removeEventListener("raycast-mini:fallback-commands-changed", handleFallbackChange as EventListener);
+    window.addEventListener("openray:fallback-commands-changed", handleFallbackChange as EventListener);
+    return () => window.removeEventListener("openray:fallback-commands-changed", handleFallbackChange as EventListener);
   }, []);
 
   const fallbackCommands = useMemo(() => buildFallbackCommands(fallbackSpecs), [fallbackSpecs, buildFallbackCommands]);
@@ -531,8 +531,8 @@ export function MainWindow() {
     const handleSettingsChange = (event: CustomEvent<InlineSectionSettings>) => {
       setInlineSectionSettings(event.detail);
     };
-    window.addEventListener("raycast-mini:inline-section-settings-changed", handleSettingsChange as EventListener);
-    return () => window.removeEventListener("raycast-mini:inline-section-settings-changed", handleSettingsChange as EventListener);
+    window.addEventListener("openray:inline-section-settings-changed", handleSettingsChange as EventListener);
+    return () => window.removeEventListener("openray:inline-section-settings-changed", handleSettingsChange as EventListener);
   }, []);
 
   // Pop to root on hide: Raycast resets to root search after the window has been closed for the
@@ -635,7 +635,7 @@ export function MainWindow() {
       };
       setExtensions(payload.extensions ?? []);
     };
-    // The host forwards `--dev-extensions` / RAYCAST_MINI_DEV_EXTENSIONS=1; the push can race this
+    // The host forwards `--dev-extensions` / OPENRAY_DEV_EXTENSIONS=1; the push can race this
     // module's first render, so the flag is also pulled once here.
     const pullDevFlag = async () => {
       try {
@@ -782,11 +782,11 @@ export function MainWindow() {
         },
       });
     });
-    // Extension-initiated `closeMainWindow()` (`closeMainRaycastWindow`): the backend forwards it
-    // here; hiding is the host's job (`window.close`), like Raycast's `closeMainRaycastWindow` →
+    // Extension-initiated `closeMainWindow()` (`closeMainOpenrayWindow`): the backend forwards it
+    // here; hiding is the host's job (`window.close`), like Raycast's `closeMainOpenrayWindow` →
     // `Raycast.WebView.Window` close. Without this the window stays visible and the toast never
     // falls back to the floating HUD.
-    const offCloseWindow = onNotification("extensionHost.closeMainRaycastWindow", () => {
+    const offCloseWindow = onNotification("extensionHost.closeMainOpenrayWindow", () => {
       closeMainWindow();
     });
     // `extensionHost.showAlert` (`Une`): route the payload into the alert store; the primary /
@@ -957,7 +957,7 @@ export function MainWindow() {
       let changed = false;
       for (const app of applications) {
         try {
-          const raw = localStorage.getItem(`raycast-mini:usage:${app.payload.id}`);
+          const raw = localStorage.getItem(`openray:usage:${app.payload.id}`);
           const count = raw ? Number.parseInt(raw, 10) || 0 : 0;
           if (newScores.get(app.payload.id) !== count) {
             newScores.set(app.payload.id, count);
@@ -1135,7 +1135,7 @@ export function MainWindow() {
         openRootActionPanel(entry);
       }}
     >
-      <RaycastIcon name="chevron-right" size={12} />
+      <OpenrayIcon name="chevron-right" size={12} />
     </span>
   );
 
@@ -1778,8 +1778,8 @@ export function MainWindow() {
       if (!extension || !command) return;
       setSelected({ kind: "extension", extension, command });
     };
-    window.addEventListener("raycast-mini:launch-extension-command", handler);
-    return () => window.removeEventListener("raycast-mini:launch-extension-command", handler);
+    window.addEventListener("openray:launch-extension-command", handler);
+    return () => window.removeEventListener("openray:launch-extension-command", handler);
   }, [extensions]);
 
   if (selected) {
@@ -1819,7 +1819,7 @@ export function MainWindow() {
       data-favorites-compact={showFavoritesCompact ? undefined : "hidden"}
     >
       <header className="window__header">
-        <span className="raycast-mark" aria-hidden>
+        <span className="openray-mark" aria-hidden>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path fill="currentColor" d="M3.6 3.6h6.4v6.4H3.6zM14 3.6h6.4v6.4H14zM3.6 14h6.4v6.4H3.6zM14 14h6.4v6.4H14z" />
             <path fill="currentColor" d="M14 10.4h-3.6V14H10a3.6 3.6 0 1 0 4 0z" opacity=".9" />
@@ -2022,7 +2022,7 @@ export function MainWindow() {
                               {entry.application.payload.icon ? (
                                 <img className="icon__img" src={entry.application.payload.icon} alt="" />
                               ) : (
-                                <RaycastIcon name="app-window-list" size={16} />
+                                <OpenrayIcon name="app-window-list" size={16} />
                               )}
                               {entry.application.payload.isRunning ? (
                                 <span className="dot" title="Running" />
@@ -2054,7 +2054,7 @@ export function MainWindow() {
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="copy-clipboard" size={16} />
+                              <OpenrayIcon name="copy-clipboard" size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">Clipboard History</span>
@@ -2079,7 +2079,7 @@ export function MainWindow() {
                             onClick={() => openQuicklinkRow(entry.quicklink)}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="link" size={16} />
+                              <OpenrayIcon name="link" size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.quicklink.name}</span>
@@ -2108,7 +2108,7 @@ export function MainWindow() {
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="plus" size={16} />
+                              <OpenrayIcon name="plus" size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">Create Quicklink</span>
@@ -2130,7 +2130,7 @@ export function MainWindow() {
                             onClick={() => setSelected(entry)}
                           >
                             <span className={`icon-wrap command-tile ${INTERNAL_EXTENSION_META[entry.area].tile}`} aria-hidden>
-                              <RaycastIcon name={INTERNAL_EXTENSION_META[entry.area].icon} size={13} />
+                              <OpenrayIcon name={INTERNAL_EXTENSION_META[entry.area].icon} size={13} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{INTERNAL_COMMANDS.find((definition) => definition.area === entry.area && definition.command === entry.command)?.title}</span>
@@ -2156,7 +2156,7 @@ export function MainWindow() {
                             }
                           >
                             <span className="icon-wrap command-tile command-tile--windowmanagement" aria-hidden>
-                              <RaycastIcon name={wmCommandIcon(entry.commandKey)} size={13} />
+                              <OpenrayIcon name={wmCommandIcon(entry.commandKey)} size={13} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.title}</span>
@@ -2190,7 +2190,7 @@ export function MainWindow() {
                             }}
                           >
                             <span className="icon-wrap command-tile command-tile--focus" aria-hidden>
-                              <RaycastIcon name="clock" size={13} />
+                              <OpenrayIcon name="clock" size={13} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.title}</span>
@@ -2218,7 +2218,7 @@ export function MainWindow() {
                             }}
                           >
                             <span className="icon-wrap command-tile command-tile--focus" aria-hidden>
-                              <RaycastIcon name="clock" size={13} />
+                              <OpenrayIcon name="clock" size={13} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.title}</span>
@@ -2247,7 +2247,7 @@ export function MainWindow() {
                               {entry.app.icon ? (
                                 <img className="icon__img" src={entry.app.icon} alt="" />
                               ) : (
-                                <RaycastIcon name="game-controller" size={16} />
+                                <OpenrayIcon name="game-controller" size={16} />
                               )}
                             </span>
                             <span className="list__text">
@@ -2270,7 +2270,7 @@ export function MainWindow() {
                             onClick={() => entry.command.action(searchText)}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="Blocks" size={16} />
+                              <OpenrayIcon name="Blocks" size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.command.title}</span>
@@ -2306,7 +2306,7 @@ export function MainWindow() {
                               ) : null}
                             </span>
                             <span className="calc-row__divider" aria-hidden>
-                              <RaycastIcon name="chevron-right" size={14} />
+                              <OpenrayIcon name="chevron-right" size={14} />
                             </span>
                             <span className="calc-row__right">
                               <span className="calc-row__answer">{entry.evaluation.answer}</span>
@@ -2336,7 +2336,7 @@ export function MainWindow() {
                               </span>
                             </span>
                             <span className="calc-row__divider" aria-hidden>
-                              <RaycastIcon name="chevron-right" size={14} />
+                              <OpenrayIcon name="chevron-right" size={14} />
                             </span>
                             <span className="calc-row__right">
                               <span className={`calc-row__answer${entry.row.status !== "ready" ? " translate-row__pending" : ""}`}>
@@ -2360,7 +2360,7 @@ export function MainWindow() {
                             onClick={() => setSelected(entry)}
                           >
                             <span className={`icon-wrap command-tile ${INTERNAL_EXTENSION_META.translator.tile}`} aria-hidden>
-                              <RaycastIcon name={INTERNAL_EXTENSION_META.translator.icon} size={13} />
+                              <OpenrayIcon name={INTERNAL_EXTENSION_META.translator.icon} size={13} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.command.name}</span>
@@ -2386,11 +2386,11 @@ export function MainWindow() {
                             onClick={() => entry.result.action(searchText, closeMainWindow)}
                           >
                             <span className="icon" aria-hidden>
-                              {entry.result.type === "snippet" && <RaycastIcon name="copy" size={16} />}
+                              {entry.result.type === "snippet" && <OpenrayIcon name="copy" size={16} />}
                               {entry.result.type === "web-search" && entry.result.icon && (
                                 <span className="web-search-icon" dangerouslySetInnerHTML={{ __html: entry.result.icon }} />
                               )}
-                              {entry.result.type === "web-search" && !entry.result.icon && <RaycastIcon name="globe" size={16} />}
+                              {entry.result.type === "web-search" && !entry.result.icon && <OpenrayIcon name="globe" size={16} />}
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.result.title}</span>
@@ -2415,7 +2415,7 @@ export function MainWindow() {
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name={fileIconFor(entry.file.contentType ?? "other")} size={16} />
+                              <OpenrayIcon name={fileIconFor(entry.file.contentType ?? "other")} size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.file.name}</span>
@@ -2431,7 +2431,7 @@ export function MainWindow() {
                         <li key="file-indexing">
                           <div className="list__row list__row--static" data-selected={index === selectedIndex}>
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="arrow-clockwise" size={16} />
+                              <OpenrayIcon name="arrow-clockwise" size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">File Search is indexing…</span>
@@ -2455,7 +2455,7 @@ export function MainWindow() {
                             onClick={() => openExplorerEntry(entry.path)}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="folder" size={16} />
+                              <OpenrayIcon name="folder" size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">Open in File Explorer</span>
@@ -2480,7 +2480,7 @@ export function MainWindow() {
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="game-controller" size={16} />
+                              <OpenrayIcon name="game-controller" size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.title}</span>
@@ -2550,7 +2550,7 @@ export function MainWindow() {
           aria-label="Settings"
           onClick={openSettings}
         >
-          <RaycastIcon name="cog" size={16} />
+          <OpenrayIcon name="cog" size={16} />
         </button>
         <span className="footer__spacer" />
         <button

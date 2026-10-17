@@ -210,7 +210,7 @@ export async function runApplicationAction(
       void ipc.backend("usage.resetAppUsage", { appId: app.id }, { module: "backend" }).catch(() => {
         /* ignore errors */
       });
-      handlers.showToast("Ranking reset", `Raycast Mini forgot how often you open ${app.name}.`);
+      handlers.showToast("Ranking reset", `Openray forgot how often you open ${app.name}.`);
       return;
     }
     case "quitApplication":
@@ -223,7 +223,7 @@ export async function runApplicationAction(
       return;
     }
     case "hideApplication":
-      // Windows has no "hide application" like macOS; Raycast minimises every window the app owns.
+      // Windows has no "hide application" like macOS; Openraymises every window the app owns.
       await ipc.backend("applications.hide", { id: app.id }, { module: "backend" });
       return;
     case "restartApplication":
@@ -249,7 +249,7 @@ export async function runApplicationAction(
       return;
     default:
       // Raycast routes these to their own commands; this clone acknowledges them.
-      console.info(`[applications] action ${action} is not implemented in Raycast Mini`);
+      console.info(`[applications] action ${action} is not implemented in Openray`);
   }
 }
 

@@ -9,7 +9,7 @@ const { DatabaseSync } = require("node:sqlite");
 
 const USAGE_DB_PATH = path.join(
   process.env.LOCALAPPDATA,
-  "RaycastMini",
+  "Openray",
   "usage-tracking.sqlite"
 );
 
@@ -70,20 +70,20 @@ function migrateFromLocalStorage(localStorageData) {
   if (!localStorageData) return;
   
   for (const [key, value] of Object.entries(localStorageData)) {
-    if (key.startsWith("raycast-mini:usage:")) {
-      const appId = key.slice("raycast-mini:usage:".length);
+    if (key.startsWith("openray:usage:")) {
+      const appId = key.slice("openray:usage:".length);
       const count = Number.parseInt(value, 10) || 0;
       if (count > 0) {
         incrementAppUsage(appId, count);
       }
-    } else if (key.startsWith("raycast-mini:file-usage:")) {
-      const filePath = key.slice("raycast-mini:file-usage:".length);
+    } else if (key.startsWith("openray:file-usage:")) {
+      const filePath = key.slice("openray:file-usage:".length);
       const count = Number.parseInt(value, 10) || 0;
       if (count > 0) {
         incrementFileUsage(filePath, count);
       }
-    } else if (key.startsWith("raycast-mini:argument-history:")) {
-      const parts = key.slice("raycast-mini:argument-history:".length).split(":");
+    } else if (key.startsWith("openray:argument-history:")) {
+      const parts = key.slice("openray:argument-history:".length).split(":");
       if (parts.length === 2) {
         const [commandId, argumentName] = parts;
         const values = JSON.parse(value);

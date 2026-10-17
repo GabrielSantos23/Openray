@@ -15,7 +15,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 internal static class Native
 {

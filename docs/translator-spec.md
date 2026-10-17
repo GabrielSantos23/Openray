@@ -1,4 +1,4 @@
-> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not RaycastMini's implementation.
+> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not Openray's implementation.
 
 # Translator — behavioral spec
 
@@ -114,7 +114,7 @@ Source of truth for the clone. Every "confirmed" item was read out of the shippe
 | Section placement | The ephemeral Translate section renders directly under Calculator (both are ephemeral answer rows); custom-command rows get their own `Translate` section after Quicklinks, shown only while searching | The shipped section order is not observable client-side; placement is our choice. |
 | Custom-command rows | Only `enabled` commands appear as dynamic root rows; their primary action is opening the Translate view with the command's languages (the confirmed `Open Translator with Command`) | Disabled commands stay in the Settings list only. The row's Ctrl+K opens the view directly instead of an action panel — the panel would duplicate the single primary action. |
 | `Swap Languages` with auto source | Uses the detected source language from the last result; without one, `en` stands in so the swap stays well-defined | The shipped swap semantics for auto are not observable. |
-| Copy Deeplink | Copies `raycast-mini://translate?id=<id>` | No protocol handler is registered in the clone; the string mirrors Raycast's deeplink shape and is informational only. |
+| Copy Deeplink | Copies `openray://translate?id=<id>` | No protocol handler is registered in the clone; the string mirrors Raycast's deeplink shape and is informational only. |
 | `Open in Raycast` label | Kept verbatim as the confirmed Output Behavior option label | Confirmed strings are the source of truth for the clone's UI text. |
 
 ## Implementation status (2026-10-11)

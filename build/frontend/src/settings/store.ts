@@ -7,7 +7,7 @@ import { ipc, onNotification } from "../ipc";
 import type { SettingsMap, SettingsValue } from "./pages";
 import { DEFAULTS } from "./persistence";
 
-const STORAGE_KEY = "raycast-mini:settings";
+const STORAGE_KEY = "openray:settings";
 
 function readLocal(): SettingsMap {
   try {

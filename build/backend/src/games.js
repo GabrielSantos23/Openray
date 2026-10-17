@@ -15,7 +15,7 @@ const path = require("node:path");
 const DEFAULT_SETTINGS = { gameModeEnabled: false };
 
 function createGames({ dispatch, dataRoot } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const flagsPath = path.join(root, "game-flags.json");
   const settingsPath = path.join(root, "games-settings.json");
 

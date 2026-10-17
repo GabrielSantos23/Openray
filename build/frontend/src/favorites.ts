@@ -2,13 +2,13 @@
 // renders them in their own section, ahead of Applications and Extensions.
 //
 // Raycast stores the pinned set in its settings store; this clone keeps it in localStorage under
-// `raycast-mini:favorites` so it survives window reloads and restarts. Both applications and
+// `openray:favorites` so it survives window reloads and restarts. Both applications and
 // extension commands can be pinned, each with its own key prefix so the two namespaces never
 // collide.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const STORAGE_KEY = "raycast-mini:favorites";
+const STORAGE_KEY = "openray:favorites";
 
 /** `app:<application id>` / `command:<extension uuid>/<command name>`. */
 export type FavoriteKey = string;

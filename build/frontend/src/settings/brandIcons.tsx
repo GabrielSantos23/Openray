@@ -1,7 +1,7 @@
 // Brand SVGs for the Launcher page's fallback commands — real logos (simple-icons /
 // Material Design Icons paths) instead of generic Lucide glyphs.
 import type { ReactNode } from "react";
-import { RaycastIcon } from "../icons";
+import { OpenrayIcon } from "../icons";
 import { FALLBACK_CATALOG, type FallbackCommandSpec } from "./persistence";
 
 function GoogleIcon({ size }: { size: number }) {
@@ -68,7 +68,7 @@ export function FallbackSpecIcon({ spec, size = 14 }: { spec: FallbackCommandSpe
   const canonical = FALLBACK_CATALOG.find((entry) => entry.id === spec.id)?.icon ?? spec.icon;
   const Brand = BRAND_ICONS[canonical];
   if (Brand) return <>{Brand({ size })}</>;
-  return <RaycastIcon name={canonical} size={size} />;
+  return <OpenrayIcon name={canonical} size={size} />;
 }
 
 /** The Windows Settings gear, traced from the official seeklogo SVG the user provided. */

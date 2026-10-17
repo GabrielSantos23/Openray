@@ -7,8 +7,8 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 
 // Point the store at a scratch database before the first require (the module reads the env once).
-const dataRoot = mkdtempSync(join(tmpdir(), "raycast-mini-wm-states-"));
-process.env.RAYCASTMINI_WINDOW_STATES_DB = join(dataRoot, "window-states.sqlite");
+const dataRoot = mkdtempSync(join(tmpdir(), "openray-wm-states-"));
+process.env.OPENRAY_WINDOW_STATES_DB = join(dataRoot, "window-states.sqlite");
 
 const require = createRequire(import.meta.url);
 const { getSavedWindowState, saveWindowState, closeDatabase } = require("../src/window-states.js");

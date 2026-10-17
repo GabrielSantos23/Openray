@@ -158,7 +158,7 @@ function buildProps() {
     preferences: context.preferences ?? {},
     environment: buildEnvironment(),
     window: {
-      closeMainWindow: () => request("closeMainRaycastWindow", {}),
+      closeMainWindow: () => request("closeMainOpenrayWindow", {}),
       popToRoot: () => {
         const hadSubviews = commandStack.length > 1;
         commandStack.length = 1;

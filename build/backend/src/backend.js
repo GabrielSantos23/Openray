@@ -21,7 +21,7 @@ function paths(options) {
   return {
     configRoot: path.join(
       process.env.LOCALAPPDATA ?? process.env.HOME ?? ".",
-      "RaycastMini",
+      "Openray",
     ),
     extensionDir(uuid) {
       return path.join(options.extensionsRoot, uuid);
@@ -45,7 +45,7 @@ function paths(options) {
 
 function createBackend(options) {
   const P = paths(options);
-  const dataRoot = options.dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const dataRoot = options.dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const sessions = new Map(); // workerId -> { worker, context }
   const activeSessions = new Map(); // sessionId -> workerId
   const pool = { "fk-dev": [], "fk-prod": [] };
@@ -347,8 +347,8 @@ function createBackend(options) {
     async clearSearchBar(ctx, params) {
       return toRenderer("extensionHost.clearSearchBar", { ...params, sessionId: ctx.worker.id });
     },
-    async closeMainRaycastWindow(ctx, params) {
-      return toRenderer("extensionHost.closeMainRaycastWindow", { ...params, sessionId: ctx.worker.id });
+    async closeMainOpenrayWindow(ctx, params) {
+      return toRenderer("extensionHost.closeMainOpenrayWindow", { ...params, sessionId: ctx.worker.id });
     },
     async openCommandPreferences(ctx, params) {
       return toRenderer("extensionHost.openCommandPreferences", { ...params, sessionId: ctx.worker.id });
@@ -590,10 +590,10 @@ function createBackend(options) {
           fs.mkdirSync(cacheDir, { recursive: true });
           const file = path.join(cacheDir, `${hash}.${ext}`);
           if (!fs.existsSync(file)) fs.writeFileSync(file, bytes);
-          // The renderer loads images through the `raycastmini-img` virtual host (mapped by the
+          // The renderer loads images through the `openray-img` virtual host (mapped by the
           // C# main window onto this cache folder) — plain URLs keep the render tree small,
           // where per-item data: URIs OOM the worker on library-sized artwork sets.
-          return { ok: true, uri: `https://raycastmini-img/${hash}.${ext}` };
+          return { ok: true, uri: `https://openray-img/${hash}.${ext}` };
         }
         case "media.current":
           // SMTC snapshot / transport control: the C# host owns the WinRT session manager, the
@@ -821,7 +821,7 @@ function createBackend(options) {
     },
 
     // An installed extension's manifest icon as a data URL (re-homed from the Store's
-    // `store.getIcon`); `iconName` carries FlowKey lucide icon names for the RaycastIcon fallback,
+    // `store.getIcon`); `iconName` carries FlowKey lucide icon names for the OpenrayIcon fallback,
     // `emoji` carries manifest icons declared as emoji (e.g. the Spotify "🎧").
     // NOTE: extensionHost handlers are invoked with `(data)` — a `(ctx, params)` signature here
     // silently read `params` as undefined and disabled every extension icon.
@@ -934,7 +934,7 @@ function createBackend(options) {
       reconnectAttempts = 0;
       // Prove this connection was spawned by the current host: the bridge promotes the client
       // whose token matches and rejects stale-token zombies instead of letting one become primary.
-      client.write(`${JSON.stringify({ type: "hello", token: process.env.RAYCAST_MINI_PIPE_TOKEN ?? "" })}` + "\n");
+      client.write(`${JSON.stringify({ type: "hello", token: process.env.OPENRAY_PIPE_TOKEN ?? "" })}` + "\n");
       console.log(`[backend] connected to launcher pipe "${options.pipeName}"`);
       connectedCallbacks.splice(0).forEach((resolve) => resolve(client));
     });

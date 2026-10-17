@@ -18,7 +18,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function withFocus(fn) {
   return async () => {
-    const root = mkdtempSync(join(tmpdir(), "raycast-mini-focus-"));
+    const root = mkdtempSync(join(tmpdir(), "openray-focus-"));
     const hostCalls = [];
     const pushes = [];
     const instance = createFocus({
@@ -116,7 +116,7 @@ test("start/toggle/pause/resume/complete lifecycle with host sync and pushes", w
   hostCalls.length = 0;
   pushes.length = 0;
 
-  const started = await instance.handlers.startSession({ title: "Ship the clone", goal: { mode: "duration", durationMs: 60000 }, raycastAppIds: ["steam.exe"] });
+  const started = await instance.handlers.startSession({ title: "Ship the clone", goal: { mode: "duration", durationMs: 60000 }, openrayAppIds: ["steam.exe"] });
   assert.equal(started.session.status, "running");
   assert.equal(started.session.title, "Ship the clone");
   assert.ok(started.session.remainingMs > 55000 && started.session.remainingMs <= 60000);
@@ -213,7 +213,7 @@ test("restart restarts from the current session input, and from the last input a
 }));
 
 test("a fresh instance restores a persisted running session from focus-session.json", async () => {
-  const root = mkdtempSync(join(tmpdir(), "raycast-mini-focus-"));
+  const root = mkdtempSync(join(tmpdir(), "openray-focus-"));
   try {
     const first = createFocus({ dataRoot: root, dispatch: () => Promise.resolve({}), pushToFrontend: () => Promise.resolve({}) });
     first.bootstrap();
@@ -232,7 +232,7 @@ test("a fresh instance restores a persisted running session from focus-session.j
 });
 
 test("bootstrap auto-completes a session that expired while the app was closed", async () => {
-  const root = mkdtempSync(join(tmpdir(), "raycast-mini-focus-"));
+  const root = mkdtempSync(join(tmpdir(), "openray-focus-"));
   try {
     const first = createFocus({ dataRoot: root, dispatch: () => Promise.resolve({}), pushToFrontend: () => Promise.resolve({}) });
     first.bootstrap();

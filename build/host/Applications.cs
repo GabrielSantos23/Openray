@@ -28,7 +28,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public sealed record ApplicationEntry(
     string Id,
@@ -82,7 +82,7 @@ public static class Applications
     private static readonly TimeSpan SnapshotTtl = TimeSpan.FromMinutes(30);
     private static readonly string SnapshotFile = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RaycastMini", "applications-scan.json");
+        "Openray", "applications-scan.json");
     private static int _rescanning;
 
     public static async Task<List<ApplicationEntry>> GetAllAsync()
@@ -141,7 +141,7 @@ public static class Applications
         {
             var disk = JsonSerializer.Deserialize<CachedScan>(File.ReadAllText(SnapshotFile));
             if (disk is null || DateTimeOffset.UtcNow - disk.Time >= SnapshotTtl || disk.Packages.Count == 0) return null;
-            RaycastMini.Launcher.App.Log.Write($"[applications] snapshot hit ({disk.Packages.Count} apps, age {(DateTimeOffset.UtcNow - disk.Time).TotalSeconds:F0}s)");
+            Openray.Launcher.App.Log.Write($"[applications] snapshot hit ({disk.Packages.Count} apps, age {(DateTimeOffset.UtcNow - disk.Time).TotalSeconds:F0}s)");
             return disk.Packages;
         }
         catch
@@ -221,7 +221,7 @@ public static class Applications
                 process.Dispose();
             }
         }
-        RaycastMini.Launcher.App.Log.Write(
+        Openray.Launcher.App.Log.Write(
             $"[applications] process snapshot {runningPaths.Count} paths in {scanStart.ElapsedMilliseconds}ms");
 
         foreach (var shortcut in EnumerateStartMenuShortcuts())
@@ -242,7 +242,7 @@ public static class Applications
                 id, name, target, AppUserModelId.ForPath(target), disambiguator, false, runningPaths.Contains(target));
         }
         ShortcutTargetCache.Flush();
-        RaycastMini.Launcher.App.Log.Write($"[applications] shortcut cache {ShortcutTargetCache.Counters}");
+        Openray.Launcher.App.Log.Write($"[applications] shortcut cache {ShortcutTargetCache.Counters}");
         var shortcutsMs = scanStart.ElapsedMilliseconds;
 
         foreach (var appPath in EnumerateAppPaths(runningPaths))
@@ -338,7 +338,7 @@ public static class Applications
         }
 
         WriteSnapshot(list);
-        RaycastMini.Launcher.App.Log.Write(
+        Openray.Launcher.App.Log.Write(
             $"[applications] shortcuts={shortcuts} skippedNotExe={skippedTargets} skippedJunk={skippedJunk} " +
             $"msix={msixCount} running={processCount} unique={found.Count} timing: snapshot≈0 shortcuts={shortcutsMs} " +
             $"appPaths={appPathsMs - shortcutsMs} registry={registryMs - appPathsMs} msix={msixMs - registryMs} " +
@@ -560,7 +560,7 @@ public static class Applications
         }
         catch (Exception error)
         {
-            RaycastMini.Launcher.App.Log.Write($"[applications] MSIX enumeration failed: {error.Message}");
+            Openray.Launcher.App.Log.Write($"[applications] MSIX enumeration failed: {error.Message}");
             yield break;
         }
         if (packages is null) yield break;
@@ -606,7 +606,7 @@ public static class Applications
     }
 
     public static async Task<object?> DispatchAsync(string method, JsonElement? data)
-    {        RaycastMini.Launcher.App.Log.Write($"[native] {method}");
+    {        Openray.Launcher.App.Log.Write($"[native] {method}");
         switch (method)
         {
             case "applications.getAll":
@@ -966,7 +966,7 @@ internal static class IconCache
 {
     private static readonly string CacheDir = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RaycastMini", "icon-cache");
+        "Openray", "icon-cache");
 
     public static string? GetDataUrl(string executablePath)
     {
@@ -1021,7 +1021,7 @@ internal static class ShortcutTargetCache
     private static readonly object Lock = new();
     private static readonly string CacheFile = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RaycastMini", "applications-shortcuts.json");
+        "Openray", "applications-shortcuts.json");
     private static Dictionary<string, Entry>? _entries;
     private static bool _dirty;
     private static int _hits;
@@ -1095,7 +1095,7 @@ internal static class MsixCache
     private static readonly object Lock = new();
     private static readonly string CacheFile = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RaycastMini", "applications-msix.json");
+        "Openray", "applications-msix.json");
     private static readonly TimeSpan Ttl = TimeSpan.FromHours(6);
     private static Cached? _memory;
 
@@ -1110,7 +1110,7 @@ internal static class MsixCache
                 if (disk is not null && DateTimeOffset.UtcNow - disk.Time < Ttl)
                 {
                     _memory = disk;
-                    RaycastMini.Launcher.App.Log.Write($"[applications] msix cache hit (disk, {disk.Packages.Count})");
+                    Openray.Launcher.App.Log.Write($"[applications] msix cache hit (disk, {disk.Packages.Count})");
                     return disk.Packages;
                 }
             }
@@ -1121,7 +1121,7 @@ internal static class MsixCache
         }
         // Resolved outside the lock: the PowerShell call takes seconds.
         var fresh = QueryAppx();
-        RaycastMini.Launcher.App.Log.Write($"[applications] msix cache refresh: {fresh.Count} packages");
+        Openray.Launcher.App.Log.Write($"[applications] msix cache refresh: {fresh.Count} packages");
         lock (Lock)
         {
             _memory = new Cached(DateTimeOffset.UtcNow, fresh);
@@ -1129,11 +1129,11 @@ internal static class MsixCache
             {
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(CacheFile)!);
                 File.WriteAllText(CacheFile, JsonSerializer.Serialize(_memory));
-                RaycastMini.Launcher.App.Log.Write("[applications] msix cache written");
+                Openray.Launcher.App.Log.Write("[applications] msix cache written");
             }
             catch (Exception error)
             {
-                RaycastMini.Launcher.App.Log.Write($"[applications] msix cache write failed: {error.Message}");
+                Openray.Launcher.App.Log.Write($"[applications] msix cache write failed: {error.Message}");
             }
         }
         return fresh;
@@ -1211,7 +1211,7 @@ internal static class MsixCache
         }
         catch (JsonException error)
         {
-            RaycastMini.Launcher.App.Log.Write($"[applications] msix output unparseable: {error.Message}");
+            Openray.Launcher.App.Log.Write($"[applications] msix output unparseable: {error.Message}");
         }
         return result;
     }

@@ -3,7 +3,7 @@
 // the commandConfig stores. Built-in extension pages render their internal commands through
 // `InternalCommandsSection`; installed extensions get their rows on the detail page.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RaycastIcon } from "../icons";
+import { OpenrayIcon } from "../icons";
 import { INTERNAL_COMMANDS, INTERNAL_EXTENSION_META, type InternalArea } from "../app/entries";
 import type { PageDefinition } from "./pages";
 import { WM_COMMANDS, wmCommandIcon } from "../windowManagement";
@@ -118,7 +118,7 @@ function CommandRowView({
           {row.iconUrl ? (
             <img src={row.iconUrl} alt="" />
           ) : (
-            <RaycastIcon name={row.lucide ?? "app-window-list"} size={14} />
+            <OpenrayIcon name={row.lucide ?? "app-window-list"} size={14} />
           )}
         </span>
         <span className="settings-shortcuts__title">{row.title}</span>
@@ -189,7 +189,7 @@ export function PageIntro({ page }: { page: PageDefinition }) {
     <div className="settings-page__intro">
       <span className="settings-page__introIcon">
         <span className="settings-introTile" data-tile={page.id}>
-          <RaycastIcon name={page.icon} size={26} />
+          <OpenrayIcon name={page.icon} size={26} />
         </span>
       </span>
       <div className="settings-page__introText">
@@ -201,7 +201,7 @@ export function PageIntro({ page }: { page: PageDefinition }) {
           <button type="button" className="settings-page__introToggle" onClick={() => setExpanded((state) => !state)}>
             {expanded ? "Show Less" : "Show More"}{" "}
             <span className="settings-page__introToggleChevron" data-expanded={expanded ? "true" : undefined}>
-              <RaycastIcon name="chevron-down" size={10} />
+              <OpenrayIcon name="chevron-down" size={10} />
             </span>
           </button>
         ) : null}

@@ -1,10 +1,10 @@
-# Lucide Icons (RaycastMini)
+# Lucide Icons (Openray)
 
 Search the [Lucide](https://lucide.dev) icon set as a grid; copy names, SVG or components.
 
 Ported from the FlowKey launcher (`GabrielSantos23/flowkey-launcher`,
 `flowkey-native/extensions/lucide-icons` — itself a port of the Raycast extension) to
-RaycastMini's FlowKey library. Changes from the source:
+Openray's FlowKey library. Changes from the source:
 
 - imports `@flowkey-mini/*` instead of `@flowkey-cli/*`;
 - bundled by `build.mjs` (esbuild + the sidecar shims) instead of the FlowKey CLI;

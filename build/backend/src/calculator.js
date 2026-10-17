@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS calculator_history (
 `;
 
 function createCalculator({ pushToFrontend, dataRoot, fetchImpl, now = () => Date.now(), historyLimit = HISTORY_LIMIT } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const databasePath = path.join(root, "calculator.sqlite");
   const ratesPath = path.join(root, "calculator-rates.json");
   const settingsPath = path.join(root, "calculator-settings.json");

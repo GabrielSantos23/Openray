@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-const outDir = mkdtempSync(join(tmpdir(), "raycast-mini-root-sections-"));
+const outDir = mkdtempSync(join(tmpdir(), "openray-root-sections-"));
 const outFile = join(outDir, "root-sections.cjs");
 
 const bundled = await build({

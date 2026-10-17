@@ -42,7 +42,7 @@ const DEFAULT_PREFERENCES = {
   onboarded: false,
 };
 
-const WELCOME_NOTE = `# Welcome to Raycast Notes
+const WELCOME_NOTE = `# Welcome to Openray Notes
 
 Everything you type here is saved automatically, and the note title follows the first line.
 
@@ -62,7 +62,7 @@ Press \`Ctrl K\` for the action panel: pin this note, copy it as Markdown, HTML 
 it to a file, or delete it (deleted notes stay in Recently Deleted for 60 days).`;
 
 function createNotes({ dispatch, pushToFrontend, dataRoot, now = () => Date.now() } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const databasePath = path.join(root, "notes.sqlite");
   const settingsPath = path.join(root, "notes-settings.json");
 

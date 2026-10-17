@@ -25,7 +25,7 @@ export interface TranslatorDialogState {
 }
 
 export function settingsToast(title: string, message?: string): void {
-  window.dispatchEvent(new CustomEvent("raycast-mini:settings-toast", { detail: { title, message } }));
+  window.dispatchEvent(new CustomEvent("openray:settings-toast", { detail: { title, message } }));
 }
 
 export function TranslatorCustomCommands() {
@@ -136,12 +136,12 @@ export function TranslatorCustomCommands() {
 
   const copyDeeplink = async (command: TranslatorCommand) => {
     setMenuFor(null);
-    // No raycast-mini:// protocol handler exists; the string mirrors Raycast's deeplink shape
+    // No openray:// protocol handler exists; the string mirrors Raycast's deeplink shape
     // and is informational only (our decision in docs/translator-spec.md).
     try {
       await ipc.backend(
         "clipboard.write",
-        { content: `raycast-mini://translate?id=${encodeURIComponent(command.id)}` },
+        { content: `openray://translate?id=${encodeURIComponent(command.id)}` },
         { module: "backend" },
       );
       settingsToast("Copied deeplink");
@@ -192,7 +192,7 @@ export function TranslatorCustomCommands() {
                   ? `Translate ${command.sourceLabel} to ${command.targetLabel}`
                   : `Translate to ${command.targetLabel}`}
                 {" · "}
-                {command.outputBehavior === "replace" ? "Replace Selection" : "Open in Raycast"}
+                {command.outputBehavior === "replace" ? "Replace Selection" : "Open in Openray"}
               </span>
             </div>
             <div className="settings-row__right" data-settings-accessory>
@@ -270,7 +270,7 @@ export function TranslatorCustomCommands() {
                 value={dialog.outputBehavior}
                 onChange={(event) => setDialog({ ...dialog, outputBehavior: event.target.value === "replace" ? "replace" : "open" })}
               >
-                <option value="open">Open in Raycast</option>
+                <option value="open">Open in Openray</option>
                 <option value="replace">Replace Selection</option>
               </select>
             </label>

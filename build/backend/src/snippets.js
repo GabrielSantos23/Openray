@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS snippets (
 `;
 
 function createSnippets({ dispatch, pushToFrontend, dataRoot, clipboardTextAt, calculate } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const databasePath = path.join(root, "snippets.sqlite");
   const settingsPath = path.join(root, "snippets-settings.json");
 

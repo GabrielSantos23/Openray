@@ -3,7 +3,7 @@
 const net = require("node:net");
 const readline = require("node:readline");
 
-const name = process.argv[2] ?? "raycast-mini-ipc";
+const name = process.argv[2] ?? "openray-ipc";
 const method = process.argv[3] ?? "extensionHost.getInstalledNodeExtensionSummaries";
 const address = process.platform === "win32" ? `\\\\.\\pipe\\${name}` : name;
 

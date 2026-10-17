@@ -2,7 +2,7 @@
 // Raycast-style command footer (left: tile + command name, right: primary action + Actions).
 
 import type { ReactNode } from "react";
-import { RaycastIcon } from "./icons";
+import { OpenrayIcon } from "./icons";
 
 export type InternalArea = "quicklinks" | "snippets" | "calculator" | "translator" | "file-search" | "notes" | "store";
 
@@ -24,7 +24,7 @@ export function CommandTile({ area, size = 22 }: { area: InternalArea; size?: nu
       style={{ width: size, height: size }}
       aria-hidden
     >
-      <RaycastIcon name={meta.icon} size={Math.round(size * 0.58)} />
+      <OpenrayIcon name={meta.icon} size={Math.round(size * 0.58)} />
     </span>
   );
 }

@@ -173,7 +173,7 @@ function parseQuickTranslate(term) {
 }
 
 function createTranslator({ pushToFrontend, dataRoot, fetchImpl, now = () => Date.now(), cacheLimit = DEFAULT_CACHE_LIMIT } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const databasePath = path.join(root, "translator.sqlite");
   const settingsPath = path.join(root, "translator-settings.json");
   const fetchJson = fetchImpl ?? ((url, init) => fetch(url, init));

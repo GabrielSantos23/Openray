@@ -1,11 +1,11 @@
-> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not RaycastMini's implementation.
+> **REA REFERENCE (archived for the A6 grep gate):** documents the real Raycast build for evidence and verification — describes upstream behavior, not Openray's implementation.
 
 # Raycast Toast / HUD Spec (reverse-engineered)
 
 Target: Raycast 2.4.0.0 (MSIX), extracted frontend chunks in `../artifacts/frontend/`,
 bundled `@raycast/api` in `../artifacts/api/node_modules/@raycast/api/index.js`,
 backend `../artifacts/backend/index.mjs`, C# host strings from `Raycast.dll`.
-Clone reference: `../build/` (RaycastMini).
+Clone reference: `../build/` (Openray).
 
 Tags: **[CONFIRMED]** = read directly from shipped code. **[INFERRED]** = behavior deduced
 from code shape, not observed in execution.
@@ -305,7 +305,7 @@ This is the dot seen at the icon's bottom-right in clipboard-copy HUDs.
 | Actions | primary/secondary wired via `callNodeCallback`, merged into action panel | serialized in API payload; UI ignores them; no `callNodeCallback` wiring for toast |
 | `onHide` callback | fired on close → extension | not delivered |
 | Error path | no-view exception → failure toast + "Copy Error" action | `commandException` only sets session error state |
-| Dead code | — | `useExtensionCommand.ts` dispatches `raycast-mini:toast`/`:hud` CustomEvents nobody listens to |
+| Dead code | — | `useExtensionCommand.ts` dispatches `openray:toast`/`:hud` CustomEvents nobody listens to |
 
 Existing assets the clone can reuse: `--red/--green/--yellow` tokens (`styles.css:30-32`),
 `--bg-40`-style panel backdrop + blur tokens, `createCallback` → `callNodeCallback` plumbing
@@ -314,7 +314,7 @@ topmost frameless window patterns in `host/MainWindow.xaml.cs`.
 
 ---
 
-## 6. Implementation to-do list (RaycastMini)
+## 6. Implementation to-do list (Openray)
 
 Ordered; each item is shippable on its own. Files are relative to `../build/`.
 
@@ -331,7 +331,7 @@ Ordered; each item is shippable on its own. Files are relative to `../build/`.
    `ANIMATED→pending`, `FAILURE→failure`, else `success`; deliver `onHide` by calling
    `ipc.backend("extensionHost.callNodeCallback", { sessionId, callbackId: onHide, data: {} })`.
    (Move the sessionId-scoped duplicates in `useExtensionCommand.ts:220-235` here and delete the
-   dead `raycast-mini:toast`/`raycast-mini:hud` CustomEvents.)
+   dead `openray:toast`/`openray:hud` CustomEvents.)
 3. **Build `Toast` + `Hud` components** (new `frontend/src/Toast.tsx`) with the extracted CSS
    (§3.2/§4.2): toast fixed `top: 40px` centered below the header (keep `pointer-events:none`
    wrapper + `all` on the root); HUD visuals shared via a `hud-primitive` block; hairline
@@ -398,7 +398,7 @@ Ordered; each item is shippable on its own. Files are relative to `../build/`.
 
 | Item | Where |
 |---|---|
-| 1–2. Store duality + style→variant + onHide delivery | `frontend/src/toastStore.ts` (new); handlers in `App.tsx` (`extensionHost.showToast/showHUD/hideToast/commandException` subscriptions); dead `raycast-mini:toast`/`:hud` CustomEvents removed from `useExtensionCommand.ts` |
+| 1–2. Store duality + style→variant + onHide delivery | `frontend/src/toastStore.ts` (new); handlers in `App.tsx` (`extensionHost.showToast/showHUD/hideToast/commandException` subscriptions); dead `openray:toast`/`:hud` CustomEvents removed from `useExtensionCommand.ts` |
 | 3–4. Toast/Hud primitives + ActivityIndicator + CSS | `frontend/src/Toast.tsx` (new); `.toast__*`, `.hud-primitive__*`, `.in-window-toasts__*`, `.activity-indicator__*` blocks in `frontend/src/styles.css` (with `@property` for the animatable gradient colour) |
 | 5–6. Timing rules | 3 s + 200 ms WAAPI fade + hover pause + pending-on-blur in `InWindowToasts`; HUD 1.2 s in the HUD page and the in-window fallback |
 | 7. Toast actions | `useToastActionGroups()` / `runToastAction()` in `App.tsx`; merged into both action panels under a `Toast` group; presses loop back via `callNodeCallback` |
@@ -411,7 +411,7 @@ Ordered; each item is shippable on its own. Files are relative to `../build/`.
 Verification: frontend `tsc + vite build` clean (incl. new `hud.html` entry), `@raycast/api`
 esbuild build clean, `dotnet build` 0 errors, backend test suite unchanged (the single failing
 clipboard test fails without these changes too — missing optional `systemevents` module).
-Browser-harness check (vite dev + `window.__raycastMiniToast`, dev builds only): success/failure/
+Browser-harness check (vite dev + `window.__openrayToast`, dev builds only): success/failure/
 pending toasts and the HUD fallback all render per the extracted CSS; 3 s auto-dismiss observed.
 
 ### 7.1 Fixes found during live testing (2026-10-10, all deployed and verified on-machine)
@@ -432,13 +432,13 @@ Live testing surfaced five latent bugs — all fixed:
 4. **HUD host/page handshake + string messages** (`host/HudWindow.cs`): the host holds the latest
    `hud:show` until `hud:ready` (first-show race), unwraps the page's double-encoded string
    messages, prewarms the HUD WebView at launcher startup, and cache-busts both window URLs.
-5. **`extensionHost.closeMainRaycastWindow` was never handled** (`frontend/src/App.tsx`): the
+5. **`extensionHost.closeMainOpenrayWindow` was never handled** (`frontend/src/App.tsx`): the
    extension API's `closeMainWindow()` push was dropped, so "copy then close" never hid the
    window and the toast never fell back to the floating HUD. Now wired to the host's
    `window.close`.
 
-End-to-end verified on the deployed install (`C:\Users\gabs\RaycastMini`): in-window toasts with
+End-to-end verified on the deployed install (`C:\Users\gabs\Openray`): in-window toasts with
 variants, the floating HUD ("Hello from the floating HUD" / "Copied entry to clipboard") shown
 outside the launcher at the bottom-centre of the screen, and the clipboard-copy fallback.
-Note: extensions install to `%LOCALAPPDATA%\RaycastMini\extensions` (per `BackendProcess.cs`),
+Note: extensions install to `%LOCALAPPDATA%\Openray\extensions` (per `BackendProcess.cs`),
 not the repo's `extensions/` folder; the Toast Playground extension lives in both.

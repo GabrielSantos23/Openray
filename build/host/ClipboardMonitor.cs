@@ -26,7 +26,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Interop;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public sealed class ClipboardRepresentation
 {
@@ -56,7 +56,7 @@ public sealed class ClipboardSource
 {
     public string Host { get; init; } = "Windows";
     /// <summary>Executable file name including extension, as shown in Raycast's source column.</summary>
-    public string Name { get; init; } = "Raycast Mini";
+    public string Name { get; init; } = "Openray";
     public string Url { get; init; } = string.Empty;
     /// <summary>Foreground window class, matched by Raycast's `IgnoredClassNames` list.</summary>
     public string? ClassName { get; init; }
@@ -119,7 +119,7 @@ public sealed class ClipboardMonitor : IDisposable
     public void Start()
     {
         if (_handle != IntPtr.Zero) return;
-        var parameters = new HwndSourceParameters("RaycastMiniClipboardListener")
+        var parameters = new HwndSourceParameters("OpenrayClipboardListener")
         {
             ParentWindow = HwndMessage,
             WindowStyle = 0,

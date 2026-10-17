@@ -89,7 +89,7 @@ function RootCommand({ props }: { props: CommandProps }) {
                 title="Image data uri"
                 onAction={async () => {
                   const result = await props.native.call("image.fetch", {
-                    url: process.env.RAYCASTMINI_TEST_IMAGE_URL ?? "https://i.scdn.co/none.png",
+                    url: process.env.OPENRAY_TEST_IMAGE_URL ?? "https://i.scdn.co/none.png",
                   });
                   setImageEcho(String(result.uri));
                 }}

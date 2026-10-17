@@ -46,7 +46,7 @@ function withStore(run) {
 
 /**
  * A store rooted at a temp directory, so nothing touches the real profile. `dataRoot` is the option the
- * store actually reads — passing anything else would silently fall back to `%LOCALAPPDATA%\RaycastMini`.
+ * store actually reads — passing anything else would silently fall back to `%LOCALAPPDATA%\Openray`.
  */
 function makeStore(directory) {
   return createClipboardStore({ dataRoot: directory });

@@ -80,7 +80,7 @@
   }
 }
 
-.raycast-mark {
+.openray-mark {
   display: grid;
   place-items: center;
   width: var(--space-24);
@@ -806,7 +806,7 @@
 .window[data-window-mode="compact"] .searchbar__input {
   font-size: 15px;
 }
-.window[data-window-mode="compact"] .raycast-mark svg {
+.window[data-window-mode="compact"] .openray-mark svg {
   width: 22px;
   height: 22px;
 }

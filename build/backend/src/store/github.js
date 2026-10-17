@@ -17,7 +17,7 @@ function githubFetch(path, { fetchImpl, raw = false } = {}) {
   const doFetch = fetchImpl ?? fetch;
   const url = raw ? `${RAW_BASE}/${path}` : `${API_BASE}${path}`;
   return doFetch(url, {
-    headers: raw ? { "User-Agent": "RaycastMini" } : { Accept: "application/vnd.github+json", "User-Agent": "RaycastMini" },
+    headers: raw ? { "User-Agent": "Openray" } : { Accept: "application/vnd.github+json", "User-Agent": "Openray" },
     signal: AbortSignal.timeout(60_000),
   });
 }

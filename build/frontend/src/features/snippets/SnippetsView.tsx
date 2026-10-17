@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionPanel, type ActionGroup } from "../../ActionPanel";
 import { ipc } from "../../ipc";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { rankEntries } from "../../matching";
 import { CommandFooter, CommandTile } from "../../commandChrome";
 import {
@@ -490,7 +490,7 @@ function SearchSnippets({
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="blank-document" size={16} />
+                              <OpenrayIcon name="blank-document" size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.title}</span>
@@ -500,7 +500,7 @@ function SearchSnippets({
                               {entry.keyword ? <span className="pill snippets-keyword">{entry.keyword}</span> : null}
                               {entry.pinned !== null ? (
                                 <span className="list__favorite" title="Pinned">
-                                  <RaycastIcon name="tack" size={13} />
+                                  <OpenrayIcon name="tack" size={13} />
                                 </span>
                               ) : null}
                             </span>

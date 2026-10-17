@@ -1,6 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MainWindow } from "./app/App";
+import { migrateLegacyLocalStorageKeys } from "./legacyKeys";
+
+migrateLegacyLocalStorageKeys();
 import { ToastLayer } from "./Toast";
 
 // Surface uncaught renderer errors to the host's diagnostics hook so a broken UI is visible in
@@ -9,7 +12,7 @@ interface MiniErrors {
   errors: string[];
 }
 const errors: MiniErrors = { errors: [] };
-(window as unknown as { __raycastMiniErrors: MiniErrors }).__raycastMiniErrors = errors;
+(window as unknown as { __openrayErrors: MiniErrors }).__openrayErrors = errors;
 window.addEventListener("error", (event) => {
   errors.errors.push(`error: ${event.message}`);
 });

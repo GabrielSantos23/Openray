@@ -190,7 +190,7 @@ function isHiddenName(name) {
 }
 
 function createFileIndexer({ pushToFrontend, dataRoot, autoStart = true } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? os.tmpdir(), "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? os.tmpdir(), "Openray");
   fs.mkdirSync(root, { recursive: true });
   const settingsFile = path.join(root, SETTINGS_FILE);
   const db = new DatabaseSync(path.join(root, INDEX_DB));

@@ -24,7 +24,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public static class SnippetHook
 {

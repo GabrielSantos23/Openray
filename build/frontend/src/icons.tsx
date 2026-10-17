@@ -258,7 +258,7 @@ export interface IconProps {
  * Accepts `icon://<name>.png` (what the extension renderer emits), a bare Raycast icon name, or a
  * kebab-case internal key. Anything unknown falls back to a neutral glyph.
  */
-export function RaycastIcon({ name, size = 15, className, strokeWidth = 1.75 }: IconProps) {
+export function OpenrayIcon({ name, size = 15, className, strokeWidth = 1.75 }: IconProps) {
   let key = name ?? "";
   if (key.startsWith("icon://")) key = key.slice("icon://".length).replace(/\.png$/, "");
 
@@ -276,7 +276,7 @@ export function RaycastIcon({ name, size = 15, className, strokeWidth = 1.75 }: 
 
 /** Convenience wrapper for a known Raycast internal key. */
 export function Icon({ name, size = 15 }: { name: string; size?: number }) {
-  return <RaycastIcon name={name} size={size} />;
+  return <OpenrayIcon name={name} size={size} />;
 }
 
 export { REGISTRY as RAYCAST_ICON_REGISTRY };

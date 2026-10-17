@@ -22,7 +22,7 @@ export interface FocusStartInput {
   title?: string;
   mode: "block" | "allow";
   categoryIds: string[];
-  raycastAppIds: string[];
+  openrayAppIds: string[];
   websiteHosts: string[];
   allowAllOnEmptyWebsiteAllowlist: boolean;
   snoozeDurationMs: number | null;
@@ -61,7 +61,7 @@ export const DEFAULT_START_INPUT: FocusStartInput = {
   title: "Focus session",
   mode: "block",
   categoryIds: [],
-  raycastAppIds: [],
+  openrayAppIds: [],
   websiteHosts: [],
   allowAllOnEmptyWebsiteAllowlist: false,
   snoozeDurationMs: 180000,

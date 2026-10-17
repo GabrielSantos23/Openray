@@ -14,7 +14,7 @@ import { createRequire } from "node:module";
 
 // esbuild.exe cannot write files under the build sandbox, so bundle to memory and let Node
 // persist the output itself.
-const outDir = mkdtempSync(join(tmpdir(), "raycast-mini-focus-games-"));
+const outDir = mkdtempSync(join(tmpdir(), "openray-focus-games-"));
 const focusFile = join(outDir, "focus.cjs");
 const gamesFile = join(outDir, "games.cjs");
 

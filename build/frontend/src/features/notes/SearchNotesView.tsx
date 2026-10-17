@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionPanel, type ActionGroup } from "../../ActionPanel";
 import { ipc } from "../../ipc";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { alertStore } from "../../alertStore";
 import { CommandFooter } from "../../commandChrome";
 import { openNotesWindow, useNotes, noteDeeplink, filterNotes, groupNotesByRecency, type NoteEntry } from "../../notes";
@@ -360,7 +360,7 @@ export function SearchNotesView({
         {notes.length === 0 ? (
           <div className="state">
             <div className="state__title">No Notes Found</div>
-            <div className="state__message">Create your first Raycast Note</div>
+            <div className="state__message">Create your first Openray Note</div>
             <button type="button" className="action action--primary" onClick={runCreateNote}>
               <span>Create Note</span>
             </button>
@@ -397,7 +397,7 @@ export function SearchNotesView({
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name="blank-document" size={16} />
+                              <OpenrayIcon name="blank-document" size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.title}</span>
@@ -406,7 +406,7 @@ export function SearchNotesView({
                             <span className="list__accessory">
                               {entry.pinned !== null ? (
                                 <span className="list__favorite" title="Pinned">
-                                  <RaycastIcon name="tack" size={13} />
+                                  <OpenrayIcon name="tack" size={13} />
                                 </span>
                               ) : null}
                             </span>

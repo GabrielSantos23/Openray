@@ -5,22 +5,22 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public partial class App : Application
 {
-    private const string DefaultPipeName = "raycast-mini-ipc";
+    private const string DefaultPipeName = "openray-ipc";
     // Overridable so a second instance (or a leftover zombie holding the default pipe) does not
-    // break IPC: `RAYCAST_MINI_PIPE=xyz RaycastMini.exe` selects a different pipe end to end.
+    // break IPC: `OPENRAY_PIPE=xyz Openray.exe` selects a different pipe end to end.
     // The default name is per-process. A single global name lets two launchers (or a leftover
     // backend from a previous run) race for the same pipe, leaving one of them waiting forever on
     // responses that go to the other end and the UI empty.
     private static readonly string PipeName =
-        Environment.GetEnvironmentVariable("RAYCAST_MINI_PIPE") ?? $"{DefaultPipeName}-{Environment.ProcessId}";
+        Environment.GetEnvironmentVariable("OPENRAY_PIPE") ?? $"{DefaultPipeName}-{Environment.ProcessId}";
 
     private static readonly string LogPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RaycastMini",
+        "Openray",
         "launcher.log");
 
     /// <summary>Shared file logger used by every component in the launcher.</summary>
@@ -29,7 +29,7 @@ public partial class App : Application
         public static readonly string Path =
             System.IO.Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RaycastMini",
+                "Openray",
                 "launcher.log");
 
         public static void Write(string message)
@@ -53,7 +53,7 @@ public partial class App : Application
                 }
                 catch
                 {
-                    Debug.WriteLine($"[raycast-mini log] {message} (log write failed: {error.Message})");
+                    Debug.WriteLine($"[openray log] {message} (log write failed: {error.Message})");
                 }
             }
         }
@@ -73,12 +73,48 @@ private MainWindow? _window;
         return await _pipe.RequestAsync("backend", method, data);
     }
 
-    /// <summary>`--dev-extensions` / RAYCAST_MINI_DEV_EXTENSIONS=1: reveal internal test extensions.</summary>
+    /// <summary>`--dev-extensions` / OPENRAY_DEV_EXTENSIONS=1: reveal internal test extensions.</summary>
     public static bool DevExtensions { get; set; }
+
+    /// <summary>
+    /// One-time carry-over from the pre-rebrand layout: `%LOCALAPPDATA%\RaycastMini` holds the
+    /// extensions, the store, settings.json, the clipboard DB, the WebView2 profile and the logs.
+    /// Runs before anything creates the new directory (the log writer included) so the move can
+    /// succeed. A locked directory (old instance still running) is skipped; the next launch retries.
+    /// </summary>
+    private static void MigrateLegacyDataDirectories()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var targets = new List<string> { Path.Combine(localAppData, "Openray") };
+        var dataDir = Environment.GetEnvironmentVariable("OPENRAY_DATA_DIR");
+        if (!string.IsNullOrWhiteSpace(dataDir)) targets.Add(dataDir);
+        foreach (var target in targets)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(target)) continue;
+                var fullTarget = Path.GetFullPath(target);
+                if (Directory.Exists(fullTarget)) continue;
+                var legacyName = Path.GetFileName(fullTarget.TrimEnd(Path.DirectorySeparatorChar));
+                var openrayIndex = legacyName.IndexOf("Openray", System.StringComparison.OrdinalIgnoreCase);
+                if (openrayIndex < 0) continue;
+                var legacyNameCandidate = string.Concat(legacyName.AsSpan(0, openrayIndex), "RaycastMini", legacyName.AsSpan(openrayIndex + "Openray".Length));
+                var legacy = Path.Combine(Path.GetDirectoryName(fullTarget)!, legacyNameCandidate);
+                if (!Directory.Exists(legacy)) continue;
+                Directory.Move(legacy, fullTarget);
+                Debug.WriteLine($"[openray] migrated data directory {legacy} -> {fullTarget}");
+            }
+            catch (Exception error)
+            {
+                Debug.WriteLine($"[openray] data-directory migration skipped: {error.Message}");
+            }
+        }
+    }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        MigrateLegacyDataDirectories();
         Log.Write("OnStartup");
 
         // Low-integrity launches (sandboxed terminals, some automation hosts) hand the process a
@@ -90,12 +126,12 @@ private MainWindow? _window;
         // Two instances share one WebView2 user-data folder, and the second always fails with
         // 0x800700AA ("resource in use") — usually a leftover instance that only hid itself.
         // Enforce one instance unless a test explicitly opts out.
-        if (Environment.GetEnvironmentVariable("RAYCAST_MINI_ALLOW_MULTI") != "1")
+        if (Environment.GetEnvironmentVariable("OPENRAY_ALLOW_MULTI") != "1")
         {
             bool createdNew = false;
             try
             {
-                _singleInstanceMutex = new System.Threading.Mutex(true, @"Local\raycast-mini-singleton", out createdNew);
+                _singleInstanceMutex = new System.Threading.Mutex(true, @"Local\openray-singleton", out createdNew);
             }
             catch (System.Threading.AbandonedMutexException)
             {
@@ -124,7 +160,7 @@ private MainWindow? _window;
     {
         try
         {
-            using var client = new System.IO.Pipes.NamedPipeClientStream(".", "raycast-mini-instance-activation", System.IO.Pipes.PipeDirection.Out);
+            using var client = new System.IO.Pipes.NamedPipeClientStream(".", "openray-instance-activation", System.IO.Pipes.PipeDirection.Out);
             client.Connect(1500);
             using var writer = new StreamWriter(client);
             writer.WriteLine("show");
@@ -145,7 +181,7 @@ private MainWindow? _window;
                 try
                 {
                     using var server = new System.IO.Pipes.NamedPipeServerStream(
-                        "raycast-mini-instance-activation",
+                        "openray-instance-activation",
                         System.IO.Pipes.PipeDirection.In,
                         1,
                         System.IO.Pipes.PipeTransmissionMode.Byte,
@@ -191,7 +227,7 @@ private MainWindow? _window;
         catch (Exception error)
         {
             Log.Write($"startup failed: {error}");
-            MessageBox.Show($"Raycast Mini failed to start:\n{error.Message}", "Raycast Mini",
+            MessageBox.Show($"Openray failed to start:\n{error.Message}", "Openray",
                 MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
         }
@@ -208,7 +244,7 @@ private MainWindow? _window;
         Log.Write($"pipe name: {PipeName}");
 
         // <build>/host/bin/<config>/<tfm>/ -> four levels up lands on <build>/.
-        var repoRoot = Environment.GetEnvironmentVariable("RAYCAST_MINI_ROOT") ??
+        var repoRoot = Environment.GetEnvironmentVariable("OPENRAY_ROOT") ??
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         Log.Write($"repoRoot={repoRoot} (exists={Directory.Exists(repoRoot)})");
 

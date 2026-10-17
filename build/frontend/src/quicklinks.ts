@@ -181,7 +181,7 @@ export function consumePendingCreateLink(): string | null {
   return value;
 }
 
-const WARN_DELETE_KEY = "raycast-mini:quicklinks-warn-delete";
+const WARN_DELETE_KEY = "openray:quicklinks-warn-delete";
 
 export function warnBeforeDelete(): boolean {
   try {

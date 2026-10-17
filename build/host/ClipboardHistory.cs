@@ -15,7 +15,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public static class ClipboardHistory
 {

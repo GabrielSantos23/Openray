@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { RaycastIcon } from "../icons";
+import { OpenrayIcon } from "../icons";
 
 export interface SelectOption {
   value: string;
@@ -158,12 +158,12 @@ export function Select({
       >
         {leadingIcon ? (
           <span className="settings-select__leadingIcon">
-            <RaycastIcon name={leadingIcon} size={12} />
+            <OpenrayIcon name={leadingIcon} size={12} />
           </span>
         ) : null}
         <span className="settings-select__label">{current?.label ?? value}</span>
         <span className="settings-select__indicator">
-          <RaycastIcon name="chevron-right" size={10} />
+          <OpenrayIcon name="chevron-right" size={10} />
         </span>
       </button>
       {open && popupRect
@@ -198,9 +198,9 @@ export function Select({
                         onClick={() => commit(option.value)}
                       >
                         <span className="settings-menu__check">
-                          <RaycastIcon name="Checkmark" size={12} />
+                          <OpenrayIcon name="Checkmark" size={12} />
                         </span>
-                        {option.icon ? <RaycastIcon name={option.icon} size={14} /> : null}
+                        {option.icon ? <OpenrayIcon name={option.icon} size={14} /> : null}
                         <span>{option.label}</span>
                         {option.accessory ? <span className="settings-menu__accessory">{option.accessory}</span> : null}
                       </button>
@@ -273,9 +273,9 @@ export function Checkbox({
       />
       <span className="settings-checkbox__mark">
         {indeterminate ? (
-          <RaycastIcon name="Minus" size={10} />
+          <OpenrayIcon name="Minus" size={10} />
         ) : checked ? (
-          <RaycastIcon name="Checkmark" size={10} />
+          <OpenrayIcon name="Checkmark" size={10} />
         ) : null}
       </span>
     </span>
@@ -529,7 +529,7 @@ export function HotkeyRecorder({
                 onChange("");
               }}
             >
-              <RaycastIcon name="XMark" size={9} />
+              <OpenrayIcon name="XMark" size={9} />
             </span>
           </>
         ) : (
@@ -634,7 +634,7 @@ export function SearchField({
   return (
     <span className="settings-searchField">
       <span className="settings-searchField__icon">
-        <RaycastIcon name="magnifying-glass" size={14} />
+        <OpenrayIcon name="magnifying-glass" size={14} />
       </span>
       <input
         className="settings-searchField__input"
@@ -651,7 +651,7 @@ export function SearchField({
       />
       {value ? (
         <button type="button" className="settings-searchField__clear" aria-label="Clear" onClick={() => onChange("")}>
-          <RaycastIcon name="XMark" size={10} />
+          <OpenrayIcon name="XMark" size={10} />
         </button>
       ) : null}
     </span>
@@ -674,7 +674,7 @@ export function IconButton({
 }) {
   return (
     <button type="button" className="settings-iconButton" title={title} aria-label={title} disabled={disabled} onClick={onClick}>
-      <RaycastIcon name={icon} size={size} />
+      <OpenrayIcon name={icon} size={size} />
     </button>
   );
 }

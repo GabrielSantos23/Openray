@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionPanel, type ActionGroup } from "../../ActionPanel";
 import { ipc } from "../../ipc";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import {
   CLIPBOARD_TYPE_FILTERS,
   clipboardActionGroups,
@@ -320,7 +320,7 @@ export function ClipboardHistoryView({
           data-state={filterOpen ? "open" : "closed"}
           onClick={() => setFilterOpen((open) => !open)}
         >
-          <RaycastIcon name={activeFilter?.icon ?? "bullet-points"} size={15} />
+          <OpenrayIcon name={activeFilter?.icon ?? "bullet-points"} size={15} />
           <span className="clipboard-filter-button__label">{activeFilter?.label ?? "All Types"}</span>
         </button>
 
@@ -382,7 +382,7 @@ export function ClipboardHistoryView({
                             }}
                           >
                             <span className="icon" aria-hidden>
-                              <RaycastIcon name={iconForEntry(entry)} size={16} />
+                              <OpenrayIcon name={iconForEntry(entry)} size={16} />
                             </span>
                             <span className="list__text">
                               <span className="list__title">{entry.title}</span>
@@ -405,7 +405,7 @@ export function ClipboardHistoryView({
                               ) : null}
                               {entry.pinned !== undefined ? (
                                 <span className="list__favorite" title="Pinned">
-                                  <RaycastIcon name="tack" size={13} />
+                                  <OpenrayIcon name="tack" size={13} />
                                 </span>
                               ) : null}
                               {entry.copyCount > 1 ? <span className="pill">{entry.copyCount}×</span> : null}
@@ -435,7 +435,7 @@ export function ClipboardHistoryView({
             setVersion((value) => value + 1);
           }}
         >
-          <RaycastIcon name="arrow-clockwise" size={16} />
+          <OpenrayIcon name="arrow-clockwise" size={16} />
         </button>
         <span className="footer__spacer" />
         <button
@@ -957,7 +957,7 @@ function ClipboardDetailPane({ preview }: { preview: ClipboardPreview | null }) 
         <div className="clipboard-detail__preview clipboard-detail__preview--files">
           {preview.items?.flatMap((item) => item.paths).map((file) => (
             <div key={file.path} className="clipboard-detail__file">
-              <RaycastIcon name="blank-document" size={13} />
+              <OpenrayIcon name="blank-document" size={13} />
               <span className="clipboard-detail__filePath">{file.path}</span>
             </div>
           ))}
@@ -966,7 +966,7 @@ function ClipboardDetailPane({ preview }: { preview: ClipboardPreview | null }) 
         <div className="clipboard-detail__preview clipboard-detail__preview--files">
           {preview.paths.map((file) => (
             <div key={file.path} className="clipboard-detail__file">
-              <RaycastIcon name="blank-document" size={13} />
+              <OpenrayIcon name="blank-document" size={13} />
               <span className="clipboard-detail__filePath">{file.path}</span>
             </div>
           ))}

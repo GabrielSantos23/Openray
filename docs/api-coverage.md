@@ -1,6 +1,6 @@
 > **ARCHIVED (FlowKey migration M2, 2026-10-14):** the Raycast Store was removed; extensions come from the FlowKey library (see flowkey-migration-plan.md). Kept for reference.
 
-# @raycast/api coverage in RaycastMini
+# @raycast/api coverage in Openray
 
 Source of truth: official `@raycast/api@2.7.3` npm package, `types/index.d.ts` (9,712 lines) — the complete public surface. The `llms-api.txt` / `llms-utils.txt` files referenced in the task no longer exist upstream (the `gh-pages` branch is gone; raw URLs 404 as of 2026-10-11), so the type definitions are the API-docs source used. Statuses reflect Phase 2 (Store) completion, 2026-10-13.
 
@@ -42,7 +42,7 @@ Statuses:
 | `Form` (+ all 9 field kinds, `Form.Dropdown.Item/Section`) | supported | Error validation extension-side, submit values map (command-ux-spec §forms). |
 | `getApplications` | supported | C# Applications.cs scan. |
 | `getDefaultApplication` | missing | No host route exists; throws `UnsupportedApiError` (decided Phase 2 — a fabricated answer would violate the no-fake-data policy). |
-| `getFrontmostApplication` | missing | The old stub returned a fake "Raycast Mini" application; removed in Phase 2, throws `UnsupportedApiError`. |
+| `getFrontmostApplication` | missing | The old stub returned a fake "Openray" application; removed in Phase 2, throws `UnsupportedApiError`. |
 | `getPreferenceValues` | supported | Flattened preferences (`value ?? default`, the real `pne()` semantics) captured from the launch session; values come from the store's per-command preference storage, edited in Settings → Extension Preferences. |
 | `getSelectedFinderItems` | missing | Windows has no Finder; throws `UnsupportedApiError`. |
 | `getSelectedText` | missing | The old host stub returned null; removed in Phase 2, throws `UnsupportedApiError` (the synthetic-clipboard route was rejected as fragile — plan §4.4). |

@@ -12,7 +12,7 @@ interface MiniErrors {
   errors: string[];
 }
 const errors: MiniErrors = { errors: [] };
-(window as unknown as { __raycastMiniErrors: MiniErrors }).__raycastMiniErrors = errors;
+(window as unknown as { __openrayErrors: MiniErrors }).__openrayErrors = errors;
 window.addEventListener("error", (event) => {
   errors.errors.push(`error: ${event.message}`);
 });

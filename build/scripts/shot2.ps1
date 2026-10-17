@@ -17,8 +17,8 @@ public class WEnum {
 '@
 Add-Type -TypeDefinition $src -Language CSharp
 Add-Type -AssemblyName System.Drawing
-$ids = @(Get-Process RaycastMini -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-if (-not $ids) { Write-Error "no RaycastMini process"; exit 1 }
+$ids = @(Get-Process Openray -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+if (-not $ids) { Write-Error "no Openray process"; exit 1 }
 $script:hits = New-Object System.Collections.ArrayList
 $action = {
   param($h)
@@ -40,7 +40,7 @@ foreach ($w in $script:hits) {
   "hwnd=$($w.H) vis=$($w.Vis) rect=$($w.R.L),$($w.R.T) size=$($w.R.R - $w.R.L)x$($w.R.B - $w.R.T) title='$($w.Title)'"
 }
 # Pick the largest visible window; else the largest at all.
-$candidate = $script:hits | Where-Object { $_.Title -eq "Raycast Mini" } | Sort-Object { ($_.R.R - $_.R.L) * ($_.R.B - $_.R.T) } -Descending | Select-Object -First 1
+$candidate = $script:hits | Where-Object { $_.Title -eq "Openray" } | Sort-Object { ($_.R.R - $_.R.L) * ($_.R.B - $_.R.T) } -Descending | Select-Object -First 1
 if (-not $candidate) { $candidate = $script:hits | Sort-Object { ($_.R.R - $_.R.L) * ($_.R.B - $_.R.T) } -Descending | Select-Object -First 1 }
 if (-not $candidate) { Write-Error "no window found"; exit 1 }
 "capturing hwnd=$($candidate.H)"

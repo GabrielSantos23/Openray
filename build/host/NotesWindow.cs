@@ -26,7 +26,7 @@ using System.Windows.Interop;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public sealed class NotesWindow : Window
 {

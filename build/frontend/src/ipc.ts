@@ -53,7 +53,7 @@ const diagnostics: MiniDiag = {
   requests: [],
 };
 
-(window as unknown as { __raycastMiniDiag: MiniDiag }).__raycastMiniDiag = diagnostics;
+(window as unknown as { __openrayDiag: MiniDiag }).__openrayDiag = diagnostics;
 
 function chromeBridge(): { webview?: { hostObjects?: { ipc?: { postMessage?: unknown } } } } | undefined {
   return (window as unknown as { chrome?: { webview?: { hostObjects?: { ipc?: { postMessage?: unknown } } } } })
@@ -114,7 +114,7 @@ export async function ipcRequest<T = unknown>(
   const ipcHostObject = chromeBridge()?.webview?.hostObjects?.ipc;
   if (!ipcHostObject) {
     diagnostics.requests.push({ method, ok: false, detail: "no host object" });
-    throw new Error("Raycast Mini host objects are unavailable (is the page served over the mapped virtual host?)");
+    throw new Error("Openray host objects are unavailable (is the page served over the mapped virtual host?)");
   }
 
   const chrome = chromeBridge()!;
@@ -184,7 +184,7 @@ export const ipc = {
 };
 
 /**
- * Ask the launcher to hide its window (Raycast's `extensionHost.closeMainRaycastWindow`). Routed to
+ * Ask the launcher to hide its window (Raycast's `extensionHost.closeMainOpenrayWindow`). Routed to
  * the native host (`module: "frontend"`), which owns the WPF window.
  */
 export function closeMainWindow(): void {

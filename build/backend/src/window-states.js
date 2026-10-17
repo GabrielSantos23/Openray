@@ -9,8 +9,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 
-const STATES_DB = process.env.RAYCASTMINI_WINDOW_STATES_DB
-  || path.join(process.env.LOCALAPPDATA, "RaycastMini", "window-states.sqlite");
+const STATES_DB = process.env.OPENRAY_WINDOW_STATES_DB
+  || path.join(process.env.LOCALAPPDATA, "Openray", "window-states.sqlite");
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS window_states (

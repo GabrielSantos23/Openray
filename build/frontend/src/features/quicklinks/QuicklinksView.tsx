@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionPanel, type ActionGroup } from "../../ActionPanel";
 import { ipc } from "../../ipc";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { rankEntries } from "../../matching";
 import type { ApplicationCommand } from "../../applications";
 import { CommandFooter, CommandTile, type InternalArea } from "../../commandChrome";
@@ -81,7 +81,7 @@ function quicklinkIcon(entry: QuicklinkEntry, size = 16): JSX.Element {
   if (entry.icon && ICON_CHOICES.includes(entry.icon)) {
     return (
       <span className="icon" aria-hidden>
-        <RaycastIcon name={entry.icon} size={size} />
+        <OpenrayIcon name={entry.icon} size={size} />
       </span>
     );
   }
@@ -587,7 +587,7 @@ function SearchQuicklinks({
                               {entry.args.length > 0 ? <span className="pill">{entry.args.length} args</span> : null}
                               {entry.pinned !== null ? (
                                 <span className="list__favorite" title="Pinned">
-                                  <RaycastIcon name="tack" size={13} />
+                                  <OpenrayIcon name="tack" size={13} />
                                 </span>
                               ) : null}
                             </span>
@@ -761,7 +761,7 @@ function SearchQuicklinks({
                 onClick={async () => {
                   const entry = confirmingDelete;
                   setConfirmingDelete(null);
-                  localStorage.setItem("raycast-mini:quicklinks-warn-delete", rememberDelete ? "1" : "0");
+                  localStorage.setItem("openray:quicklinks-warn-delete", rememberDelete ? "1" : "0");
                   await runDelete(entry);
                 }}
               >
@@ -892,7 +892,7 @@ function OpenWithPicker({
         {display?.payload.icon ? (
           <img className="openwith__icon" src={display.payload.icon} alt="" />
         ) : (
-          <RaycastIcon name="app-window-list" size={14} />
+          <OpenrayIcon name="app-window-list" size={14} />
         )}
         <span className="openwith__name">{display?.payload.name ?? "System Default"}</span>
         <svg className="openwith__chevron" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden>
@@ -1105,7 +1105,7 @@ function CreateQuicklinkForm({
           type="button"
           tabIndex={-1}
           className="command-guide-link"
-          onClick={() => void ipc.backend("shell.openUrl", { url: "https://github.com/GabrielSantos23/RaycastMini#readme" }, { module: "backend" })}
+          onClick={() => void ipc.backend("shell.openUrl", { url: "https://github.com/GabrielSantos23/Openray#readme" }, { module: "backend" })}
         >
           Quicklinks Guide
         </button>
@@ -1155,10 +1155,10 @@ function CreateQuicklinkForm({
                     </svg>
                   </button>
                   <button type="button" tabIndex={-1} className="icon icon--plain" title="Insert a file path" onClick={() => void insertPath("file")}>
-                    <RaycastIcon name="file" size={14} />
+                    <OpenrayIcon name="file" size={14} />
                   </button>
                   <button type="button" tabIndex={-1} className="icon icon--plain" title="Insert a folder path" onClick={() => void insertPath("folder")}>
-                    <RaycastIcon name="folder" size={14} />
+                    <OpenrayIcon name="folder" size={14} />
                   </button>
                 </div>
               </div>

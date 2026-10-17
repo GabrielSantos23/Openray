@@ -1,7 +1,7 @@
 // The Settings sidebar: search field with page/row search results and the navigation links.
 
 import { useState } from "react";
-import { RaycastIcon } from "../icons";
+import { OpenrayIcon } from "../icons";
 import { ACCOUNT_PAGE_ID, PAGES, SIDEBAR_PAGE_IDS, type PageDefinition } from "./pages";
 
 export function SearchField({
@@ -19,7 +19,7 @@ export function SearchField({
   return (
     <div className="settings-input" data-state={focused ? "focus" : "blur"}>
       <span className="settings-input__icon">
-        <RaycastIcon name="magnifying-glass" size={15} />
+        <OpenrayIcon name="magnifying-glass" size={15} />
       </span>
       <input
         className="settings-input__input"
@@ -98,7 +98,7 @@ export function SidebarLink({
       }}
     >
       <span className="settings-navlink__icon">
-        <RaycastIcon name={page?.icon ?? "cog"} size={16} />
+        <OpenrayIcon name={page?.icon ?? "cog"} size={16} />
       </span>
       <span className="settings-navlink__label">{title}</span>
     </a>

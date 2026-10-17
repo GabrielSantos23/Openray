@@ -1,4 +1,4 @@
-# RaycastMini Settings — Design Spec
+# Openray Settings — Design Spec
 
 Source of truth: five screenshots of Raycast for Windows 2.4.0 (attached to the task) +
 REA of the installed app. REA artifacts live in `C:\Users\gabs\.t3\scratch\rea-settings\`:
@@ -24,14 +24,14 @@ and remain accepted deviations.
   settings `liga, calt, kern, ss03`. Windows header text uses `Segoe UI Variable` first.
 - All screenshots were captured at **100% DPI** (titlebar measures exactly 40px, sidebar 232px
   with border, row 46–47px), so image px = CSS px. Window size in the captures: 1371×756
-  (user-resized; Raycast's settings window is freely resizable — RaycastMini will use default
+  (user-resized; Raycast's settings window is freely resizable — Openray will use default
   1200×760, min 720×480, and the comparison captures resize to 1371×756).
 
 ## 1. Design tokens (from `css-FlvQZ5S4.css` + rendered screenshots)
 
 Raycast's system is: opaque base colors + white overlay ramps. The rendered hexes below were
 sampled from the clean General screenshot and match the token math exactly (e.g. section card =
-fg 2.5% over #1F1F1F = #242424). RaycastMini defines the computed hexes as the token values.
+fg 2.5% over #1F1F1F = #242424). Openray defines the computed hexes as the token values.
 
 ### 1.1 Surfaces and text
 
@@ -119,8 +119,8 @@ openable directly to `#/general`, `#/shortcuts`, `#/general?row=open-at-login` e
 panel "Configure" commands land on the right row (row deep-link scrolls and pulses
 `selection-5` for 2s — Raycast's `data-highlight` behavior).
 
-Pro badges on: Cloud Sync, AI, Dictation (screenshot 1). Pro pages in RaycastMini render the same
-rows disabled with the "Not available in RaycastMini" hint.
+Pro badges on: Cloud Sync, AI, Dictation (screenshot 1). Pro pages in Openray render the same
+rows disabled with the "Not available in Openray" hint.
 
 ## 3. Window chrome
 
@@ -136,7 +136,7 @@ rows disabled with the "Not available in RaycastMini" hint.
 ## 4. Page catalog and behavior
 
 Store: one settings store (`settings` module in the Node backend, JSON at
-`%LOCALAPPDATA%\RaycastMini\store\settings.json`) replaces Raycast's `raycastSettingsStore` +
+`%LOCALAPPDATA%\Openray\store\settings.json`) replaces Raycast's `raycastSettingsStore` +
 `updateGeneralSettings` backend payload + encrypted DB. Every key below lives there; the store
 emits change events so **both windows update live** (Raycast: `subscribeUpdate*` host pushes —
 same contract). Renderer caches are dropped in favor of store reads.
@@ -158,7 +158,7 @@ Section 1 (untitled):
   instead of the Start Menu. You'll still be able to open the Start Menu from the taskbar.";
   sets hotkey back to Win] [hotkey recorder showing current keycaps — screenshot shows "Alt
   Space"] [reset icon button, tooltip "Reset to default hotkey"]. Default global hotkey: **Win
-  key alone** (`Meta`). RaycastMini's default stays its own current default (documented as
+  key alone** (`Meta`). Openray's default stays its own current default (documented as
   accepted deviation: Win-key interception is out of scope; default `Alt+Space`, recorder +
   conflict handling + registration failure toasts are real).
 
@@ -170,7 +170,7 @@ Section "Appearance":
   light: Raycast Light, Dawn, Overcast, Noon), each with its theme icon. **Default Raycast
   Dark / Raycast Light.** Themes apply live (CSS variables swap) in both windows.
 - `theme-studio` — "Theme Studio" + description "Edit or create themes for Raycast", button
-  "Upgrade to Pro". **Not available in RaycastMini** (disabled button + hint).
+  "Upgrade to Pro". **Not available in Openray** (disabled button + hint).
 - `interface-size` — "Interface Size" + "Adjust the size of the Raycast interface"; three `Aa`
   icon radio buttons (Aa sizes ≈10/13/17px) mapping to zoom **1 / 1.1 / 1.2**, labels
   Default/Large/Larger. Applies live by setting `--zoom` on the root of both windows.
@@ -188,7 +188,7 @@ Description: "Configure content shown in root search." Sections: Behavior, Custo
 Fallback Commands.
 
 Behavior:
-- `show-raycast-on` — "Show Raycast on" ghost dropdown: `mouse-screen` "Screen containing
+- `show-openray-on` — "Show Raycast on" ghost dropdown: `mouse-screen` "Screen containing
   mouse" / `active-screen` "Screen with active window" / `primary-screen` "Primary screen".
   **Default `mouse-screen`** (screenshot shows default).
 - `pop-to-root-search` — description "Timeout after which Raycast will reset to root search
@@ -224,7 +224,7 @@ Fallback Commands (drag-reorder list, not the current textarea):
 - Empty state: "No Fallback Commands" (11px quaternary, centered, 16px padding-block).
 - Persistence: per-extension `enabledFallbackCommandIds` + per-command `fallbackOrder` (index;
   null when removed).
-- RaycastMini mapping: fallback-capable commands = web-search-ish commands (Google/DuckDuckGo
+- Openray mapping: fallback-capable commands = web-search-ish commands (Google/DuckDuckGo
   from web-search data, Search Snippets, Store, Spotify Search, etc. — all root-search commands
   flagged fallback-capable); same picker/reorder/remove UI, same storage keys in the settings
   store. Replaces the current `fallback-commands-list` textarea + `fallback-commands-enabled`
@@ -261,13 +261,13 @@ with tooltip "Also assigned to <command name>" when conflicting. Checkbox toggle
 command's `enabled`. Search filters by title+alias (match-sorter). Rows virtualized (46px
 estimate, overscan 10). Empty state: "No results".
 
-RaycastMini mapping: Applications = the app index (per-app alias/hotkey/enabled already used by
+Openray mapping: Applications = the app index (per-app alias/hotkey/enabled already used by
 root search — the backend app store gains alias/hotkey/enabled fields); Extensions = installed
 extensions and their commands (alias/hotkey/enabled per command — replaces the current
 ExtensionPreferences page; that page's per-command preference fields move to a detail view);
 Quicklinks/Games/System/Windows Settings render what exists (Quicklinks commands exist; Games
-commands exist; System actions = RaycastMini's system commands; Windows Settings rows render
-disabled "Not available in RaycastMini").
+commands exist; System actions = Openray's system commands; Windows Settings rows render
+disabled "Not available in Openray").
 
 Hotkey recorder popover (shared component; used by Raycast Hotkey, Clipboard History hotkey,
 Shortcuts rows) — `(reconstructed from code)`:
@@ -303,7 +303,7 @@ Section "Keyboard":
 - `auto-switch-input-source` — "Auto-switch Input Source" + "Automatically switch to the
   selected keyboard input source when opening Raycast. The previous input source will be
   restored when closing." Options: "None" + system keyboard layouts (loaded async; disabled
-  while loading/empty). Store key `enforcedInputSourceId`. **Not available in RaycastMini**
+  while loading/empty). Store key `enforcedInputSourceId`. **Not available in Openray**
   (disabled "None" + hint).
 - `navigation-bindings` — "Key bindings for quick navigation in supported controls." Options:
   `emacs` "Emacs (Alt+B, Alt+F, Alt+P, Alt+N)" / `vim-motions` "Vim Motions (Alt+H, Alt+L,
@@ -318,7 +318,7 @@ Section "Keyboard":
   dropdown appears (options "Does Nothing" / "Trigger <label>") and the row description reads
   "Pressing <label> will trigger the left Ctrl+Alt+Shift+Win modifier keys." + "Hyper Key
   shortcuts will be shown in Raycast with ✦."; failure state "Hyper Key failed to start." /
-  "Hyper Key unavailable" ("An app is using Secure Input"). **Not available in RaycastMini** —
+  "Hyper Key unavailable" ("An app is using Secure Input"). **Not available in Openray** —
   row + dependent rows render disabled with hint.
 - `hyper-key-include-shift` — "Include Shift (⇧)" switch, default true, disabled when Copilot is
   selected. `(reconstructed: hidden until Hyper Key set — Raycast hides it while key is None)`.
@@ -333,12 +333,12 @@ Description: "Tune advanced behavior, exporting, and connectivity." Sections in 
   disable favicon fetching." Options: none "None", duckduckgo "DuckDuckGo", google "Google",
   raycast "Raycast" (with "Default" accessory). Default `raycast`. (The chunk also defines
   "Window Activation Behavior" and "Tidy Menu Bar" rows, but both are macOS-gated / not rendered
-  by the Windows view — RaycastMini renders neither.) RaycastMini: stored value wired to the
+  by the Windows view — Openray renders neither.) Openray: stored value wired to the
   favicon fetcher if one exists; otherwise disabled + hint.
 - Section "File Explorer" (Windows): "Open Folders in Tabs" — "Open folders as new tabs in an
   existing File Explorer window instead of opening new windows." Default false. Switch also
-  calls host `openFoldersInTabs({enabled})`. **RaycastMini: disabled + hint** (opening a folder
-  as a tab of an existing Explorer window needs COM IShellWindows automation RaycastMini's host
+  calls host `openFoldersInTabs({enabled})`. **Openray: disabled + hint** (opening a folder
+  as a tab of an existing Explorer window needs COM IShellWindows automation Openray's host
   does not have; there is no explorer.exe CLI flag for tabs — the earlier `/existing` note was
   wrong).
 - Section "Accessibility" (Windows): "Run the Accessibility Helper Elevated" — "Turn this on if
@@ -346,7 +346,7 @@ Description: "Tune advanced behavior, exporting, and connectivity." Sections in 
   Raycast then launches its input helper with administrator rights via the Raycast System
   Service. Requires an administrator account — on standard Windows accounts this has no effect,
   since Windows can't grant elevation without a password prompt. Takes effect after you restart
-  Raycast." (error-state descriptions exist for service-down / standard-account). **RaycastMini:
+  Raycast." (error-state descriptions exist for service-down / standard-account). **Openray:
   disabled + hint** (no System Service).
 - Section "Export" (non-Pro view; pro view swaps the second row for Scheduled Backup/Location/
   Auto-Delete): "Export Passphrase" — small password input (max-width 180) with eye/eye-disabled
@@ -354,10 +354,10 @@ Description: "Tune advanced behavior, exporting, and connectivity." Sections in 
   validation: empty or ≥8 chars, else description becomes red "Passphrase must be at least 8
   characters long."; persisted on blur (Raycast: userDefaults `ExportSettingsDataPassphrase`).
   Then "Scheduled Export" — "Automatically back up your settings and data with Raycast Pro" with
-  a standout "Upgrade to Pro" button. **RaycastMini**: passphrase is real (used to AES-encrypt
+  a standout "Upgrade to Pro" button. **Openray**: passphrase is real (used to AES-encrypt
   the Export Settings file); "Scheduled Export" keeps the layout with the standout button
-  disabled + "Not available in RaycastMini" hint (no Pro tier). The real **Export Settings /
-  Import Settings pair** Raycast ships as commands: RaycastMini puts two working rows here —
+  disabled + "Not available in Openray" hint (no Pro tier). The real **Export Settings /
+  Import Settings pair** Raycast ships as commands: Openray puts two working rows here —
   "Export Settings" writes a versioned JSON (settings store + aliases/hotkeys + extension
   settings, encrypted when a passphrase is set) through a Save dialog; "Import Settings" reads it
   back, validates, applies live and toasts success/failure. (Raycast's import/export is a
@@ -374,13 +374,13 @@ Description: "Tune advanced behavior, exporting, and connectivity." Sections in 
 Description: "Check for updates, view links, and open feedback destinations." Rows: "Raycast
 Updates" (action "Check for Updates", value = version — real: opens the releases check),
 "Open Changelog", "Website", "Slack Community", "Send Feedback" — same as current implementation
-with RaycastMini's links.
+with Openray's links.
 
 ### 4.7 Cloud Sync / Organizations / Account
 
 Cloud Sync (Pro badge): rows "Cloud Sync" (switch), "Synced Devices", "Synced Content" — all
-disabled + "Not available in RaycastMini". Organizations: empty-state text. Account: kept as the
-sidebar-top account block (avatar/name/"Account") — non-navigating in RaycastMini (signed-out
+disabled + "Not available in Openray". Organizations: empty-state text. Account: kept as the
+sidebar-top account block (avatar/name/"Account") — non-navigating in Openray (signed-out
 state), row content omitted (Raycast's account page is auth-bound). `(reconstructed)`
 
 ### 4.8 Extension pages (group 2 of the sidebar) — layout confirmed by screenshot 5 (Spotify Player)
@@ -400,7 +400,7 @@ alias input). Extension disabled → whole content 50% opacity, pointer-events n
 - **Applications** (description "Quickly launch your installed applications."): rows "Auto Quit"
   (navigates to sub-page; description "Automatically quit apps shortly after you stop using
   them.") **N/A**, "Hotkey Action" dropdown Toggle Visibility/Always Show ("Behavior when
-  triggering an application hotkey." — default `toggle`, real for RaycastMini app hotkeys),
+  triggering an application hotkey." — default `toggle`, real for Openray app hotkeys),
   "Search Scopes" (plus button opens folder dialog; list of default + user scopes with
   plus/minus toggles — maps onto File Search scopes), "Deep Search" switch Windows-only
   ("Search up to 3 levels deep inside added directories") — maps to File Search's index depth
@@ -413,20 +413,20 @@ alias input). Extension disabled → whole content 50% opacity, pointer-events n
   stores unchanged (these were verified working in prior sessions).
 - **AI, Browser, Calendar, Contacts, Developer, Dictation, Emoji & Symbols, Remote, Screenshots,
   Script Commands, Windows Run, Windows Settings, Internal**: intro block + rows/empty state
-  rendered disabled with the "Not available in RaycastMini" hint (task item 3). Pro badge on AI
+  rendered disabled with the "Not available in Openray" hint (task item 3). Pro badge on AI
   and Dictation.
 
 ## 5. Live update contract
 
 Raycast: the settings window writes the store optimistically, persists to localStorage + backend,
 fans out per-key host IPC, and every other window subscribes to `subscribeUpdate<Key>` pushes.
-RaycastMini equivalent:
+Openray equivalent:
 
 1. `settings.set(patch)` in the Node store: validates, merges, persists JSON, then broadcasts
    `settings.changed {keys}` on the existing NDJSON pipe to both windows.
 2. Launcher subscribes: appearance/theme → re-render tokens; uiZoom → `--zoom`; windowMode →
    compact/expanded window sizing; popToRootTimeout → close timer; rootSearchSensitivity →
-   matcher; show-raycast-on → window placement; raycast-hotkey → host re-register; escape keys →
+   matcher; show-openray-on → window placement; raycast-hotkey → host re-register; escape keys →
    Escape handler; fallback commands → root search fallback list; shortcuts aliases/hotkeys →
    command catalog; clipboard/snippets/etc. → their existing store paths.
 3. Settings window subscribes to the same event (e.g. launcher edits a hotkey) and re-reads.
@@ -449,10 +449,10 @@ extension detail view (confirmed by screenshot: intro + Show More expander + ena
    `(reconstructed)` from code; layout follows the same row/section system so only those states
    can drift. (Extensions detail, Advanced and the selected-extension state were confirmed by
    screenshots 5 and 6; markers removed.)
-2. **Raycast Hotkey default**: Raycast default is the Win key; RaycastMini keeps `Alt+Space`
-   (Win-key interception needs a low-level keyboard hook that RaycastMini's host does not have).
+2. **Raycast Hotkey default**: Raycast default is the Win key; Openray keeps `Alt+Space`
+   (Win-key interception needs a low-level keyboard hook that Openray's host does not have).
    Recorder, conflict flow, reset button and Replace-Start-Menu-style row are otherwise real
-   (RaycastMini shows no start-menu row; documented in §4.1).
+   (Openray shows no start-menu row; documented in §4.1).
 3. **Import/Export settings** as Advanced rows instead of Raycast's standalone commands
    (task item 4 asked for it to work for real; placement differs).
 4. **Theme Studio**, **Auto-Quit**, **Deep Search (3-level)** — features absent; rows disabled.

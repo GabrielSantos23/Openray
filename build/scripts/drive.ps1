@@ -12,7 +12,7 @@ param(
     [int]$ProcessId = 0
 )
 
-# Drives the RaycastMini launcher for end-to-end checks:
+# Drives the Openray launcher for end-to-end checks:
 #   -Hotkey              send the global hotkey (Ctrl+Alt+Space) to toggle the launcher
 #   -Type "text"         type literal text into the focused field (SendKeys)
 #   -Keys "enter,esc,down,ctrl+k,shift+esc,ctrl+["  send special keys, comma separated
@@ -40,8 +40,8 @@ public struct RECT { public int Left; public int Top; public int Right; public i
 '@
 $t = @(Add-Type -MemberDefinition $sig -Name "Drv" -Namespace DrvNs -PassThru) | Where-Object { $_.Name -eq "Drv" } | Select-Object -First 1
 
-$ids = if ($ProcessId -gt 0) { @($ProcessId) } else { @(Get-Process RaycastMini -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }) }
-if ($ids.Count -eq 0) { Write-Error "RaycastMini process not found"; exit 1 }
+$ids = if ($ProcessId -gt 0) { @($ProcessId) } else { @(Get-Process Openray -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }) }
+if ($ids.Count -eq 0) { Write-Error "Openray process not found"; exit 1 }
 
 $global:hits = New-Object System.Collections.ArrayList
 $cb = [DrvNs.Drv+EnumWindowsProc] {

@@ -109,7 +109,7 @@ export async function importStoreExtension(): Promise<string | null> {
 
 /** An installed FlowKey extension's command, launched through the root-search session path. */
 export function launchStoreCommand(uuid: string, commandName: string): void {
-  window.dispatchEvent(new CustomEvent("raycast-mini:launch-extension-command", { detail: { uuid, command: commandName } }));
+  window.dispatchEvent(new CustomEvent("openray:launch-extension-command", { detail: { uuid, command: commandName } }));
 }
 
 // Session-level icon cache: one backend round trip per extension per window.

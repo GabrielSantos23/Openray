@@ -208,7 +208,7 @@ export function buildSections(
   for (const extension of extensions) {
     for (const command of extension.commands ?? []) {
       // Dev-only test extensions stay hidden unless the flag is on: localStorage
-      // `raycast-mini:dev-extensions=1`, or the host's `--dev-extensions` / env equivalent.
+      // `openray:dev-extensions=1`, or the host's `--dev-extensions` / env equivalent.
       if (extension.name === "command-ux-test" && !isDevExtensionsEnabled()) continue;
       if (isShortcutDisabled(commandFavoriteKey(extension.uuid, command.name))) continue;
       const entry: ExtensionEntry = { kind: "extension", extension, command };

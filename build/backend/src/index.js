@@ -1,4 +1,4 @@
-// Raycast Mini — Node extension host.
+// Openray — Node extension host.
 //
 // This is the Node half of Raycast's architecture: `Raycast.exe` spawns `backend/node.exe
 // backend/index.mjs`, which keeps a pool of `worker_threads` workers (one per running extension
@@ -44,18 +44,18 @@ const { createExtensionStore } = require("./store");
 
 const config = {
   // Must match host/NamedPipeBridge.cs
-  pipeName: process.env.RAYCAST_MINI_PIPE ?? "raycast-mini-ipc",
-  frontendRoot: process.env.RAYCAST_MINI_FRONTEND_ROOT ?? path.join(__dirname, "..", "..", "frontend"),
+  pipeName: process.env.OPENRAY_PIPE ?? "openray-ipc",
+  frontendRoot: process.env.OPENRAY_FRONTEND_ROOT ?? path.join(__dirname, "..", "..", "frontend"),
   extensionsRoot:
-    process.env.RAYCAST_MINI_EXTENSIONS_ROOT ??
-    path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini", "extensions"),
+    process.env.OPENRAY_EXTENSIONS_ROOT ??
+    path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray", "extensions"),
 };
 
 const backend = createBackend({
   pipeName: config.pipeName,
   frontendRoot: config.frontendRoot,
   extensionsRoot: config.extensionsRoot,
-  dataRoot: process.env.RAYCAST_MINI_DATA_DIR ?? path.dirname(config.extensionsRoot),
+  dataRoot: process.env.OPENRAY_DATA_DIR ?? path.dirname(config.extensionsRoot),
 });
 
 // `connect()` owns the single pipe reader and answers host requests too, so nothing else has to
@@ -173,7 +173,7 @@ backend.registerSettingsStoreHandler(settingsStore.handlers);
 // AES-GCM passphrase) and the Connection preferences applied to this process at boot.
 const advanced = createAdvanced({
   dispatch: (method, data) => backend.dispatch("backend", method, data),
-  dataRoot: process.env.RAYCAST_MINI_DATA_DIR ?? path.dirname(config.extensionsRoot),
+  dataRoot: process.env.OPENRAY_DATA_DIR ?? path.dirname(config.extensionsRoot),
   settings: {
     getAll: () => settingsStore.getValues(),
     set: (patch) => settingsStore.handlers.set({ values: patch }),
@@ -196,7 +196,7 @@ notes.bootstrap();
 // FlowKey extensions, living under `<dataRoot>/store/`. `store.sync` downloads the catalog in the
 // background; installs of uploaded extensions land in the live extensions root.
 const extensionStore = createExtensionStore({
-  dataRoot: process.env.RAYCAST_MINI_DATA_DIR ?? path.dirname(config.extensionsRoot),
+  dataRoot: process.env.OPENRAY_DATA_DIR ?? path.dirname(config.extensionsRoot),
   extensionsRoot: config.extensionsRoot,
 });
 backend.registerStoreHandler(extensionStore.handlers);
@@ -206,7 +206,7 @@ backend.registerStoreHandler(extensionStore.handlers);
 // backup folder — move, never delete, idempotent, logged (docs/flowkey-migration-plan.md A4).
 try {
   const migration = migrateRemovedStoreArtifacts({
-    dataRoot: process.env.RAYCAST_MINI_DATA_DIR ?? path.dirname(config.extensionsRoot),
+    dataRoot: process.env.OPENRAY_DATA_DIR ?? path.dirname(config.extensionsRoot),
     extensionsRoot: config.extensionsRoot,
   });
   if (migration.moved.length > 0) {

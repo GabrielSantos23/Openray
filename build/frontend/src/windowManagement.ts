@@ -1083,7 +1083,7 @@ export function hotkeyLabel(hotkey: WmHotkey): string {
   return [...modifiers, key].join(" + ");
 }
 
-const HOTKEYS_STORAGE_KEY = "raycast-mini:wm-hotkeys";
+const HOTKEYS_STORAGE_KEY = "openray:wm-hotkeys";
 
 export function readStoredHotkeys(): Record<string, string> {
   try {

@@ -3,7 +3,7 @@
 // search and the Modifications/Categories dropdown.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { RaycastIcon } from "../icons";
+import { OpenrayIcon } from "../icons";
 import { ipc } from "../ipc";
 import { INTERNAL_COMMANDS, INTERNAL_EXTENSION_META, type ExtensionSummary } from "../app/entries";
 import { WM_COMMANDS, wmCommandIcon } from "../windowManagement";
@@ -219,7 +219,7 @@ export function ShortcutsPage() {
               aria-label={collapsed ? "Expand" : "Collapse"}
               onClick={() => setCollapsed((state) => !state)}
             >
-              <RaycastIcon name={collapsed ? "plus" : "minus"} size={10} />
+              <OpenrayIcon name={collapsed ? "plus" : "minus"} size={10} />
             </button>
           </header>
           {!collapsed ? (
@@ -282,7 +282,7 @@ function ShortcutRowView({
     <li className="settings-shortcuts__row" title={lockedReason ?? undefined}>
       <span className="settings-shortcuts__name">
         <span className="settings-shortcuts__icon">
-          {row.iconUrl ? <img src={row.iconUrl} alt="" /> : <RaycastIcon name={row.lucide ?? "app-window-list"} size={14} />}
+          {row.iconUrl ? <img src={row.iconUrl} alt="" /> : <OpenrayIcon name={row.lucide ?? "app-window-list"} size={14} />}
         </span>
         <span className="settings-shortcuts__title">{row.title}</span>
       </span>
@@ -352,7 +352,7 @@ function ShortcutsCategorySelect({ current }: { current: ShortcutCategory }) {
         <CategoryTile category={current} />
         {categoryLabel(current)}
         <span className="settings-shortcuts__categoryChevron">
-          <RaycastIcon name="chevron-down" size={12} />
+          <OpenrayIcon name="chevron-down" size={12} />
         </span>
       </button>
       {open && popupRect
@@ -404,7 +404,7 @@ function CategoryTile({ category }: { category: ShortcutCategory }) {
   }
   return (
     <span className={`settings-shortcuts__catTile settings-shortcuts__catTile--${category.toLowerCase()}`}>
-      <RaycastIcon name={categoryMeta(category).icon} size={12} />
+      <OpenrayIcon name={categoryMeta(category).icon} size={12} />
     </span>
   );
 }
@@ -451,7 +451,7 @@ export function ShortcutsTitlebarActions() {
           aria-label="Search shortcuts"
           onClick={() => setSearchOpen(true)}
         >
-          <RaycastIcon name="magnifying-glass" size={14} />
+          <OpenrayIcon name="magnifying-glass" size={14} />
         </button>
         <input
           ref={searchInputRef}
@@ -483,7 +483,7 @@ export function ShortcutsTitlebarActions() {
       >
         {label}
         <span className="settings-shortcuts__filterChevron">
-          <RaycastIcon name="chevron-down" size={12} />
+          <OpenrayIcon name="chevron-down" size={12} />
         </span>
       </button>
       {open && popupRect
@@ -509,7 +509,7 @@ export function ShortcutsTitlebarActions() {
                   <span className="settings-shortcuts__filterCheck">
                     <input type="checkbox" checked={filter.modifications.has(key)} readOnly tabIndex={-1} />
                   </span>
-                  <RaycastIcon name={icon} size={13} />
+                  <OpenrayIcon name={icon} size={13} />
                   <span>{label_}</span>
                 </button>
               ))}

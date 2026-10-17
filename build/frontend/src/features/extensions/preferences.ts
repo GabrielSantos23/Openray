@@ -6,7 +6,7 @@
 
 import { ipc } from "../../ipc";
 
-const MIRROR_KEY = "raycast-mini:flowkey-preferences";
+const MIRROR_KEY = "openray:flowkey-preferences";
 
 type Values = Record<string, unknown>;
 

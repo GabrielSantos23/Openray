@@ -22,7 +22,7 @@ export const WM_COMMANDS: WmCommandDefinition[] = [
   P("maximize", "Maximize", "Maximize focused window to fit the screen."),
   P("restore", "Restore", "Restore focused window to its last position."),
   P("minimize", "Minimize", "Minimize focused window to the taskbar.", ["hide", "taskbar", "dock"]),
-  P("minimizeOnDisplay", "Minimize on This Display", "Minimize all windows on the display where Raycast is open.", ["show desktop", "minimize all", "hide", "monitor", "screen"]),
+  P("minimizeOnDisplay", "Minimize on This Display", "Minimize all windows on the display where Openray is open.", ["show desktop", "minimize all", "hide", "monitor", "screen"]),
   P("maximizeHeight", "Maximize Height", "Maximize height of focused window to fit the screen."),
   P("maximizeWidth", "Maximize Width", "Maximize width of focused window to fit the screen."),
   P("maximizeAlmost", "Almost Maximize", "Maximize focused window to almost fit the screen."),

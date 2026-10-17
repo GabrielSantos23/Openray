@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { alertStore, type AlertAction, type AlertState } from "./alertStore";
-import { RaycastIcon } from "./icons";
+import { OpenrayIcon } from "./icons";
 
 export function useAlert(): AlertState | null {
   return useSyncExternalStore(
@@ -125,7 +125,7 @@ function AlertHost() {
         <div className="alert__body">
           {alert.icon ? (
             <span className="alert__icon" aria-hidden>
-              <RaycastIcon name="warning" size={20} />
+              <OpenrayIcon name="warning" size={20} />
             </span>
           ) : null}
           <h1 className="alert__title">{alert.title}</h1>

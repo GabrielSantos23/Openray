@@ -83,7 +83,7 @@ export const ROOT_SECTION_ICON_SIZE = 15;
 export const marks: MiniMarks = {
   marks: ["app-module-evaluated", `exported-application-area-keys=${APPLICATION_AREA_KEYS.join(",")}`],
 };
-(window as unknown as { __raycastMiniMarks: MiniMarks }).__raycastMiniMarks = marks;
+(window as unknown as { __openrayMarks: MiniMarks }).__openrayMarks = marks;
 
 /**
  * Raycast's live refresh: the clipboard view subscribes to `clipboard.stateChanged`, which the Node

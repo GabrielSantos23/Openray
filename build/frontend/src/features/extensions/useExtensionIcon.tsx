@@ -4,7 +4,7 @@
 // icons may be files (data URL), lucide names (`iconName`), or emoji (`emoji`).
 
 import { useEffect, useState } from "react";
-import { RaycastIcon } from "../../icons";
+import { OpenrayIcon } from "../../icons";
 import { ipc } from "../../ipc";
 
 export interface ExtensionIconMeta {
@@ -63,5 +63,5 @@ export function ExtensionIcon({ uuid, size = 16 }: { uuid: string; size?: number
       </span>
     );
   }
-  return <RaycastIcon name="Blocks" size={size} />;
+  return <OpenrayIcon name="Blocks" size={size} />;
 }

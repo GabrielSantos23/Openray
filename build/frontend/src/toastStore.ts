@@ -207,9 +207,9 @@ export const toastStore = new ToastStore();
 export const hudStore = new HudStore();
 
 // Harness hook (dev builds only): lets a browser harness drive the stores the way the extension
-// host would, mirroring the `__raycastMiniDiag` diagnostics pattern.
+// host would, mirroring the `__openrayDiag` diagnostics pattern.
 if (import.meta.env?.DEV) {
-  (window as unknown as Record<string, unknown>).__raycastMiniToast = { toastStore, hudStore, styleToVariant };
+  (window as unknown as Record<string, unknown>).__openrayToast = { toastStore, hudStore, styleToVariant };
 }
 
 /** Raycast's `Ane(e)` style -> variant map (`main-window-g1Vb1JLY.js`). */

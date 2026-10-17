@@ -405,7 +405,7 @@ test(
   }),
 );
 
-// image.fetch success path: the extension gets a renderer-loadable URL on the raycastmini-img
+// image.fetch success path: the extension gets a renderer-loadable URL on the openray-img
 // virtual host (the C# main window maps it onto the cache folder), with the bytes cached on disk.
 test("image.fetch returns a virtual-host url for a declared loopback host", async () => {
   const server = http.createServer((_request, response) => {
@@ -414,7 +414,7 @@ test("image.fetch returns a virtual-host url for a declared loopback host", asyn
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const port = server.address().port;
-  process.env.RAYCASTMINI_TEST_IMAGE_URL = `http://127.0.0.1:${port}/icon.png`;
+  process.env.OPENRAY_TEST_IMAGE_URL = `http://127.0.0.1:${port}/icon.png`;
   try {
     await withBackend(async ({ backend, session, vaultItem, rendered, dataRoot }) => {
       await runAction(backend, session, actionByTitle(vaultItem, "Image data uri"));
@@ -430,21 +430,21 @@ test("image.fetch returns a virtual-host url for a declared loopback host", asyn
           const item = (JSON.parse(text).model?.navigationStack?.body ?? null)?.sections
             ?.flatMap((section) => section.items)
             .find((entry) => entry.id === "vault");
-          if (item?.subtitle?.includes("img=https://raycastmini-img/")) {
+          if (item?.subtitle?.includes("img=https://openray-img/")) {
             echo = item.subtitle;
             break outer;
           }
         }
       }
       assert.ok(echo, "vault echoes the fetched image as a virtual-host url");
-      assert.match(echo, /img=https:\/\/raycastmini-img\/[0-9a-f]{40}\.png/);
+      assert.match(echo, /img=https:\/\/openray-img\/[0-9a-f]{40}\.png/);
       const cacheDir = path.join(dataRoot, "oauth", "image-cache");
       const cached = fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir) : [];
       assert.equal(cached.length, 1, "the fetched bytes are cached once under the data dir");
       assert.match(cached[0], /\.png$/);
     })();
   } finally {
-    delete process.env.RAYCASTMINI_TEST_IMAGE_URL;
+    delete process.env.OPENRAY_TEST_IMAGE_URL;
     await new Promise((resolve) => server.close(resolve));
   }
 });

@@ -33,7 +33,7 @@ function validatePatch(patch) {
 }
 
 function createSettingsStore({ dataRoot, toRenderer } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const storePath = path.join(root, "store", "settings.json");
 
   fs.mkdirSync(path.dirname(storePath), { recursive: true });
@@ -44,6 +44,22 @@ function createSettingsStore({ dataRoot, toRenderer } = {}) {
   } catch {
     /* first run keeps an empty map over the renderer defaults */
   }
+
+  // One-time carry-over of row ids renamed in the Openray rebrand; the stored values
+  // (launcher hotkey, launcher screen) must survive the id change.
+  let legacyRenamed = false;
+  for (const [legacyKey, key] of Object.entries({ "raycast-hotkey": "openray-hotkey", "show-raycast-on": "show-openray-on" })) {
+    if (legacyKey in values && !(key in values)) {
+      values[key] = values[legacyKey];
+      legacyRenamed = true;
+    }
+    if (legacyKey in values) {
+      delete values[legacyKey];
+      legacyRenamed = true;
+    }
+  }
+
+  if (legacyRenamed) persist();
 
   function persist() {
     try {

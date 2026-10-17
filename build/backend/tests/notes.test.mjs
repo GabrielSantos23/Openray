@@ -259,7 +259,7 @@ test("bootstrap creates the onboarding note exactly once; purge runs at startup"
     const first = makeNotes(root);
     first.bootstrap();
     assert.equal(first.handlers.count().count, 1);
-    assert.equal(first.handlers.list().notes[0].title, "Welcome to Raycast Notes");
+    assert.equal(first.handlers.list().notes[0].title, "Welcome to Openray Notes");
     first.close();
 
     const second = makeNotes(root);

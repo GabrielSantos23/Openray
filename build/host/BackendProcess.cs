@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public sealed class BackendProcess : IAsyncDisposable
 {
@@ -26,7 +26,7 @@ public sealed class BackendProcess : IAsyncDisposable
         ApiRoot = System.IO.Path.Combine(repoRoot, "api");
         ExtensionsRoot = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RaycastMini",
+            "Openray",
             "extensions");
     }
 
@@ -65,18 +65,18 @@ public sealed class BackendProcess : IAsyncDisposable
             CreateNoWindow = true,
         };
 
-        startInfo.EnvironmentVariables["RAYCAST_MINI_PIPE"] = _pipeName;
-        startInfo.EnvironmentVariables["RAYCAST_MINI_PIPE_TOKEN"] = ConnectionToken;
+        startInfo.EnvironmentVariables["OPENRAY_PIPE"] = _pipeName;
+        startInfo.EnvironmentVariables["OPENRAY_PIPE_TOKEN"] = ConnectionToken;
         _startCount++;
-        startInfo.EnvironmentVariables["RAYCAST_MINI_API_ROOT"] = ApiRoot;
-        startInfo.EnvironmentVariables["RAYCAST_MINI_FRONTEND_ROOT"] = FrontendRoot;
-        startInfo.EnvironmentVariables["RAYCAST_MINI_EXTENSIONS_ROOT"] = ExtensionsRoot;
+        startInfo.EnvironmentVariables["OPENRAY_API_ROOT"] = ApiRoot;
+        startInfo.EnvironmentVariables["OPENRAY_FRONTEND_ROOT"] = FrontendRoot;
+        startInfo.EnvironmentVariables["OPENRAY_EXTENSIONS_ROOT"] = ExtensionsRoot;
 
         // Advanced > Connection: trust an extra certificate authority in the Node process from boot.
         try
         {
-            var dataDir = Environment.GetEnvironmentVariable("RAYCAST_MINI_DATA_DIR")
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RaycastMini");
+            var dataDir = Environment.GetEnvironmentVariable("OPENRAY_DATA_DIR")
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Openray");
             var settingsFile = Path.Combine(dataDir, "store", "settings.json");
             if (File.Exists(settingsFile))
             {
@@ -181,7 +181,7 @@ public sealed class BackendProcess : IAsyncDisposable
         {
             var logPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RaycastMini",
+                "Openray",
                 "backend.log");
             Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
             File.AppendAllText(logPath, $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}");

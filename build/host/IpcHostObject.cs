@@ -18,7 +18,7 @@ using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 /// <summary>
 /// Grants WebView2 permissions the launcher needs without surfacing the browser prompt: the
@@ -88,12 +88,12 @@ public sealed class IpcHostObject
         }
         catch (Exception error)
         {
-            RaycastMini.Launcher.App.Log.Write($"[renderer->host] {method} failed: {error}");
+            Openray.Launcher.App.Log.Write($"[renderer->host] {method} failed: {error}");
             return JsonSerializer.Serialize(new { id = 0, error = new { message = error.Message, code = 500 } });
         }
         finally
         {
-            RaycastMini.Launcher.App.Log.Write($"[renderer->host] {method} isBackend={isBackend}");
+            Openray.Launcher.App.Log.Write($"[renderer->host] {method} isBackend={isBackend}");
         }
 
         return result is null

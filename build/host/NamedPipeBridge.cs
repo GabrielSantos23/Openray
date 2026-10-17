@@ -24,7 +24,7 @@ using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public sealed class PipeMessage
 {

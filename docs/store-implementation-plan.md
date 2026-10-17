@@ -2,7 +2,7 @@
 
 # Store implementation plan (Phase 2 proposal — awaiting approval)
 
-Everything here builds on docs/store-spec.md (REA evidence) and docs/api-coverage.md. Work happens in the worktree `C:\Users\gabs\.t3\scratch\RaycastMini-store`, branch `feature/store`.
+Everything here builds on docs/store-spec.md (REA evidence) and docs/api-coverage.md. Work happens in the worktree `C:\Users\gabs\.t3\scratch\Openray-store`, branch `feature/store`.
 
 ## 1. Architecture decisions
 
@@ -88,7 +88,7 @@ Existing files modified (shared-file overlaps — **likely merge conflicts with 
 2. **Fetch source**: `git clone --filter=blob:none --no-checkout https://github.com/raycast/extensions <cache>` then `git sparse-checkout set extensions/<name>` and checkout the pinned commit — sparse, blob-filtered, one cache shared by all extensions.
 3. **Pinned commit**: recorded in `store.sqlite` per install (`commit_sha`), displayed in the Store detail and in the install confirmation.
 4. **Dependencies**: `npm install --omit=dev` inside the extension copy (npm cache shared; no scripts executed by us beyond npm's own lifecycle — documented risk in §9).
-5. **Build**: per-command esbuild bundles into the install root (`%LOCALAPPDATA%\RaycastMini\extensions\<uuid>\<command>.js`), assets copied, manifest copied.
+5. **Build**: per-command esbuild bundles into the install root (`%LOCALAPPDATA%\Openray\extensions\<uuid>\<command>.js`), assets copied, manifest copied.
 6. **Classification**: run the classifier over the built bundles + manifest; store classes.
 7. **Registration**: insert into the store registry, then refresh `extensionHost.getInstalledNodeExtensionSummaries` push so root search picks the commands up (fixes the "summaries loaded once at mount" gap via the new push).
 8. **Update**: `store.checkForUpdates` compares catalog commit + per-command digests (mirrors the real app's `commandDigests`, store-spec §2.6); update = reinstall with backup/rollback exactly like the real installer (staging dir, rename, DB rollback).
@@ -120,9 +120,9 @@ command_classifications(uuid, command_name, class, missing_apis JSON, guarded_ap
 
 ## 6. Testing without disturbing the other agent
 
-- All code and commits in worktree `../RaycastMini-store` (branch `feature/store`); main working tree untouched.
+- All code and commits in worktree `../Openray-store` (branch `feature/store`); main working tree untouched.
 - Tests are headless (`node --test`), using fixture extensions in `build/backend/tests/fixtures/` and the harness driving the store module directly (no app launch).
-- If a live instance is warranted: `RAYCAST_MINI_PIPE=raycast-mini-store-test`, `RAYCAST_MINI_EXTENSIONS_ROOT=<worktree>\.store-data\extensions`, `RAYCAST_MINI_ALLOW_MULTI=1`, plus a new `RAYCAST_MINI_DATA_DIR` override (the only host change beyond NativeHost; additive, listed above) so logs/SQLite stay out of `%LOCALAPPDATA%\RaycastMini`. The global hotkey cannot be isolated (one process per hotkey): our instance would fail to register Ctrl+Alt+Space and log it — acceptable for testing; documented for the user instead of fighting over it. Default plan: **headless-only verification**, and I give exact commands to run the isolated instance.
+- If a live instance is warranted: `OPENRAY_PIPE=openray-store-test`, `OPENRAY_EXTENSIONS_ROOT=<worktree>\.store-data\extensions`, `OPENRAY_ALLOW_MULTI=1`, plus a new `OPENRAY_DATA_DIR` override (the only host change beyond NativeHost; additive, listed above) so logs/SQLite stay out of `%LOCALAPPDATA%\Openray`. The global hotkey cannot be isolated (one process per hotkey): our instance would fail to register Ctrl+Alt+Space and log it — acceptable for testing; documented for the user instead of fighting over it. Default plan: **headless-only verification**, and I give exact commands to run the isolated instance.
 - Never touch the other agent's processes, the main tree's output folder, or uncommitted files.
 
 ## 7. The 15 harness extensions

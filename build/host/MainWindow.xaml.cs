@@ -17,7 +17,7 @@ using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public partial class MainWindow : Window
 {
@@ -52,7 +52,7 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-        Title = "Raycast Mini";
+        Title = "Openray";
         Width = 720;
         Height = 480;
         Topmost = true;
@@ -73,11 +73,11 @@ public partial class MainWindow : Window
         Closing += OnClosing;
 
         // Raycast hides the launcher when it loses focus. `--keep-open` (or
-        // RAYCAST_MINI_KEEP_OPEN=1) keeps it on screen, which is handy when debugging.
+        // OPENRAY_KEEP_OPEN=1) keeps it on screen, which is handy when debugging.
         // WebView2's controller creation requires a visible parent: hiding mid-init (launched from
         // a background terminal, focus flickers) fails EnsureCoreWebView2Async with 0x800700AA
         // ("resource in use"), so the hide is deferred until initialisation settles.
-        var keepOpen = Environment.GetEnvironmentVariable("RAYCAST_MINI_KEEP_OPEN") == "1" ||
+        var keepOpen = Environment.GetEnvironmentVariable("OPENRAY_KEEP_OPEN") == "1" ||
                        Environment.GetCommandLineArgs().Any(arg =>
                            arg.Equals("--keep-open", StringComparison.OrdinalIgnoreCase));
         if (!keepOpen)
@@ -98,7 +98,7 @@ public partial class MainWindow : Window
     {
         var baseDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RaycastMini",
+            "Openray",
             baseName);
 
         var lockFiles = new[]
@@ -120,7 +120,7 @@ public partial class MainWindow : Window
                     App.Log.Write($"[webview2] lock file '{lockFile}' is in use; using process-isolated folder");
                     return Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "RaycastMini",
+                        "Openray",
                         $"{baseName}-{Environment.ProcessId}");
                 }
             }
@@ -176,10 +176,10 @@ public partial class MainWindow : Window
         // library-sized artwork sets).
         var imageCacheDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RaycastMini", "oauth", "image-cache");
+            "Openray", "oauth", "image-cache");
         Directory.CreateDirectory(imageCacheDir);
         _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-            "raycastmini-img", imageCacheDir, CoreWebView2HostResourceAccessKind.Allow);
+            "openray-img", imageCacheDir, CoreWebView2HostResourceAccessKind.Allow);
 
         _webView.CoreWebView2.Navigate(
             File.Exists(html) ? $"https://raycast.mini/dist/main-window.html?v={DateTime.UtcNow.Ticks}" : $"file:///{html}");
@@ -189,10 +189,10 @@ public partial class MainWindow : Window
         // first-show latency entirely).
         _ = HudWindow.GetOrCreate(() => _backend.FrontendRoot).PrewarmAsync();
 
-        // Dev flag: `--dev-extensions` (or RAYCAST_MINI_DEV_EXTENSIONS=1) reveals the internal test
-        // extensions in the root search (RaycastMini: `command-ux-test`).
+        // Dev flag: `--dev-extensions` (or OPENRAY_DEV_EXTENSIONS=1) reveals the internal test
+        // extensions in the root search (Openray: `command-ux-test`).
         if (Environment.GetCommandLineArgs().Any(arg => arg.Equals("--dev-extensions", StringComparison.OrdinalIgnoreCase)) ||
-            Environment.GetEnvironmentVariable("RAYCAST_MINI_DEV_EXTENSIONS") == "1")
+            Environment.GetEnvironmentVariable("OPENRAY_DEV_EXTENSIONS") == "1")
         {
             App.DevExtensions = true;
             PostToRenderer("window.devExtensions",
@@ -210,7 +210,7 @@ public partial class MainWindow : Window
                     // CoreWebView2 is UI-thread affine, so hop to the dispatcher and unwrap twice.
                     var dispatcherOperation = _webView.Dispatcher.InvokeAsync<Task<string>>(async () =>
                         await _webView.CoreWebView2.ExecuteScriptAsync(
-                            "JSON.stringify({ diag: window.__raycastMiniDiag ?? null, errors: window.__raycastMiniErrors ?? null, marks: window.__raycastMiniMarks ?? null, ipcEntries: window.__ipcEntries ?? 0 })"));
+                            "JSON.stringify({ diag: window.__openrayDiag ?? null, errors: window.__openrayErrors ?? null, marks: window.__openrayMarks ?? null, ipcEntries: window.__ipcEntries ?? 0 })"));
                     var inner = await dispatcherOperation;
                     string json = await inner;
                     App.Log.Write($"[diag] {json}");
@@ -233,8 +233,8 @@ public partial class MainWindow : Window
         string method, string jsonParams, System.Text.Json.JsonElement? data, bool isBackend)
     {
         // `Esc` / the footer close action: the renderer asks the host to hide the launcher (the
-        // global hotkey brings it back), matching Raycast's `closeMainRaycastWindow`.
-        if (method is "window.close" or "window.hide" or "extensionHost.closeMainRaycastWindow")
+        // global hotkey brings it back), matching Raycast's `closeMainOpenrayWindow`.
+        if (method is "window.close" or "window.hide" or "extensionHost.closeMainOpenrayWindow")
         {
             _webView.Dispatcher.Invoke(() =>
             {
@@ -380,7 +380,7 @@ public partial class MainWindow : Window
         }
 
         // Automation only (dev): run a script in the renderer and return its JSON result. The
-        // renderer exposes its hooks as `window.__raycastMiniTest` when --dev-extensions is on.
+        // renderer exposes its hooks as `window.__openrayTest` when --dev-extensions is on.
         if (method == "window.eval" && App.DevExtensions)
         {
             var script = data is { ValueKind: System.Text.Json.JsonValueKind.Object } evalPayload &&
@@ -481,7 +481,7 @@ public partial class MainWindow : Window
         App.Log.Write($"[hotkey] RegisterHotKey Ctrl+Alt+Space: ok={ok1} (err={Marshal.GetLastWin32Error()}), Ctrl+Shift+Space: ok={ok2}");
 
         // Seed the dynamic settings (Raycast Hotkey, tray, Open at Login) from the settings store.
-        var storedHotkey = ReadStoredSetting("raycast-hotkey") as string;
+        var storedHotkey = ReadStoredSetting("openray-hotkey") as string;
         if (!string.IsNullOrWhiteSpace(storedHotkey) && TryParseHotkey(storedHotkey, out var storedMods, out var storedKey))
         {
             UnregisterHotKey(handle, HotkeyId);
@@ -554,11 +554,11 @@ public partial class MainWindow : Window
     {
         try
         {
-            var dataDir = System.Environment.GetEnvironmentVariable("RAYCAST_MINI_DATA_DIR");
+            var dataDir = System.Environment.GetEnvironmentVariable("OPENRAY_DATA_DIR");
             var path = string.IsNullOrEmpty(dataDir)
                 ? System.IO.Path.Combine(
                     System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
-                    "RaycastMini", "store", "settings.json")
+                    "Openray", "store", "settings.json")
                 : System.IO.Path.Combine(dataDir, "store", "settings.json");
             if (!System.IO.File.Exists(path)) return null;
             using var document = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path));
@@ -721,7 +721,7 @@ public partial class MainWindow : Window
     private static void SetOpenAtLogin(bool enabled)
     {
         const string runKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string valueName = "RaycastMini";
+        const string valueName = "Openray";
         using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(runKey, writable: true)
             ?? Microsoft.Win32.Registry.CurrentUser.CreateSubKey(runKey);
         if (enabled)
@@ -760,7 +760,7 @@ public partial class MainWindow : Window
              TryParseHotkey(_clipboardHotkeyText, out var clipMods, out var clipKey) &&
              (modifiers, key) == (clipMods, clipKey)))
         {
-            throw new InvalidOperationException($"The hotkey {hotkey} is already used by Raycast");
+            throw new InvalidOperationException($"The hotkey {hotkey} is already used by Openray");
         }
         var previous = _globalHotkeyText;
         UnregisterHotKey(handle, HotkeyId);
@@ -991,7 +991,7 @@ public partial class MainWindow : Window
         }
         _webView.Focus();
         _webView.CoreWebView2?.PostWebMessageAsJson(
-            "{\"type\":\"raycast-mini:navigate\",\"route\":\"/extension/clipboard-history\"}");
+            "{\"type\":\"openray:navigate\",\"route\":\"/extension/clipboard-history\"}");
     }
 
     public void Toggle()
@@ -1074,7 +1074,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void PositionOnStoredScreen()
     {
-        var choice = ReadStoredSetting("show-raycast-on") as string ?? "Screen containing mouse";
+        var choice = ReadStoredSetting("show-openray-on") as string ?? "Screen containing mouse";
         try
         {
             var point = choice switch
@@ -1249,7 +1249,7 @@ public partial class MainWindow : Window
                 uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
                 uCallbackMessage = WM_TRAYICON,
                 hIcon = _trayIconInstance.Handle,
-                szTip = "Raycast Mini",
+                szTip = "Openray",
             };
 
             if (Shell_NotifyIcon(NIM_ADD, ref data))
@@ -1287,7 +1287,7 @@ public partial class MainWindow : Window
     private void OpenTrayContextMenu()
     {
         _trayContextMenu = new ContextMenu();
-        var showItem = new MenuItem { Header = "Show Raycast Mini" };
+        var showItem = new MenuItem { Header = "Show Openray" };
         showItem.Click += (_, _) => ShowMainWindow();
 
         var clipboardItem = new MenuItem { Header = "Clipboard History" };

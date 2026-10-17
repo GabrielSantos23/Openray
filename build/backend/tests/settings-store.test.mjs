@@ -8,7 +8,7 @@ import path from "node:path";
 const { createSettingsStore } = await import("../src/settings-store.js");
 
 function tempRoot() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "raycastmini-settings-"));
+  return fs.mkdtempSync(path.join(os.tmpdir(), "openray-settings-"));
 }
 
 test("set validates value types and rejects nested objects", () => {

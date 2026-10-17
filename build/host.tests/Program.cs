@@ -8,9 +8,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using RaycastMini.Launcher;
+using Openray.Launcher;
 
-namespace RaycastMini.Host.Tests;
+namespace Openray.Host.Tests;
 
 internal static class Program
 {

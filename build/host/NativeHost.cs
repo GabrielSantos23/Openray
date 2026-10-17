@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 
-namespace RaycastMini.Launcher;
+namespace Openray.Launcher;
 
 public static class NativeHost
 {
@@ -35,7 +35,7 @@ public static class NativeHost
         "clipboard.write" => Task.FromResult(WriteClipboard(data)),
         "clipboard.read" => Task.FromResult(ReadClipboard()),
         "clipboard.clear" => Task.FromResult(ClearClipboard()),
-        "shell.getFrontmostApplication" => Task.FromResult<object?>(new { name = "Raycast Mini", path = "RaycastMini.exe" }),
+        "shell.getFrontmostApplication" => Task.FromResult<object?>(new { name = "Openray", path = "Openray.exe" }),
         "shell.getSelectedText" => Task.FromResult<object?>(new { value = (string?)null }),
         "shell.openUrl" => Task.FromResult(OpenUrl(data)),
         "shell.openWith" => Task.FromResult(OpenWith(data)),

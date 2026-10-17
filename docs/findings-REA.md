@@ -231,7 +231,7 @@ call. **67 entries**. Grouped:
 ```
 allLocalStorageItems  authorizeOAuth  browserExtensionExecuteJS  browserExtensionGetContent
 browserExtensionGetTabs  captureException  clearClipboard  clearLocalStorage
-clearSearchBar  closeMainRaycastWindow  commandException  commandExited
+clearSearchBar  closeMainOpenrayWindow  commandException  commandExited
 completePrompt  createQuicklink  createRaycastNote  createSnippet
 deleteRaycastNote  formReset  formSetFocus  getActiveWindow
 getApplications  getClipboard  getDefaultApplication  getDesktops
@@ -465,7 +465,7 @@ and the host→renderer handler table registered for extension callbacks is:
 
 ```js
 var Qne = {
-  authorizeOAuth, clearSearchBar, closeMainRaycastWindow, commandException, hideToast, initOAuth,
+  authorizeOAuth, clearSearchBar, closeMainOpenrayWindow, commandException, hideToast, initOAuth,
   popToRoot, render, renderEmpty, renderSuspense, showAlert, showToast, showHUD,
   openCommandPreferences, openExtensionPreferences, ensureBrowserExtensionInstalled,
   createSnippet, createQuicklink

@@ -68,7 +68,7 @@ export function openNotesWindow(options: { create?: boolean; text?: string; note
 
 /** Our documented deeplink format (the shipped `raycast://…` scheme depends on its own registration). */
 export function noteDeeplink(id: string): string {
-  return `raycast-mini://notes/${id}`;
+  return `openray://notes/${id}`;
 }
 
 export type NoteRecencyBucket = "Pinned" | "Today" | "Yesterday" | "This Week" | "This Month" | "Older";

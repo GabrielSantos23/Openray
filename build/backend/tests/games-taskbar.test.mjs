@@ -15,7 +15,7 @@ const { createTaskbar } = require("../src/taskbar");
 
 function withGames(fn) {
   return async () => {
-    const root = mkdtempSync(join(tmpdir(), "raycast-mini-games-"));
+    const root = mkdtempSync(join(tmpdir(), "openray-games-"));
     const hostCalls = [];
     const games = createGames({
       dataRoot: root,
@@ -81,7 +81,7 @@ test("Game Mode setting persists and forwards to the host", withGames(async ({ g
 
 function withTaskbar(fn) {
   return async () => {
-    const root = mkdtempSync(join(tmpdir(), "raycast-mini-taskbar-"));
+    const root = mkdtempSync(join(tmpdir(), "openray-taskbar-"));
     const hostCalls = [];
     const taskbar = createTaskbar({
       dataRoot: root,

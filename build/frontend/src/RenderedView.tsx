@@ -11,7 +11,7 @@
 //       submit-form actions carrying the values, formSetFocus / formReset.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { RaycastIcon } from "./icons";
+import { OpenrayIcon } from "./icons";
 import { markdownTitle, renderMarkdown } from "./markdown";
 import { onNotification } from "./ipc";
 import { isDevExtensions, overrideTestHooks } from "./testHooks";
@@ -67,7 +67,7 @@ function Icon({ icon, fallback = "AppWindow" }: { icon?: unknown; fallback?: str
   }
   return (
     <span className="icon" aria-hidden>
-      <RaycastIcon name={typeof source === "string" ? source : fallback} size={15} />
+      <OpenrayIcon name={typeof source === "string" ? source : fallback} size={15} />
     </span>
   );
 }
@@ -107,7 +107,7 @@ function EmptyView({ body, onRun }: { body: ViewBody; onRun: (action: ViewAction
   return (
     <div className="state">
       <div className="icon icon--plain" aria-hidden>
-        <RaycastIcon name={iconName(body.emptyView?.icon) ?? "search"} size={22} />
+        <OpenrayIcon name={iconName(body.emptyView?.icon) ?? "search"} size={22} />
       </div>
       <div className="state__title">{body.emptyView?.title ?? "No results"}</div>
       {body.emptyView?.description ? (
@@ -222,7 +222,7 @@ function MetadataPane({
                 <dd className="metadata__value">
                   <a className="metadata__link" href={item.target} target="_blank" rel="noreferrer">
                     <span>{item.text ?? item.target}</span>
-                    <RaycastIcon name="arrow-up-right" size={12} />
+                    <OpenrayIcon name="arrow-up-right" size={12} />
                   </a>
                 </dd>
               </div>
@@ -556,7 +556,7 @@ export function SearchBarDropdown({
       >
         <span className="settings-dropdownButton__text">{current?.title ?? current?.id ?? ""}</span>
         <span className="settings-dropdownButton__indicator">
-          <RaycastIcon name="Forward" size={12} />
+          <OpenrayIcon name="Forward" size={12} />
         </span>
       </button>
       {open ? (

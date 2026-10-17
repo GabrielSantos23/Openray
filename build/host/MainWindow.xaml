@@ -1,10 +1,10 @@
 <!-- Code-behind-free shell: the window is composed entirely in MainWindow.xaml.cs so the
      WebView2 wiring sits next to the layout. `AllowsTransparency` + a solid-root window is required
      for Raycast's 8px window radius and its large soft drop shadow to be visible. -->
-<Window x:Class="RaycastMini.Launcher.MainWindow"
+<Window x:Class="Openray.Launcher.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Raycast Mini"
+        Title="Openray"
         Height="480" Width="720"
         WindowStyle="None"
         ResizeMode="CanResize"

@@ -19,8 +19,8 @@ public struct RECT { public int Left; public int Top; public int Right; public i
 '@
 $t = @(Add-Type -MemberDefinition $sig -Name "DrvE" -Namespace DrvNsE -PassThru) | Where-Object { $_.Name -eq "DrvE" } | Select-Object -First 1
 
-$ids = @(Get-Process RaycastMini -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-if ($ids.Count -eq 0) { Write-Error "RaycastMini not running"; exit 1 }
+$ids = @(Get-Process Openray -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+if ($ids.Count -eq 0) { Write-Error "Openray not running"; exit 1 }
 $global:hits = New-Object System.Collections.ArrayList
 $cb = [DrvNsE.DrvE+EnumWindowsProc] {
     param($h, $l)
@@ -29,7 +29,7 @@ $cb = [DrvNsE.DrvE+EnumWindowsProc] {
     if ($ids -contains [int]$procId -and $t::IsWindowVisible($h)) {
         $sb = New-Object System.Text.StringBuilder 256
         [void]$t::GetWindowText($h, $sb, 256)
-        if ($sb.ToString() -eq "Raycast Mini") { [void]$global:hits.Add($h) }
+        if ($sb.ToString() -eq "Openray") { [void]$global:hits.Add($h) }
     }
     return $true
 }

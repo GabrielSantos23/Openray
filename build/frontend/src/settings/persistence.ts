@@ -4,7 +4,7 @@
 import type { Sensitivity } from "../matching";
 import type { SettingsMap, SettingsValue } from "./pages";
 
-export const STORAGE_KEY = "raycast-mini:settings";
+export const STORAGE_KEY = "openray:settings";
 
 /** Clipboard rows persist to the Node store, not localStorage, so every reader sees one value. */
 export const CLIPBOARD_ROW_IDS = new Set([
@@ -131,10 +131,10 @@ export const DEFAULTS: SettingsMap = {
   "open-at-login": true,
   "show-in-menu-bar": true,
   "automatically-show-taskbar": false,
-  "raycast-hotkey": "Ctrl + Alt + Space",
+  "openray-hotkey": "Ctrl + Alt + Space",
   "replace-start-menu": false,
   "active-theme": "",
-  "show-raycast-on": "Screen containing mouse",
+  "show-openray-on": "Screen containing mouse",
   "pop-to-root-search": "After 90 seconds",
   "root-search-sensitivity": "High",
   "escape-key-behavior": "Navigate back or close window",
@@ -295,7 +295,7 @@ export interface FallbackCommandSpec {
   command?: string;
 }
 
-/** The commands the picker offers — only ones Raycast Mini can actually run. */
+/** The commands the picker offers — only ones Openray can actually run. */
 export const FALLBACK_CATALOG: FallbackCommandSpec[] = [
   { id: "cmd:quicklinks/search", kind: "command", title: "Search Quicklinks", provider: "Quicklinks", icon: "link", area: "quicklinks", command: "search" },
   { id: "cmd:snippets/search", kind: "command", title: "Search Snippets", provider: "Snippets", icon: "text", area: "snippets", command: "search" },

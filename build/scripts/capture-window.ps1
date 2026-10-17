@@ -18,7 +18,7 @@ public class WCap {
 '@
 Add-Type -TypeDefinition $src -Language CSharp
 Add-Type -AssemblyName System.Drawing
-$ids = @(Get-Process RaycastMini -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+$ids = @(Get-Process Openray -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 if (-not $ids) { Write-Error "no process"; exit 1 }
 $script:hits = New-Object System.Collections.ArrayList
 $cb = {
@@ -35,8 +35,8 @@ $cb = {
   return $true
 }
 [WCap]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
-$w = $script:hits | Where-Object { $_.Title -eq "Raycast Mini" } | Select-Object -First 1
-if (-not $w) { Write-Error "no Raycast Mini window"; exit 1 }
+$w = $script:hits | Where-Object { $_.Title -eq "Openray" } | Select-Object -First 1
+if (-not $w) { Write-Error "no Openray window"; exit 1 }
 [void][WCap]::ShowWindow($w.H, 5)
 [void][WCap]::SetForegroundWindow($w.H)
 Start-Sleep -Milliseconds 2000

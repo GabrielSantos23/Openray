@@ -14,7 +14,7 @@ const POSITIONS = ["top", "bottom", "left", "right"];
 const DEFAULT_SETTINGS = { showTaskbar: false, position: "bottom" };
 
 function createTaskbar({ dispatch, dataRoot } = {}) {
-  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "RaycastMini");
+  const root = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
   const settingsPath = path.join(root, "taskbar-settings.json");
 
   fs.mkdirSync(root, { recursive: true });
