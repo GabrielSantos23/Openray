@@ -68,6 +68,9 @@ function createBackend(options) {
   let settingsStoreHandlers = {};
   // Set by index.js to a launch gate; loadCommand refuses commands the gate rejects.
   let launchGate = null;
+  // Set by index.js; registry-resolvable methods dispatch through the command registry so the
+  // pipe shares one path with the control channel, CLI and MCP (docs/mcp-architecture.md).
+  let registryRef = null;
 
   // ---------------------------------------------------------------------------------------------
   // Installed-extension registry.
@@ -1040,6 +1043,10 @@ function createBackend(options) {
         const handler = extensionHostHandlers[method.slice("extensionHost.".length)];
         if (handler) return handler(data ?? {});
       }
+      if (registryRef) {
+        const command = registryRef.get(method);
+        if (command) return registryRef.runOrThrow(method, data ?? {}, { source: "pipe" });
+      }
       if (extensionHostHandlers[method]) return extensionHostHandlers[method](data ?? {});
       if (hostHandlers[method]) return hostHandlers[method]({ worker: null }, data ?? {});
 
@@ -1241,6 +1248,10 @@ function createBackend(options) {
     /** Install the launch gate (optional); throwing refuses a launch. */
     setLaunchGate(gate) {
       launchGate = gate ?? null;
+    },
+    /** Install the command registry; registry-resolvable backend methods dispatch through it. */
+    registerRegistry(registry) {
+      registryRef = registry ?? null;
     },
     /** Replace one host handler (tests stub native side effects like `open` this way). */
     overrideHostHandler(name, handler) {

@@ -134,7 +134,8 @@ backend.registerFileIndexerHandler(fileIndexer.handlers);
   backend.registerUsageTrackerHandler(usageTracker.handlers);
 
 // Window Management saved bounds — the store behind the `Restore` command.
-backend.registerWindowStateHandler(createWindowStates().handlers);
+const windowStates = createWindowStates();
+backend.registerWindowStateHandler(windowStates.handlers);
 
 // Focus is the sixth internal extension (`focus.*`). The session state machine lives here and
 // re-syncs the host on every mutation; the host owns the blocking loop and the timer panel.
@@ -200,6 +201,191 @@ const extensionStore = createExtensionStore({
   extensionsRoot: config.extensionsRoot,
 });
 backend.registerStoreHandler(extensionStore.handlers);
+
+// ---------------------------------------------------------------------------------------------
+// Command registry (docs/mcp-architecture.md): every handler method above becomes a command
+// with the same id, so the pipe, the control channel, the CLI and MCP share one dispatch path.
+// ---------------------------------------------------------------------------------------------
+const { createRegistry, needsUi } = require("./registry");
+const { createWiring, CATALOG } = require("./commands");
+const { createExtensionCommands } = require("./commands/extensions");
+
+const registry = createRegistry();
+backend.registerRegistry(registry);
+const wiring = createWiring({ registry, backend });
+
+wiring.registerTable("settings", settingsStore.handlers, { risk: { replaceAll: "destructive" } });
+wiring.registerTable("clipboard", clipboard.handlers);
+wiring.registerTable("calculator", calculator.handlers, {
+  risk: { calculate: "read", getColor: "read" },
+});
+wiring.registerTable("translator", translator.handlers);
+wiring.registerTable("quicklinks", quicklinks.handlers, { risk: { resolve: "read" } });
+wiring.registerTable("snippets", snippets.handlers, {
+  risk: { resolve: "read", isKeywordAvailable: "read" },
+});
+wiring.registerTable("fileSearch", fileIndexer.handlers);
+wiring.registerTable("usage", usageTracker.handlers);
+wiring.registerTable("windowManagement", windowStates.handlers);
+wiring.registerTable("focus", focus.handlers);
+wiring.registerTable("games", games.handlers);
+wiring.registerTable("taskbar", taskbar.handlers);
+wiring.registerTable("advanced", advanced.handlers, { risk: { importFromFile: "destructive" } });
+wiring.registerTable("notes", notes.handlers);
+wiring.registerTable("store", extensionStore.handlers);
+
+for (const [method, risk] of [
+  ["clipboard.read", "read"],
+  ["clipboard.write", "write"],
+  ["clipboard.clear", "destructive"],
+  ["shell.getSelectedText", "read"],
+  ["shell.getFrontmostApplication", "read"],
+  ["shell.openUrl", "write"],
+  ["shell.openWith", "write"],
+  ["shell.revealFile", "write"],
+  ["shell.setOpenUrlPreferences", "write"],
+  ["applications.getAll", "read"],
+  ["applications.isForeground", "read"],
+  ["applications.getDefaultBrowser", "read"],
+  ["applications.open", "write"],
+  ["applications.newWindow", "write"],
+  ["applications.hide", "write"],
+  ["applications.reveal", "write"],
+  ["applications.showProperties", "write"],
+  ["applications.openRecentFiles", "write"],
+  ["applications.setActivationBehavior", "write"],
+  ["applications.runAsAdministrator", "write"],
+  ["applications.runAsUser", "write"],
+  ["applications.quit", "destructive"],
+  ["applications.restart", "destructive"],
+  ["applications.forceQuit", "destructive"],
+  ["applications.uninstall", "destructive"],
+  ["fileSystem.openFile", "write"],
+  ["fileSystem.readFile", "read"],
+  ["fileSystem.writeFile", "destructive"],
+  ["fileSystem.moveToTrash", "destructive"],
+  ["fileSystem.showOpenFileDialog", "write"],
+  ["fileSystem.showSaveFileDialog", "write"],
+  ["fileSystem.showSelectFolderDialog", "write"],
+  ["windowManagement.getDisplays", "read"],
+  ["windowManagement.getActiveWindow", "read"],
+  ["windowManagement.enumerateVisibleWindows", "read"],
+  ["windowManagement.setWindowBounds", "write"],
+  ["windowManagement.minimizeWindow", "write"],
+  ["windowManagement.toggleAlwaysOnTop", "write"],
+  ["windowManagement.cycleAppWindows", "write"],
+  ["windowManagement.registerCommandHotkey", "write"],
+  ["windowManagement.hotkey", "write"],
+]) {
+  wiring.registerNative(method, { risk, description: CATALOG[method] });
+}
+
+wiring.registerUi(
+  "ui.openSettings",
+  "window.openSettings",
+  CATALOG["ui.openSettings"],
+);
+wiring.registerUi("ui.showMainWindow", "window.showMainWindow", CATALOG["ui.showMainWindow"]);
+wiring.registerUi("ui.hideMainWindow", "window.close", CATALOG["ui.hideMainWindow"]);
+
+registry.register([
+  {
+    id: "settings.get",
+    title: "settings get",
+    description: CATALOG["settings.get"],
+    risk: "read",
+    domain: "settings",
+    params: {
+      type: "object",
+      properties: { key: { type: "string" } },
+      required: ["key"],
+      additionalProperties: false,
+    },
+    run: (params) => {
+      const values = settingsStore.getValues();
+      return { key: params.key, value: values[params.key] ?? null };
+    },
+  },
+  {
+    id: "settings.list",
+    title: "settings list",
+    description: CATALOG["settings.list"],
+    risk: "read",
+    domain: "settings",
+    params: { type: "object" },
+    run: () => ({
+      settings: Object.entries(settingsStore.getValues()).map(([key, value]) => ({
+        key,
+        value,
+        type: Array.isArray(value) ? "array" : typeof value,
+      })),
+    }),
+  },
+  {
+    id: "registry.list",
+    title: "registry list",
+    description: CATALOG["registry.list"],
+    risk: "read",
+    domain: "registry",
+    params: {
+      type: "object",
+      properties: { filter: { type: "string" } },
+      additionalProperties: false,
+    },
+    run: (params) => ({ commands: registry.list({ filter: params?.filter }) }),
+  },
+  {
+    id: "registry.describe",
+    title: "registry describe",
+    description: CATALOG["registry.describe"],
+    risk: "read",
+    domain: "registry",
+    params: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+      additionalProperties: false,
+    },
+    run: (params) => {
+      const described = registry.describe(params.id);
+      if (!described) {
+        const error = new Error(`no such command: ${params.id}`);
+        error.code = "unknown_command";
+        error.hint = "call registry.list to discover ids";
+        throw error;
+      }
+      return described;
+    },
+  },
+]);
+
+const extensionCommands = createExtensionCommands({ registry, backend });
+extensionCommands
+  .registerInstalled()
+  .then((summary) => console.log(JSON.stringify({ registryReady: true, ...summary })))
+  .catch((error) =>
+    console.warn("[registry] extension command registration failed:", error?.message ?? error),
+  );
+
+// Needs a connected launcher window by definition; exposed so callers get the typed error
+// instead of guessing which commands are UI-bound.
+registry.register([
+  {
+    id: "ui.getWindowState",
+    title: "ui getWindowState",
+    description:
+      "Read the launcher renderer's UI state (open view, query, visible items, selection). Requires the running app; see get_state on the control channel.",
+    risk: "read",
+    domain: "ui",
+    params: { type: "object" },
+    run: () => {
+      throw needsUi(
+        "ui.getWindowState needs the launcher window; use the control channel get_state instead",
+        "start the app with --control and call get_state",
+      );
+    },
+  },
+]);
 
 // FlowKey migration M2: the Store is gone. Any Store artifacts still on disk (store.sqlite,
 // Store-installed extension folders, the stale extensions-root node_modules) move into the
