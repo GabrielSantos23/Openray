@@ -393,6 +393,29 @@ public partial class MainWindow : Window
             return System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(output);
         }
 
+        // Control channel (docs/control-protocol.md): renderer round trips for get_state and
+        // send_input, plus the window capture the control channel serves as its screenshot.
+        // Backend-initiated (via App.OnBackendRequestAsync) or renderer-initiated, both arrive here.
+        if (method == "window.controlState")
+        {
+            var controlState = await EvalInRendererAsync(
+                "window.__openrayControl ? window.__openrayControl.state() : null");
+            return controlState == "null" ? null : System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(controlState);
+        }
+        if (method == "window.controlInput")
+        {
+            var inputPayload = data is { ValueKind: System.Text.Json.JsonValueKind.Object } controlInputData
+                ? System.Text.Json.JsonSerializer.Serialize(controlInputData)
+                : "{}";
+            var controlResult = await EvalInRendererAsync(
+                $"window.__openrayControl ? window.__openrayControl.input({inputPayload}) : null");
+            return controlResult == "null" ? null : System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(controlResult);
+        }
+        if (method == "window.capture")
+        {
+            return System.Text.Json.JsonSerializer.SerializeToElement(CaptureWindowAsPng());
+        }
+
         if (isBackend)
         {
             // Do not gate on `_backend.IsRunning`: the watchdog may be mid-restart, and the pipe
@@ -1347,4 +1370,56 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    // -----------------------------------------------------------------------------------------
+    // Control channel (docs/control-protocol.md): get_state, send_input and the screenshot.
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Runs a script in the launcher renderer and returns its JSON-encoded result. Callable from
+    /// any thread: WebView2 requires the UI dispatcher, so the call marshals through it.
+    /// </summary>
+    private async Task<string> EvalInRendererAsync(string script)
+    {
+        return await _webView.Dispatcher.InvokeAsync(() =>
+            _webView.CoreWebView2.ExecuteScriptAsync(script)).Task.Unwrap();
+    }
+
+    /// <summary>Route the backend's control-channel round trips into the launcher dispatch.</summary>
+    public Task<System.Text.Json.JsonElement?> DispatchFromBackendAsync(string method, System.Text.Json.JsonElement? data)
+        => DispatchIpcAsync(method, string.Empty, data, isBackend: false);
+
+    [DllImport("user32.dll")]
+    private static extern bool PrintWindow(IntPtr window, IntPtr hdc, uint flags);
+
+    /// <summary>
+    /// Captures the launcher window as PNG (base64). PrintWindow with PW_RENDERFULLCONTENT (2)
+    /// is required: the content is Chromium's, composed through DWM, so a plain PrintWindow or
+    /// a WPF RenderTargetBitmap captures only the chrome and leaves the web content out.
+    /// Works while the window is visible; a hidden window has no reliable pixels — callers get
+    /// a typed error instead of a black image.
+    /// </summary>
+    private object CaptureWindowAsPng()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (!GetWindowRect(handle, out var rect) || rect.Width <= 0 || rect.Height <= 0)
+            throw new InvalidOperationException("the launcher window has no on-screen bounds; show it before capturing");
+        int width = rect.Width;
+        int height = rect.Height;
+        using var bitmap = new System.Drawing.Bitmap(width, height);
+        using var graphics = System.Drawing.Graphics.FromImage(bitmap);
+        var hdc = graphics.GetHdc();
+        try
+        {
+            if (!PrintWindow(handle, hdc, 2))
+                throw new InvalidOperationException("PrintWindow failed for the launcher window");
+        }
+        finally
+        {
+            graphics.ReleaseHdc(hdc);
+        }
+        using var stream = new MemoryStream();
+        bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+        return new { png = Convert.ToBase64String(stream.ToArray()) };
+    }
 }

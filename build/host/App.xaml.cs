@@ -316,6 +316,14 @@ _window = new MainWindow(_pipe, _backend);
         if (message.Module == "frontend")
         {
             if (_window is null) return null;
+            // Control-channel round trips (get_state, send_input, screenshot) need the renderer's
+            // or the window's answer back over the pipe, not a fire-and-forget push.
+            if (message.Method is "window.controlState" or "window.controlInput" or "window.capture")
+            {
+                if (_window is not MainWindow controlWindow) return null;
+                return await controlWindow.Dispatcher.InvokeAsync(() =>
+                    controlWindow.DispatchFromBackendAsync(message.Method, message.Data)).Task.Unwrap();
+            }
             _window.Dispatcher.Invoke(() =>
             {
                 _window.PostToRenderer(message.Method, message.Data);

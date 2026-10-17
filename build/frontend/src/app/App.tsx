@@ -20,6 +20,7 @@ import { useExtensionCommand } from "../useExtensionCommand";
 import { alertStore, type ExtensionAlertPayload } from "../alertStore";
 import AlertHost from "../AlertHost";
 import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "../testHooks";
+import { installControlHooks, type ControlInput, type ControlItem, type ControlState } from "../controlHooks";
 import { readCommandHotkeys, registerAllCommandHotkeys, syncCommandHotkeysWithExtensions } from "../commandConfig";
 import { installSystemAccent } from "./systemAccent";
 import { installSettingsPush, subscribeSettings, syncFromBackend, updateSettings, useSetting } from "../settings/store";
@@ -1103,6 +1104,132 @@ export function MainWindow() {
       state: () => ({ view: "root", entries: entries.length, search: searchText }),
     });
   }, [entries, searchText]);
+
+  // Control-channel hooks (`window.__openrayControl`): the host's `window.controlState` /
+  // `window.controlInput` routes read these — get_state and send_input for agents, with input
+  // routed app-internally (no OS-level injection). Shape documented in docs/control-protocol.md.
+  useEffect(() => {
+    const controlTitle = (entry: RootEntry): string => {
+      switch (entry.kind) {
+        case "application":
+          return entry.application.title;
+        case "extension":
+          return entry.command.title;
+        case "internal":
+          return entry.commandId;
+        case "quicklink":
+          return entry.quicklink.name;
+        case "quicklink-create":
+          return "Create Quicklink";
+        case "fallback":
+          return entry.command.title;
+        case "file":
+          return entry.file.name;
+        case "file-indexing":
+          return "File Search is indexing";
+        case "open-in-explorer":
+          return "Open in File Explorer";
+        case "inline":
+          return entry.result.title;
+        case "calculator":
+          return entry.expression;
+        case "color":
+          return entry.query;
+        case "translate":
+          return entry.row.sourceText;
+        case "translator-command":
+          return entry.command.name;
+        case "wm-command":
+        case "wm-args":
+        case "focus-view":
+        case "focus-action":
+        case "focus-session":
+        case "games-view":
+          return entry.title;
+        case "game":
+          return entry.app.name;
+        case "clipboard":
+          return "Clipboard History";
+      }
+    };
+    const controlItem = (entry: RootEntry | undefined, index: number): ControlItem | null =>
+      entry ? { index, kind: entry.kind, title: controlTitle(entry) } : null;
+    const dialogOpen =
+      openApplication !== null
+        ? "application-panel"
+        : commandPanelEntry !== null
+          ? "command-panel"
+          : calculatorPanel !== null
+            ? "calculator-panel"
+            : colorPanel !== null
+              ? "color-panel"
+              : translatePanel !== null
+                ? "translate-panel"
+                : quicklinkArgs !== null
+                  ? "quicklink-args"
+                  : null;
+    installControlHooks({
+      state: (): ControlState => {
+        const selectedItem = controlItem(entries[selectedIndex], selectedIndex);
+        return {
+          window: "launcher",
+          view: dialogOpen !== null ? `dialog:${dialogOpen}` : selected !== null ? "command-view" : "root",
+          query: searchText,
+          windowMode,
+          sections: sections.map((section) => ({ id: section.id, title: section.title, count: section.entries.length })),
+          items: entries.flatMap((entry, index) => {
+            const item = controlItem(entry, index);
+            return item ? [item] : [];
+          }),
+          selectedIndex,
+          selected: selectedItem,
+          openDialog: dialogOpen,
+        };
+      },
+      input: (event: ControlInput) => {
+        switch (event.type) {
+          case "text":
+            setSelected(null);
+            setSearchText(searchText + String(event.text ?? ""));
+            return { ok: true };
+          case "setQuery":
+            setSelected(null);
+            setSearchText(String(event.query ?? ""));
+            return { ok: true };
+          case "clear":
+            setSelected(null);
+            setSearchText("");
+            return { ok: true };
+          case "backspace":
+            setSelected(null);
+            setSearchText(searchText.slice(0, -1));
+            return { ok: true };
+          case "key":
+            // The window-level handlers own navigation/activation; a synthetic keydown runs the
+            // exact same code path a physical key would (app-internal, never OS injection).
+            window.dispatchEvent(new KeyboardEvent("keydown", { key: String(event.key ?? ""), bubbles: true, cancelable: true }));
+            return { ok: true };
+          case "action":
+            if (event.name === "openSettings") {
+              openSettings();
+              return { ok: true };
+            }
+            if (event.name === "close") {
+              closeMainWindow();
+              return { ok: true };
+            }
+            setSelected(null);
+            setOpenApplication(null);
+            setCommandPanelEntry(null);
+            setCalculatorPanel(null);
+            setColorPanel(null);
+            setTranslatePanel(null);
+            setQuicklinkArgs(null);
+            return { ok: true };
+        }
+      },
+    });
+  }, [sections, entries, selectedIndex, searchText, windowMode, openApplication, commandPanelEntry, calculatorPanel, colorPanel, translatePanel, quicklinkArgs, selected]);
 
   const selectedEntry = entries[selectedIndex];
   panelOpenRef.current = openApplication !== null || commandPanelEntry !== null || calculatorPanel !== null || colorPanel !== null || translatePanel !== null;

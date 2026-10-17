@@ -387,6 +387,22 @@ registry.register([
   },
 ]);
 
+// Control channel (docs/control-protocol.md): loopback-only HTTP with a per-launch bearer
+// token; off by default, enabled with `--control` (argv) or OPENRAY_CONTROL=1.
+const controlRequested = process.argv.includes("--control") || process.env.OPENRAY_CONTROL === "1";
+if (controlRequested) {
+  const fs = require("node:fs");
+  const { createControlServer, writeControlToken } = require("./control-server");
+  const { token, file } = writeControlToken(process.env.OPENRAY_DATA_DIR);
+  const port = Number(process.env.OPENRAY_CONTROL_PORT ?? 0) || 0;
+  createControlServer({ registry, backend, token, port })
+    .then((control) => {
+      // The token itself is never logged; agents read it from the token file.
+      console.log(JSON.stringify({ control: true, address: control.address, tokenFile: file }));
+    })
+    .catch((error) => console.error("[control] failed to start:", error?.message ?? error));
+}
+
 // FlowKey migration M2: the Store is gone. Any Store artifacts still on disk (store.sqlite,
 // Store-installed extension folders, the stale extensions-root node_modules) move into the
 // backup folder — move, never delete, idempotent, logged (docs/flowkey-migration-plan.md A4).
