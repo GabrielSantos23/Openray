@@ -148,7 +148,6 @@ export const DEFAULTS: SettingsMap = {
   "applications-deep-search": false,
   "applications-auto-quit-enabled": false,
   "applications-auto-quit-delay": "After 5 minutes",
-  "applications-search-scopes": "[]",
   "favicon-provider": "Raycast",
   "use-system-proxy-settings": false,
   "export-passphrase": "",

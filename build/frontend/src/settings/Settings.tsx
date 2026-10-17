@@ -71,7 +71,6 @@ import {
   usePopupRect,
 } from "./controls";
 import { ShortcutsFilterContext, ShortcutsPage, ShortcutsTitlebarActions, type ShortcutsFilter } from "./ShortcutsPage";
-import { ApplicationsSearchScopes } from "./ApplicationsScopes";
 import { FallbackSpecIcon } from "./brandIcons";
 import { TranslatorCustomCommands } from "./TranslatorCustomCommands";
 import { ExtensionIcon } from "../features/extensions/useExtensionIcon";
@@ -402,15 +401,7 @@ export function Settings() {
               )}
               {!extensionRoute && page.id !== "shortcuts" ? <InternalCommandsSection pageId={page.id} /> : null}
               {page.id === "shortcuts" ? <ShortcutsPage /> : null}
-              {page.id === "applications" ? (
-                <>
-                  <ApplicationsSearchScopes
-                    value={values["applications-search-scopes"]}
-                    onChange={(next) => setValue("applications-search-scopes", next)}
-                  />
-                  <ShortcutsPage lockedCategory="Applications" />
-                </>
-              ) : null}
+              {page.id === "applications" ? <ShortcutsPage lockedCategory="Applications" /> : null}
               {page.id === "translator" ? <TranslatorCustomCommands /> : null}
               {page.id === "extensions" ? <ExtensionPreferences /> : null}
             </div>
