@@ -19,6 +19,7 @@ import {
   INTERNAL_EXTENSION_META,
   internalCommandEntry,
   type CalculatorEntry,
+  type ColorEntry,
   type ExtensionEntry,
   type ExtensionSummary,
   type FocusActionEntry,
@@ -31,7 +32,7 @@ import {
   type TranslatorCustomCommand,
 } from "./entries";
 
-type RootSectionId = "favorites" | "suggestions" | "results" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search" | "window-management" | "focus" | "focus-commands" | "games";
+type RootSectionId = "favorites" | "suggestions" | "results" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search" | "window-management" | "focus" | "focus-commands" | "games" | "color";
 
 interface RootSection {
   id: RootSectionId;
@@ -87,7 +88,8 @@ export function buildSections(
   fileIndexState: { state: string; fileCount: number; entriesPerSecond?: number | null } | null,
   showFilesInRoot: boolean,
   focusSession: FocusSessionState | null,
-  gameApps: ApplicationCommand[]
+  gameApps: ApplicationCommand[],
+  colorEntry: ColorEntry | null = null
 ): RootSection[] {  // Build searchable entries for all applications
   const appAliases = readAppAliases();
   const disabledShortcuts = readShortcutDisabled();
@@ -385,6 +387,11 @@ export function buildSections(
   const calculatorEntries: RootEntry[] = calculatorEntry ? [calculatorEntry] : [];
   if (calculatorEntries.length > 0) {
     sections.push({ id: "calculator", title: "Calculator", icon: "calculator", entries: calculatorEntries });
+  }
+
+  // Color section (`Enable Color Conversion`): the typed query parses as a color.
+  if (colorEntry) {
+    sections.push({ id: "color", title: "Color", icon: "eye-dropper", entries: [colorEntry] });
   }
 
   // Translate section: the ephemeral quick-translate row (`rootSearch:{section:'translate',

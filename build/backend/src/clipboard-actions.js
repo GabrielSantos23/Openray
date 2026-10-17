@@ -500,6 +500,7 @@ function representationForMime(entry, mimeType) {
 
 module.exports = {
   COLOR_FORMATS,
+  NAMED_COLORS,
   DEFAULT_SEQUENCE_NEWLINE,
   DEFAULT_SEQUENCE_TIMEOUT_SECONDS,
   OCR_DEBOUNCE_MS,

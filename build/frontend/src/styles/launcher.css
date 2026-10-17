@@ -810,3 +810,34 @@
   width: 22px;
   height: 22px;
 }
+
+/* Color row (Enable Color Conversion): input color -> named preview. */
+.color-row__chip {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  flex: none;
+}
+.color-row__swatch {
+  width: 34px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  margin-right: 2px;
+  flex: none;
+}
+
+/* Calculator expression syntax highlighting (the `Syntax highlighting` setting). */
+.calc-tok--number {
+  color: #bfdbfe;
+}
+.calc-tok--number-unit {
+  color: #93c5fd;
+}
+.calc-tok--operator {
+  color: #fca5a5;
+}
+.calc-tok--word {
+  color: #fcd34d;
+}

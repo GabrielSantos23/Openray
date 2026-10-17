@@ -114,6 +114,7 @@ import {
   type InternalArea,
   type InternalCommandName,
   type CalculatorEntry,
+  type ColorEntry,
   type FocusActionEntry,
   type FocusSessionEntry,
   type FocusViewEntry,
@@ -188,6 +189,12 @@ export function MainWindow() {
   const [inlineResults, setInlineResults] = useState<InlineSectionResult[]>([]);
   // Action panel for the ephemeral calculator row (Ctrl+K on the split row).
   const [calculatorPanel, setCalculatorPanel] = useState<CalculatorEntry | null>(null);
+  // Action panel for the color row, and the calculator display preferences
+  // (`calculator-settings.json`: syntax highlighting + color conversion switches).
+  const [colorPanel, setColorPanel] = useState<ColorEntry | null>(null);
+  const [colorEntry, setColorEntry] = useState<ColorEntry | null>(null);
+  const [calcSyntaxHighlighting, setCalcSyntaxHighlighting] = useState(true);
+  const [colorConversionEnabled, setColorConversionEnabled] = useState(true);
   // Action panels for the Focus session row and the dynamic game rows.
   const [focusSessionPanel, setFocusSessionPanel] = useState<FocusSessionEntry | null>(null);
   const [gamePanel, setGamePanel] = useState<GameEntry | null>(null);
@@ -423,6 +430,63 @@ export function MainWindow() {
       clearTimeout(timer);
     };
   }, [searchText, inlineSectionSettings.calculator]);
+
+  // Calculator display preferences: syntax highlighting (render-time) and the color conversion
+  // gate. Fetched once; changes from the Settings window arrive through the same backend store.
+  useEffect(() => {
+    const refreshPrefs = () => {
+      void ipc
+        .backend("calculator.getPreferences", {}, { module: "backend" })
+        .then((raw) => {
+          const prefs = (raw as { syntaxHighlighting?: boolean; enableColorDetection?: boolean } | undefined);
+          if (!prefs) return;
+          if (typeof prefs.syntaxHighlighting === "boolean") setCalcSyntaxHighlighting(prefs.syntaxHighlighting);
+          if (typeof prefs.enableColorDetection === "boolean") setColorConversionEnabled(prefs.enableColorDetection);
+        })
+        .catch(() => undefined);
+    };
+    refreshPrefs();
+    // The Settings window writes these through `calculator.setPreference`, which pushes
+    // `calculator.updated` so an open launcher picks the change up live.
+    return onNotification("calculator.updated", refreshPrefs);
+  }, []);
+
+  // The color row (`Enable Color Conversion`): when the query parses as a color, show the
+  // conversion row — input color on the left, the named preview on the right.
+  useEffect(() => {
+    const query = searchText.trim();
+    let cancelled = false;
+    if (!query) {
+      setColorEntry(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void ipc
+        .backend("calculator.getColor", { input: query }, { module: "backend" })
+        .then((raw) => {
+          if (cancelled) return;
+          const color = raw as { hex: string; name: string | null; formats: ColorEntry["formats"] } | null;
+          setColorEntry(
+            color
+              ? {
+                  kind: "color",
+                  query,
+                  hex: color.hex,
+                  name: color.name ? color.name.charAt(0).toUpperCase() + color.name.slice(1) : "Color",
+                  formats: color.formats ?? [],
+                }
+              : null,
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setColorEntry(null);
+        });
+    }, 100);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchText, colorConversionEnabled]);
 
   // The quick-translate row runs the backend's confirmed parser (`in|into <language>`, ≥ 3 chars,
   // prefix match) with the confirmed 150 ms debounce. Row states pending/failed/ready: the row
@@ -985,8 +1049,8 @@ export function MainWindow() {
   // Root Search renders Favorites / Applications / Commands as named sections, exactly like
   // Raycast's root search, and the flat selection index walks all of them in order.
   const sections = useMemo(
-    () => buildSections(searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false, focusState?.session ?? null, gameApps),
-    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings, focusState, gameApps],
+    () => buildSections(searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false, focusState?.session ?? null, gameApps, colorEntry),
+    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings, focusState, gameApps, colorEntry],
   );
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
@@ -1014,7 +1078,7 @@ export function MainWindow() {
   }, [entries, searchText]);
 
   const selectedEntry = entries[selectedIndex];
-  panelOpenRef.current = openApplication !== null || commandPanelEntry !== null || calculatorPanel !== null || translatePanel !== null;
+  panelOpenRef.current = openApplication !== null || commandPanelEntry !== null || calculatorPanel !== null || colorPanel !== null || translatePanel !== null;
 
   // Hooks must run before any early return, so the action source is resolved here.
   const panelApp = openApplication?.payload ?? null;
@@ -1106,6 +1170,7 @@ export function MainWindow() {
     else if (entry.kind === "internal") setCommandPanelEntry(entry);
     else if (entry.kind === "quicklink-create") setSelected(entry);
     else if (entry.kind === "calculator") setCalculatorPanel(entry);
+    else if (entry.kind === "color") setColorPanel(entry);
     else if (entry.kind === "translate") setTranslatePanel(entry);
     else if (entry.kind === "file") setFilePanel(entry.file as FileSearchRow);
     else if (entry.kind === "open-in-explorer") openExplorerEntry(entry.path);
@@ -1327,6 +1392,16 @@ export function MainWindow() {
     [showToast, closeMainWindow, upsertCalculatorHistory],
   );
 
+  const copyColorValue = useCallback(
+    (value: string) => {
+      void ipc.backend("clipboard.write", { content: value }, { module: "backend" }).then(() => {
+        showToast("Copied color to clipboard");
+        closeMainWindow();
+      });
+    },
+    [showToast, closeMainWindow],
+  );
+
   const pasteCalculatorAnswer = useCallback(
     (entry: CalculatorEntry) => {
       void upsertCalculatorHistory(entry)
@@ -1372,6 +1447,19 @@ export function MainWindow() {
     }
     return [{ name: "actions", actions }];
   }, [calculatorPanel]);
+
+  const colorPanelGroups = useMemo<ActionGroup[]>(() => {
+    if (!colorPanel) return [];
+    const formats = colorPanel.formats.map((format) => ({
+      id: `color:copyAs:${format.id}`,
+      title: `Copy as ${format.label}`,
+      itemId: format.id,
+    }));
+    return [
+      { name: "actions", actions: [{ id: "color:copy", title: "Copy Color", itemId: "color" }] },
+      { name: "Copy Color as…", actions: formats },
+    ];
+  }, [colorPanel]);
 
   // --- Translator actions (docs/translator-spec.md — quick row and view action set) -----------
 
@@ -1618,6 +1706,8 @@ export function MainWindow() {
         } else if (entry.kind === "calculator") {
           // Enter = primary action = Copy Answer (confirmed).
           copyCalculatorAnswer(entry);
+        } else if (entry.kind === "color") {
+          copyColorValue(entry.hex);
         } else if (entry.kind === "translate") {
           // Enter = primary action = Copy Translation (confirmed for the quick row).
           copyTranslation(entry);
@@ -2321,7 +2411,9 @@ export function MainWindow() {
                             onClick={() => copyCalculatorAnswer(entry)}
                           >
                             <span className="calc-row__left">
-                              <span className="calc-row__expression">{entry.expression}</span>
+                              <span className="calc-row__expression">
+                                {calcSyntaxHighlighting ? <HighlightedExpression text={entry.expression} /> : entry.expression}
+                              </span>
                               <span className="calc-row__badge">
                                 {entry.evaluation.unitFrom ?? entry.evaluation.currencyFrom ?? "Expression"}
                               </span>
@@ -2341,6 +2433,43 @@ export function MainWindow() {
                               <span className="calc-row__badge">
                                 {entry.evaluation.unitTo ?? entry.evaluation.currencyTo ?? "Result"}
                               </span>
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "color" ? (
+                        <li key="color:root-row">
+                          <button
+                            type="button"
+                            className="list__row calc-row color-row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={() => copyColorValue(entry.hex)}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              setColorPanel(entry);
+                            }}
+                          >
+                            <span className="calc-row__left">
+                              <span className="color-row__chip" style={{ background: entry.hex }} />
+                              <span className="calc-row__expression">{entry.query}</span>
+                              <span className="calc-row__badge">
+                                {entry.formats.find((f) => f.id === "hex" && entry.query.trim().toUpperCase() === f.value)
+                                  ? "HEX"
+                                  : entry.query.includes("rgb")
+                                    ? "RGB"
+                                    : entry.query.includes("hsl")
+                                      ? "HSL"
+                                      : entry.query.startsWith("#")
+                                        ? "HEX"
+                                        : "Color"}
+                              </span>
+                            </span>
+                            <span className="calc-row__divider" aria-hidden>
+                              <OpenrayIcon name="arrow-right" size={14} />
+                            </span>
+                            <span className="calc-row__right">
+                              <span className="color-row__swatch" style={{ background: entry.hex }} />
+                              <span className="calc-row__badge">{entry.name}</span>
                             </span>
                           </button>
                         </li>
@@ -2581,6 +2710,15 @@ export function MainWindow() {
           <OpenrayIcon name="cog" size={16} />
         </button>
         <span className="footer__spacer" />
+        {selectedEntry?.kind === "color" ? (
+          <button
+            type="button"
+            className="footer-action footer-action--kbd"
+            onClick={() => setColorPanel(selectedEntry)}
+          >
+            Copy Color as…
+          </button>
+        ) : null}
         <button
           type="button"
           className="footer-action footer-action--kbd"
@@ -2655,6 +2793,28 @@ export function MainWindow() {
           if (!file) return;
           if (action.id === "file:open") closeMainWindow();
           await runFilePanelAction(file, action.id);
+        }}
+      />
+
+      <ActionPanel
+        open={colorPanel !== null}
+        title="Copy Color as…"
+        groups={[...colorPanelGroups, ...toastGroups]}
+        onClose={() => setColorPanel(null)}
+        onRun={async (action) => {
+          const entry = colorPanel;
+          if (!entry) return;
+          setColorPanel(null);
+          if (action.id === "color:copy") {
+            copyColorValue(entry.hex);
+            return;
+          }
+          if (action.id.startsWith("color:copyAs:")) {
+            const format = entry.formats.find((candidate) => `color:copyAs:${candidate.id}` === action.id);
+            if (format) copyColorValue(format.value);
+            return;
+          }
+          void runToastAction(action.id);
         }}
       />
 
@@ -2782,3 +2942,32 @@ export function MainWindow() {
   );
 }
 
+
+
+/** Syntax highlighting for the calculator row's expression (the `Syntax highlighting` setting):
+ * numbers, operators, functions/units and grouping get their own token colors. */
+const EXPRESSION_TOKEN = /(0x[0-9a-f]+|0b[01]+|0o[0-7]+|\d[\d_.]*(?:[eE][+-]?\d+)?)(px|rem|em|km|cm|mm|mi|ft|in|yd|kg|g|lb|oz|mb|gb|kb|tb|s|min|h|ms)?\b|[+\-*/%^()]|([a-zA-Z_][a-zA-Z0-9_]*)|(\s+)|(.)/g;
+
+function HighlightedExpression({ text }: { text: string }) {
+  const tokens: Array<{ text: string; kind: string }> = [];
+  let match: RegExpExecArray | null;
+  EXPRESSION_TOKEN.lastIndex = 0;
+  while ((match = EXPRESSION_TOKEN.exec(text)) !== null) {
+    const kind = match[2] ? "number-unit" : match[1] ? "number" : match[0].match(/^[+\-*/%^()]$/) ? "operator" : match[3] ? "word" : match[4] ? "space" : "text";
+    tokens.push({ text: match[0], kind });
+    if (match.index === EXPRESSION_TOKEN.lastIndex) EXPRESSION_TOKEN.lastIndex += 1;
+  }
+  return (
+    <>
+      {tokens.map((token, index) =>
+        token.kind === "space" || token.kind === "text" ? (
+          <span key={index}>{token.text}</span>
+        ) : (
+          <span key={index} className={`calc-tok calc-tok--${token.kind}`}>
+            {token.text}
+          </span>
+        ),
+      )}
+    </>
+  );
+}

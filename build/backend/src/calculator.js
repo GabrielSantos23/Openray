@@ -18,6 +18,7 @@ const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 
 const { evaluate, swapUnits } = require("./calculator-engine");
+const { NAMED_COLORS, formattedColors, parseColor } = require("./clipboard-actions");
 
 const RATE_URL = "https://open.er-api.com/v6/latest/USD";
 const RATE_REFRESH_INTERVAL_MS = 7200 * 1000; // confirmed 2 h minimum
@@ -47,7 +48,7 @@ function createCalculator({ pushToFrontend, dataRoot, fetchImpl, now = () => Dat
   const db = new DatabaseSync(databasePath);
   db.exec(SCHEMA);
 
-  const preferences = { remToPxRate: 16 };
+  const preferences = { remToPxRate: 16, syntaxHighlighting: true, enableColorDetection: true };
   try {
     Object.assign(preferences, JSON.parse(fs.readFileSync(settingsPath, "utf-8")));
   } catch {
@@ -209,16 +210,45 @@ function createCalculator({ pushToFrontend, dataRoot, fetchImpl, now = () => Dat
     },
 
     setPreference({ key, value } = {}) {
-      if (key !== "remToPxRate") throw new Error(`Unknown calculator preference: ${key}`);
-      const rate = Number(value);
-      if (!Number.isFinite(rate) || rate < 1) throw new Error("The pixel rate must be a number of at least 1");
-      preferences.remToPxRate = rate;
+      if (key === "remToPxRate") {
+        const rate = Number(value);
+        if (!Number.isFinite(rate) || rate < 1) throw new Error("The pixel rate must be a number of at least 1");
+        preferences.remToPxRate = rate;
+      } else if (key === "syntaxHighlighting" || key === "enableColorDetection") {
+        preferences[key] = value === true;
+      } else {
+        throw new Error(`Unknown calculator preference: ${key}`);
+      }
       try {
         fs.writeFileSync(settingsPath, JSON.stringify(preferences, null, 2));
       } catch (error) {
         console.error("[calculator] could not persist preferences", error);
       }
-      return { value: preferences.remToPxRate };
+      notifyChanged();
+      return { value: preferences[key] };
+    },
+
+    // Root-search color row (`Enable Color Conversion`): parse the query as a color and return
+    // the canonical hex, the closest CSS name, and every Raycast `Copy Color as…` format.
+    getColor({ input } = {}) {
+      const text = String(input ?? "").trim();
+      const color = parseColor(text);
+      if (!color) return null;
+      const formats = formattedColors(text);
+      const hex = formats.find((f) => f.id === "hex")?.value ?? color;
+      let best = null;
+      let bestDistance = Infinity;
+      for (const [name, namedHex] of Object.entries(NAMED_COLORS)) {
+        const named = parseColor(namedHex);
+        if (!named) continue;
+        const distance =
+          (color.r - named.r) ** 2 + (color.g - named.g) ** 2 + (color.b - named.b) ** 2;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = name;
+        }
+      }
+      return { hex, name: best, formats };
     },
 
     historyGetAll() {

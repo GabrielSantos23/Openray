@@ -1277,6 +1277,9 @@ function routeLegacyRow(id: string, next: SettingsValue, values: SettingsMap): v
       if (Number.isFinite(rate) && rate >= 1) {
         void ipc.backend("calculator.setPreference", { key: "remToPxRate", value: rate }, { module: "backend" }).catch(() => undefined);
       }
+    } else if (id === "calculator-syntax-highlighting" || id === "calculator-color-conversion") {
+      const key = id === "calculator-syntax-highlighting" ? "syntaxHighlighting" : "enableColorDetection";
+      void ipc.backend("calculator.setPreference", { key, value: next === true }, { module: "backend" }).catch(() => undefined);
     }
     return;
   }
@@ -1529,8 +1532,12 @@ function useLegacyRowMirrors(mergeValues: (patch: SettingsMap) => void): void {
 
     void fetch("calculator.getPreferences").then((response) => {
       if (!response) return;
-      const preferences = response as { remToPxRate?: number };
-      mergeValues({ "calculator-rem-to-px": String(preferences.remToPxRate ?? 16) });
+      const preferences = response as { remToPxRate?: number; syntaxHighlighting?: boolean; enableColorDetection?: boolean };
+      mergeValues({
+        "calculator-rem-to-px": String(preferences.remToPxRate ?? 16),
+        "calculator-syntax-highlighting": preferences.syntaxHighlighting !== false,
+        "calculator-color-conversion": preferences.enableColorDetection !== false,
+      });
     });
 
     void fetch("translator.getPreferences").then((response) => {

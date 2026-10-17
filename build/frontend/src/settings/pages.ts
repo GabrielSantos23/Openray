@@ -584,13 +584,24 @@ export const PAGES: readonly PageDefinition[] = [
     keywords: ["calculator", "color", "hex", "pixels", "rem", "em", "syntax highlighting", "flight tracker"],
     sections: [
       {
-        id: "calculator-conversion",
-        title: "Conversion",
+        id: "calculator-general",
         rows: [
+          {
+            id: "calculator-syntax-highlighting",
+            title: "Syntax highlighting",
+            description: "Color the numbers, operators and functions in calculated expressions.",
+            control: "switch",
+          },
+          {
+            id: "calculator-color-conversion",
+            title: "Enable Color Conversion",
+            description: "Preview and convert color values from Root Search.",
+            control: "switch",
+          },
           {
             id: "calculator-rem-to-px",
             title: "REM/EM to Pixel Conversion",
-            description: "How many pixels one rem/em is worth when converting between rem/em and pixels.",
+            description: "Input the desired number of pixels equivalent to 1 rem/em.",
             control: "text",
           },
         ],

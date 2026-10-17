@@ -440,3 +440,27 @@ test("the remToPxRate preference validates and persists", () => {
     assert.equal(reopened.handlers.getPreferences().remToPxRate, 14, "preference survives a restart");
   });
 });
+
+test("color conversion: parse, formats, closest name and the enable switches", () => {
+  withRoot((root) => {
+    const { handlers } = makeCalculator(root);
+    const white = handlers.getColor({ input: "#fff" });
+    assert.ok(white, "#fff parses");
+    assert.equal(white.hex, "#FFFFFF");
+    assert.equal(white.name, "white");
+    const formatIds = white.formats.map((format) => format.id);
+    assert.ok(formatIds.includes("hex") && formatIds.includes("hsl") && formatIds.includes("uiColor"), "Raycast format list");
+
+    const red = handlers.getColor({ input: "rgb(255, 0, 0)" });
+    assert.equal(red.hex, "#FF0000");
+    assert.equal(red.name, "red");
+
+    assert.equal(handlers.getColor({ input: "not a color" }), null);
+
+    handlers.setPreference({ key: "enableColorDetection", value: false });
+    handlers.setPreference({ key: "syntaxHighlighting", value: true });
+    const reopened = makeCalculator(root);
+    assert.equal(reopened.handlers.getPreferences().enableColorDetection, false, "switch survives a restart");
+    assert.equal(reopened.handlers.getPreferences().syntaxHighlighting, true);
+  });
+});

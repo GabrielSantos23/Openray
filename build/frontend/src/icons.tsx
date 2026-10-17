@@ -118,6 +118,7 @@ const REGISTRY: Record<string, IconComponent> = {
   "x-mark-circle": XCircle,
   "eye-disabled": EyeOff,
   "arrow-clockwise": RefreshCw,
+  "arrow-right": ArrowRight,
   "x-mark-circle-half-dash": CircleSlash,
   "grip-vertical": GripVertical,
   minus: Minus,

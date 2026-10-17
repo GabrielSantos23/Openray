@@ -141,6 +141,7 @@ export const INTERNAL_COMMANDS: ReadonlyArray<{
   // Raycast's Clipboard History extension commands (the AI `Ask Clipboard` one has no clone).
   // `history` is carried by the existing `clipboard` root row, so buildSections drops it from the
   // generated internal rows to avoid a duplicate.
+  { area: "calculator", command: "history", title: "Calculator History", keywords: ["calculator", "history", "calculations", "math"] },
   { area: "clipboard-history", command: "history", title: "Clipboard History", keywords: ["clipboard history clipboard"] },
   { area: "clipboard-history", command: "pasteSequential", title: "Paste Sequentially", keywords: ["clipboard", "paste sequentially"] },
   { area: "clipboard-history", command: "resetPasteSequence", title: "Reset Paste Sequence", keywords: ["clipboard", "reset paste sequence"] },
@@ -251,6 +252,17 @@ export interface CalculatorRatesMeta {
   stale: boolean;
 }
 
+/** The root-search color row (`Enable Color Conversion`): one parsed color with every format. */
+export interface ColorEntry {
+  kind: "color";
+  query: string;
+  hex: string;
+  /** Closest CSS color name ("White"), already title-cased. */
+  name: string;
+  /** Every `Copy Color as…` format in Raycast order. */
+  formats: Array<{ id: string; label: string; value: string }>;
+}
+
 /** The ephemeral root-search row: `rootSearch:{section:'calculator', matching:'always'}`. */
 export interface CalculatorEntry {
   kind: "calculator";
@@ -300,7 +312,7 @@ export interface GamesViewEntry {
   title: string;
 }
 
-export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | FileIndexingEntry | OpenInExplorerEntry | InlineEntry | CalculatorEntry | TranslateEntry | TranslatorCommandEntry | WindowManagementEntry | WindowManagementArgsEntry | FocusViewEntry | FocusActionEntry | FocusSessionEntry | GameEntry | GamesViewEntry;
+export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | FileIndexingEntry | OpenInExplorerEntry | InlineEntry | CalculatorEntry | ColorEntry | TranslateEntry | TranslatorCommandEntry | WindowManagementEntry | WindowManagementArgsEntry | FocusViewEntry | FocusActionEntry | FocusSessionEntry | GameEntry | GamesViewEntry;
 
 export interface SearchableEntry {
   title: string;
