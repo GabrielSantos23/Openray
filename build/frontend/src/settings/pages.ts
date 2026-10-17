@@ -346,44 +346,6 @@ export const PAGES: readonly PageDefinition[] = [
     ],
   },
   {
-    id: "cloud-sync",
-    title: "Cloud Sync",
-    description: "Enable cloud sync for settings and content across devices.",
-    icon: "cloud-sync",
-    pro: true,
-    keywords: ["backup", "cloud", "raycast pro", "sync"],
-    sections: [
-      {
-        id: "cloud-sync",
-        rows: [
-          {
-            id: "cloud-sync-enabled",
-            title: "Cloud Sync",
-            description: "Keep settings and content synchronised across devices.",
-            control: "switch",
-            unavailable: true,
-          },
-          {
-            id: "cloud-sync-synced-devices",
-            title: "Synced Devices",
-            description: "View devices connected to Cloud Sync.",
-            control: "action",
-            action: "View Devices",
-            unavailable: true,
-          },
-          {
-            id: "cloud-sync-synced-content",
-            title: "Synced Content",
-            description: "See which content categories are synced across devices.",
-            control: "action",
-            action: "View Content",
-            unavailable: true,
-          },
-        ],
-      },
-    ],
-  },
-  {
     id: "advanced",
     title: "Advanced",
     description: "Tune advanced behavior, exporting, and connectivity.",
@@ -490,15 +452,6 @@ export const PAGES: readonly PageDefinition[] = [
         ],
       },
     ],
-  },
-  {
-    id: "organizations",
-    title: "Organizations",
-    description: "Manage organizations, members, and organization settings.",
-    icon: "organizations",
-    keywords: ["invite", "members", "organization", "org", "team", "teams", "webhooks"],
-    empty: "Organizations require a signed-in Openray account.",
-    sections: [],
   },
   {
     id: "quicklinks",
@@ -1139,23 +1092,49 @@ export const PAGES: readonly PageDefinition[] = [
             description: "Automatically quit apps shortly after you stop using them.",
             control: "action",
             action: "Configure",
-            unavailable: true,
           },
           {
             id: "applications-hotkey-action",
             title: "Hotkey Action",
             description: "Behavior when triggering an application hotkey.",
             control: "select",
-            options: ["Toggle Visibility", "Always Show"],
+            options: ["Toggle Visibility", "Always Show", "Always Hide"],
             value: "Toggle Visibility",
-            unavailable: true,
           },
           {
             id: "applications-deep-search",
             title: "Deep Search",
             description: "Search up to 3 levels deep inside added directories",
             control: "switch",
-            unavailable: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "applications-auto-quit",
+    title: "Auto Quit",
+    description: "Automatically quit apps shortly after you stop using them.",
+    icon: "app-window-list",
+    keywords: ["auto quit"],
+    sections: [
+      {
+        id: "applications-auto-quit",
+        rows: [
+          {
+            id: "applications-auto-quit-enabled",
+            title: "Auto Quit",
+            description: "Automatically quit apps you have not used for a while.",
+            control: "switch",
+          },
+          {
+            id: "applications-auto-quit-delay",
+            title: "Quit Delay",
+            description: "How long an app stays open after you stop using it.",
+            control: "select",
+            options: ["After 1 minute", "After 5 minutes", "After 10 minutes", "After 30 minutes", "After 1 hour"],
+            value: "After 5 minutes",
+            visibleWhen: (values) => values["applications-auto-quit-enabled"] === true,
           },
         ],
       },
@@ -1170,11 +1149,12 @@ export const SIDEBAR_PAGE_IDS = [
   "launcher",
   "shortcuts",
   "keyboard",
-  "cloud-sync",
   "advanced",
-  "organizations",
   "about",
 ];
+
+/** Reachable only via the Auto Quit row on the Applications page; hidden from the sidebar and search. */
+export const HIDDEN_PAGE_IDS = ["applications-auto-quit"];
 
 /** The extension-pages group under the root pages, alphabetical like Raycast's sidebar. */
 export const EXTENSION_PAGE_IDS = [

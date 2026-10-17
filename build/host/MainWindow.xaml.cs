@@ -493,6 +493,9 @@ public partial class MainWindow : Window
         if (ReadStoredSetting("open-at-login") is true) SetOpenAtLogin(true);
         if (ReadStoredSetting("replace-start-menu") is true) SetStartMenuReplaced(true);
 
+        // Auto Quit: idle installed applications get quit on this timer (a no-op while disabled).
+        AutoQuit.Start(Dispatcher);
+
         // The Windows accent drives every toggle/link color; re-push when the user changes it.
         try
         {

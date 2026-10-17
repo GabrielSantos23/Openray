@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { OpenrayIcon } from "../icons";
-import { ACCOUNT_PAGE_ID, PAGES, SIDEBAR_PAGE_IDS, type PageDefinition } from "./pages";
+import { ACCOUNT_PAGE_ID, HIDDEN_PAGE_IDS, PAGES, SIDEBAR_PAGE_IDS, type PageDefinition } from "./pages";
 
 export function SearchField({
   value,

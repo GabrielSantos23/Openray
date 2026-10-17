@@ -16,7 +16,7 @@
 // `disambiguator`, plus the `rootSearch.section === "apps"` routing.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ipc } from "./ipc";
+import { ipc, onNotification } from "./ipc";
 import type { ActionGroup } from "./ActionPanel";
 
 export interface ApplicationPayload {
@@ -54,31 +54,40 @@ export function useApplications(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setLoading(true);
-    ipc
-      .backend("applications.getAll", {}, { module: "backend" })
-      .then((response) => {
-        if (cancelled) return;
-        const value = (response as { value?: ApplicationPayload[] }).value ?? [];
-        setApplications(
-          value.map((payload) => ({
-            extensionId: APPLICATIONS_AREA,
-            commandId: `applications/${payload.id}`,
-            title: payload.name,
-            // Raycast displays only the disambiguating folder, never the full path.
-            subtitle: payload.disambiguator
-              ? (payload.disambiguator.split(/[\\/]/).filter(Boolean).pop() ?? null)
-              : null,
-            keywords: [payload.bundleId, payload.name, payload.path].filter(Boolean) as string[],
-            payload,
-          })),
-        );
-      })
-      .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : String(reason)))
-      .finally(() => !cancelled && setLoading(false));
+    const fetchApplications = () => {
+      setLoading(true);
+      ipc
+        .backend("applications.getAll", {}, { module: "backend" })
+        .then((response) => {
+          if (cancelled) return;
+          const value = (response as { value?: ApplicationPayload[] }).value ?? [];
+          setApplications(
+            value.map((payload) => ({
+              extensionId: APPLICATIONS_AREA,
+              commandId: `applications/${payload.id}`,
+              title: payload.name,
+              // Raycast displays only the disambiguating folder, never the full path.
+              subtitle: payload.disambiguator
+                ? (payload.disambiguator.split(/[\\/]/).filter(Boolean).pop() ?? null)
+                : null,
+              keywords: [payload.bundleId, payload.name, payload.path].filter(Boolean) as string[],
+              payload,
+            })),
+          );
+        })
+        .catch((reason) => {
+          if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+        })
+        .finally(() => !cancelled && setLoading(false));
+    };
+    fetchApplications();
+    // The host pushes `applications.changed` after a background rescan (startup snapshot race,
+    // Search Scopes / Deep Search changes) so the list catches up without a relaunch.
+    const offChanged = onNotification("applications.changed", fetchApplications);
 
     return () => {
       cancelled = true;
+      offChanged();
     };
   }, [enabled]);
 

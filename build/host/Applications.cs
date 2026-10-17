@@ -76,6 +76,8 @@ public static class Applications
     private static readonly object CacheLock = new();
     private static List<ApplicationEntry>? _cache;
     private static DateTimeOffset _cacheTime;
+    // Scopes/Deep Search change what a scan covers; a changed key invalidates cache and snapshot.
+    private static string _configKey = "";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
     // Like Raycast's persistent index: the previous scan is kept on disk and served instantly on
     // launch while a background rescan refreshes it, so the launcher never waits for a cold scan.
@@ -85,14 +87,45 @@ public static class Applications
         "Openray", "applications-scan.json");
     private static int _rescanning;
 
+    /// <summary>The Applications settings the scan depends on: Search Scopes + Deep Search.</summary>
+    private static string ConfigKey()
+    {
+        var deep = MainWindow.ReadStoredSetting("applications-deep-search") is true;
+        var scopes = ReadSearchScopes();
+        return $"{deep}|{string.Join(";", scopes)}";
+    }
+
+    /// <summary>The `applications-search-scopes` setting: a JSON array of directory paths.</summary>
+    internal static List<string> ReadSearchScopes()
+    {
+        var raw = MainWindow.ReadStoredSetting("applications-search-scopes") as string;
+        if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            var scopes = new List<string>();
+            foreach (var element in document.RootElement.EnumerateArray())
+            {
+                var path = element.GetString();
+                if (!string.IsNullOrWhiteSpace(path)) scopes.Add(path);
+            }
+            return scopes;
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
     public static async Task<List<ApplicationEntry>> GetAllAsync()
     {
+        var configKey = ConfigKey();
         lock (CacheLock)
         {
-            if (_cache is not null && DateTimeOffset.UtcNow - _cacheTime < CacheTtl) return _cache;
+            if (_cache is not null && _configKey == configKey && DateTimeOffset.UtcNow - _cacheTime < CacheTtl) return _cache;
         }
         var snapshot = TryReadSnapshot();
-        if (snapshot is not null)
+        if (snapshot is not null && _configKey == configKey)
         {
             // Served as-is: refreshing the running badges would cost a full process pass on the
             // critical path of every action (including `applications.open`); the delayed
@@ -101,6 +134,7 @@ public static class Applications
             {
                 _cache = snapshot;
                 _cacheTime = DateTimeOffset.UtcNow;
+                _configKey = configKey;
             }
             StartBackgroundRescan();
             return snapshot;
@@ -110,6 +144,7 @@ public static class Applications
         {
             _cache = result;
             _cacheTime = DateTimeOffset.UtcNow;
+            _configKey = configKey;
         }
         return result;
     }
@@ -179,6 +214,7 @@ public static class Applications
                 {
                     _cache = fresh;
                     _cacheTime = DateTimeOffset.UtcNow;
+                    _configKey = ConfigKey();
                 }
             }
             catch
@@ -189,7 +225,27 @@ public static class Applications
             {
                 Interlocked.Exchange(ref _rescanning, 0);
             }
+            // The launcher may have served the pre-rescan list; let the renderer refresh.
+            NotifyApplicationsChanged();
         });
+    }
+
+    /// <summary>Requests a refetch of the applications list in the renderer.</summary>
+    private static void NotifyApplicationsChanged()
+    {
+        try
+        {
+            var application = System.Windows.Application.Current;
+            if (application is null) return;
+            _ = application.Dispatcher.InvokeAsync(() =>
+            {
+                if (application.MainWindow is MainWindow main) main.PostToRenderer("applications.changed", null);
+            });
+        }
+        catch
+        {
+            /* shutting down */
+        }
     }
 
     private sealed record CachedScan(DateTimeOffset Time, List<ApplicationEntry> Packages);
@@ -240,6 +296,37 @@ public static class Applications
             var id = $"path:{target.ToLowerInvariant()}";
             found[id] = new ApplicationEntry(
                 id, name, target, AppUserModelId.ForPath(target), disambiguator, false, runningPaths.Contains(target));
+        }
+        // Search Scopes: extra directories picked in Settings. Without Deep Search only the
+        // top level is scanned; with it, up to 3 directory levels like the shipped feature.
+        var scopes = ReadSearchScopes();
+        var deepSearch = MainWindow.ReadStoredSetting("applications-deep-search") is true;
+        var scopeShortcuts = 0;
+        foreach (var scope in scopes)
+        {
+            if (string.IsNullOrWhiteSpace(scope) || !Directory.Exists(scope)) continue;
+            foreach (var file in EnumerateScopeFiles(scope, deepSearch ? 3 : 1))
+            {
+                var name = System.IO.Path.GetFileNameWithoutExtension(file);
+                var target = ShortcutTargetCache.Resolve(file);
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(target)) continue;
+                if (!target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
+                if (JunkKeywords.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase))) continue;
+                scopeShortcuts++;
+                var disambiguator = System.IO.Path.GetDirectoryName(target) is { } scopeDir
+                    ? scopeDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    : null;
+                var scopeId = $"path:{target.ToLowerInvariant()}";
+                if (!found.ContainsKey(scopeId))
+                {
+                    found[scopeId] = new ApplicationEntry(
+                        scopeId, name, target, AppUserModelId.ForPath(target), disambiguator, false, runningPaths.Contains(target));
+                }
+            }
+        }
+        if (scopes.Count > 0)
+        {
+            Openray.Launcher.App.Log.Write($"[applications] scopes {scopes.Count} deep={deepSearch} shortcuts={scopeShortcuts}");
         }
         ShortcutTargetCache.Flush();
         Openray.Launcher.App.Log.Write($"[applications] shortcut cache {ShortcutTargetCache.Counters}");
@@ -524,6 +611,33 @@ public static class Applications
         return results;
     }
 
+    /// <summary>`*.lnk` files under `root`, at most `maxDepth` directory levels deep (1 = direct children).</summary>
+    private static IEnumerable<string> EnumerateScopeFiles(string root, int maxDepth)
+    {
+        var stack = new Stack<(string Dir, int Depth)>();
+        stack.Push((root, 1));
+        while (stack.Count > 0)
+        {
+            var (dir, depth) = stack.Pop();
+            string[] files = Array.Empty<string>();
+            string[] subDirs = Array.Empty<string>();
+            try
+            {
+                files = Directory.GetFiles(dir, "*.lnk");
+                if (depth <= maxDepth)
+                {
+                    subDirs = Directory.GetDirectories(dir);
+                }
+            }
+            catch (Exception)
+            {
+                /* inaccessible directory — skip */
+            }
+            foreach (var file in files) yield return file;
+            foreach (var subDir in subDirs) stack.Push((subDir, depth + 1));
+        }
+    }
+
     private static IEnumerable<(string Name, string TargetPath)> EnumerateStartMenuShortcuts()
     {
         var roots = new[]
@@ -605,6 +719,12 @@ public static class Applications
         }
     }
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
     public static async Task<object?> DispatchAsync(string method, JsonElement? data)
     {        Openray.Launcher.App.Log.Write($"[native] {method}");
         switch (method)
@@ -613,6 +733,25 @@ public static class Applications
             {
                 var apps = await GetAllAsync();
                 return new { value = apps.Select(ToPayload) };
+            }
+            case "applications.isForeground":
+            {
+                var id = data?.GetProperty("id").GetString();
+                var app = _cache?.FirstOrDefault(entry => entry.Id == id);
+                if (app?.Path is null) return new { value = false };
+                var foreground = GetForegroundWindow();
+                if (foreground == IntPtr.Zero) return new { value = false };
+                _ = GetWindowThreadProcessId(foreground, out var ownerPid);
+                try
+                {
+                    using var process = Process.GetProcessById((int)ownerPid);
+                    var modulePath = process.MainModule?.FileName;
+                    return new { value = modulePath is not null && string.Equals(modulePath, app.Path, StringComparison.OrdinalIgnoreCase) };
+                }
+                catch
+                {
+                    return new { value = false };
+                }
             }
             case "applications.getDefaultBrowser":
             {

@@ -55,9 +55,11 @@ interface ShortcutRow {
 
 const ALL_CATEGORIES: ShortcutCategory[] = ["Applications", "Extensions", "Games", "Quicklinks", "System"];
 
-export function ShortcutsPage() {
+export function ShortcutsPage({ lockedCategory }: { lockedCategory?: "Applications" } = {}) {
   const context = useContext(ShortcutsFilterContext);
-  const filter = context?.filter ?? { query: "", categories: [], modifications: new Set() };
+  const filter = lockedCategory
+    ? { query: "", categories: [lockedCategory] as ShortcutCategory[], modifications: new Set<"hotkey" | "alias" | "enabled" | "disabled">() }
+    : context?.filter ?? { query: "", categories: [], modifications: new Set() };
   const [rows, setRows] = useState<ShortcutRow[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [version, setVersion] = useState(0);
@@ -99,7 +101,7 @@ export function ShortcutsPage() {
       const isGame = gameIds.has(app.payload.id) || app.payload.isGame === true;
       next.push({
         key: appConfigKey(app.payload.id),
-        category: isGame ? "Games" : "Applications",
+        category: lockedCategory ? "Applications" : isGame ? "Games" : "Applications",
         title: app.title,
         subtitle: app.subtitle ?? undefined,
         iconUrl: app.payload.icon,
@@ -212,7 +214,11 @@ export function ShortcutsPage() {
       {[...grouped.entries()].map(([category, categoryRows]) => (
         <section className="settings-shortcuts__group" key={category}>
           <header className="settings-shortcuts__header">
-            <ShortcutsCategorySelect current={category} />
+            {lockedCategory ? (
+              <span className="settings-shortcuts__lockedTitle">{lockedCategory}</span>
+            ) : (
+              <ShortcutsCategorySelect current={category} />
+            )}
             <button
               type="button"
               className="settings-shortcuts__collapse"

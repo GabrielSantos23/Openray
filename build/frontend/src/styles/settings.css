@@ -2204,3 +2204,69 @@
   padding: var(--space-6) var(--space-4);
   color: var(--settings-text-secondary);
 }
+
+/* Applications — Search Scopes section and the locked shortcuts table title. */
+.settings-section__title {
+  position: relative;
+}
+.settings-scopes__add {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: var(--fill-tertiary, rgba(255, 255, 255, 0.08));
+  color: inherit;
+  cursor: pointer;
+}
+.settings-scopes__add:hover {
+  background: var(--fill-secondary, rgba(255, 255, 255, 0.14));
+}
+.settings-scopes__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.72));
+}
+.settings-scopes__row:hover {
+  background: var(--fill-tertiary, rgba(255, 255, 255, 0.06));
+}
+.settings-scopes__path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.settings-scopes__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  cursor: pointer;
+}
+.settings-scopes__row:hover .settings-scopes__remove {
+  opacity: 0.85;
+}
+.settings-scopes__remove:hover {
+  background: var(--fill-secondary, rgba(255, 255, 255, 0.14));
+}
+.settings-shortcuts__lockedTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, rgba(255, 255, 255, 0.92));
+}

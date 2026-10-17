@@ -1718,6 +1718,10 @@ export function MainWindow() {
       console.info(`[applications] open failed: ${String(error)}`);
     });
   };
+  // The Applications setting drives what an application hotkey does: show the app, hide it,
+  // or toggle — hide when the app is the foreground window, launch/focus it otherwise.
+  const appHotkeyAction = String(useSetting("applications-hotkey-action") ?? "Toggle Visibility");
+
   // Application / quicklink / internal-command hotkeys registered on the Shortcuts page:
   // a separate subscription so the lookups can close over the loaded data.
   useEffect(() => {
@@ -1727,7 +1731,31 @@ export function MainWindow() {
       if (payload.commandKey.startsWith("app:")) {
         const appId = payload.commandKey.slice("app:".length);
         const app = applications.find((candidate) => candidate.payload.id === appId);
-        if (app) openApplicationEntry(app);
+        if (app) {
+          const hide = () => {
+            closeMainWindow();
+            void runApplicationAction(app.payload, "hideApplication", actionHandlers).catch(() => undefined);
+          };
+          if (appHotkeyAction === "Always Hide") {
+            if (app.payload.isRunning) hide();
+            else openApplicationEntry(app);
+          } else if (appHotkeyAction === "Always Show") {
+            openApplicationEntry(app);
+          } else {
+            // Toggle Visibility: the host reports whether the app owns the foreground window.
+            void ipc
+              .backend("applications.isForeground", { id: app.payload.id }, { module: "backend" })
+              .then((response) => {
+                const foreground = Boolean(
+                  (response as { value?: boolean; foreground?: boolean } | undefined)?.value ??
+                    (response as { foreground?: boolean } | undefined)?.foreground,
+                );
+                if (foreground) hide();
+                else openApplicationEntry(app);
+              })
+              .catch(() => openApplicationEntry(app));
+          }
+        }
         return;
       }
       if (payload.commandKey.startsWith("quicklink:")) {
@@ -1763,7 +1791,7 @@ export function MainWindow() {
       }
     });
     // openApplicationEntry/openQuicklinkRow are stable; data flows through the deps below.
-  }, [applications, quicklinkRows, extensions, openApplicationEntry, openQuicklinkRow, closeMainWindow, setSelected]);
+  }, [applications, quicklinkRows, extensions, openApplicationEntry, openQuicklinkRow, closeMainWindow, setSelected, appHotkeyAction]);
 
   // Toast actions merge into whatever action panel is open, like Raycast's `getToastActions()`.
   const toastGroups = useToastActionGroups();
