@@ -1062,11 +1062,13 @@ export function MainWindow() {
       openCommand: (query) => {
         const q = query.toLowerCase();
         const match = entries.find(
-          (entry) => entry.kind === "extension" && entry.command.title.toLowerCase().includes(q),
+          (entry) =>
+            (entry.kind === "extension" && entry.command.title.toLowerCase().includes(q)) ||
+            (entry.kind === "internal" && entry.commandId.toLowerCase().replace("/", " ").includes(q)),
         );
-        if (!match || match.kind !== "extension") return null;
+        if (!match || (match.kind !== "extension" && match.kind !== "internal")) return null;
         setSelected(match);
-        return { title: match.command.title };
+        return { title: match.kind === "internal" ? match.commandId : match.command.title };
       },
       rootSearch: (query) => {
         setSelected(null);

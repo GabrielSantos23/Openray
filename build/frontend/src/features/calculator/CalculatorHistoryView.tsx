@@ -157,8 +157,12 @@ export function CalculatorHistoryView({
     const unpinned = filtered.filter((entry) => entry.pinned === null);
     const result: Array<{ id: string; title: string; entries: HistoryEntry[] }> = [];
     if (pinned.length) result.push({ id: "pinned", title: "Pinned", entries: pinned });
+    // Each entry lands in the FIRST matching section only — "This Week" and "This Month" both
+    // match a 3-day-old entry, and every section matching made it show up twice.
+    const unassigned = new Set(unpinned);
     for (const section of AGE_SECTIONS) {
-      const sectionEntries = unpinned.filter((entry) => section.match(entry.createdAt, now));
+      const sectionEntries = unpinned.filter((entry) => unassigned.has(entry) && section.match(entry.createdAt, now));
+      for (const entry of sectionEntries) unassigned.delete(entry);
       if (sectionEntries.length) result.push({ id: section.id, title: section.title, entries: sectionEntries });
     }
     return result;
@@ -174,7 +178,7 @@ export function CalculatorHistoryView({
   }, [searchText]);
 
   useEffect(() => {
-    const container = listRef.current?.parentElement;
+    const container = listRef.current?.closest(".window__body") ?? listRef.current?.parentElement;
     const row = listRef.current?.querySelector<HTMLElement>('.list__row[data-selected="true"]');
     if (!container || !row) return;
     const rowRect = row.getBoundingClientRect();
