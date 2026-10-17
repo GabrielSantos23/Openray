@@ -56,7 +56,7 @@ People keep snippets, notes and quicklinks here, and the launcher is opened doze
 ### Everything is a command
 
 1. **New user-visible behavior is a command** in the registry with id, title, description, params schema, risk, and `run`, plus tests. The UI, extensions, CLI, control channel and MCP all dispatch commands by id. If a feature only works through a UI handler, it is not finished.
-2. Ids are `domain.action`, lowercase, dot separated (`snippets.create`, `windows.snapLeft`, `settings.set`). Extension commands are `ext.<extensionName>.<command>`. Ids are stable; renaming one is a breaking change.
+2. Ids are `domain.action`, dot separated (`snippets.create`, `windows.snapLeft`, `settings.set`). New ids are lowercase; pre-existing camelCase method ids keep their spelling (`historyGetAll`) so pipe callers stay compatible. Extension commands are `ext.<extensionName>.<command>`. Ids are stable; renaming one is a breaking change.
 3. `risk` is `read`, `write` or `destructive`. Destructive commands (delete, overwrite, anything that leaves the machine) need an explicit opt-in (`allowDestructive: true`) from the caller.
 4. Handlers work through core services, never through UI code. UI feedback goes out as events on the event bus; handlers never call the UI. Handlers must work with the window hidden and no UI attached (verbs that genuinely need the renderer or the WPF host return the typed `needs_ui` error when it is absent).
 5. Results and errors are plain JSON in one envelope: `{ ok: true, result }` or `{ ok: false, error: { code, message, hint? } }`. The `hint` says how to fix the call.
