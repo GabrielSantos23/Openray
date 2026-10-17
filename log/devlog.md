@@ -1,4 +1,29 @@
-# Devlog
+## 2026-10-17 (evening) — action panel redesign, scroll-appearing scrollbar, translucent settings popovers
+
+**What landed**
+
+- Root-search scrollbar shows only while scrolling (`data-scrolling` fed by the body scroll
+  handler, 600ms fade; fg-20 thumb, 8px track).
+- Action panel rebuilt to the shipped menu layout (menu-XUV8Agq8.css / popover-BU57MK8Q.css):
+  330px wide, 8px radius, 36px rows, entry-title header, group separators instead of labels,
+  shortcut keycap pills, the search field at the bottom ("Search for actions…", 34px, top
+  separator), and the shipped [windows] popover material (panel-overlay + panel-background
+  gradients over the panel backdrop, 120px blur).
+- Settings dropdown menus and the hotkey recorder use the same translucent popover material.
+- Control input hook: `key` events accept modifiers, and `text` routes to the focused input
+  (so the action panel's search is drivable through MCP).
+
+**Verified through MCP**
+
+- Scrollbar: 40 ArrowDowns then an immediate screenshot — thumb pixels present (fg-20 at the
+  track edge); 1.5s later at rest the same pixels are window background.
+- Action panel: ctrl+k via `/input` opens it (get_state view `dialog:command-panel`);
+  panel-scoped text filters in place ("favor" -> "Remove from Favorites", "sh" -> "No actions"
+  state); Escape closes.
+- phase6 suite 13/13 after the changes.
+- Settings-window surfaces verified in the built CSS (backdrop-filter + popover material on
+  `.settings-menu`/`.settings-recorder`); the Settings window itself is not screenshotable via
+  the control channel (separate WebView2 process, docs/gaps.md #1).
 
 ## 2026-10-17 (later) — launcher restyle to the shipped palette + MCP theme commands
 

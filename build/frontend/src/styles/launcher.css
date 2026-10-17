@@ -131,12 +131,33 @@
   min-height: 0;
   overflow: hidden auto;
   padding: var(--space-8);
-  /* Scrolling works; the scrollbar never shows (shipped root search). */
-  scrollbar-width: none;
+  /* Raycast's root-search scrollbar: invisible at rest, appears while scrolling. */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.window__body[data-scrolling] {
+  scrollbar-color: var(--fg-20) transparent;
 }
 
 .window__body::-webkit-scrollbar {
-  display: none;
+  width: 8px;
+}
+
+.window__body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.window__body::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.window__body[data-scrolling]::-webkit-scrollbar-thumb {
+  background: var(--fg-20);
+  background-clip: padding-box;
 }
 
 .list {
@@ -654,18 +675,21 @@
   /* Raycast anchors the action panel above the footer's Actions button, bottom-right. */
   bottom: calc(var(--window-footer-height) + var(--space-2));
   right: var(--space-6);
-  width: 340px; /* Raycast's `addMenuWidth: 350` */
-  max-height: min(460px, calc(100% - var(--window-header-height) - var(--window-footer-height) - var(--space-16)));
-  overflow: hidden auto;
+  width: 330px;
+  max-height: min(340px, calc(100% - var(--window-header-height) - var(--window-footer-height) - var(--space-16)));
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-6);
-  border-radius: var(--radius-12);
-  background: var(--color-panel-backdrop);
+  border-radius: var(--radius-8);
+  /* The shipped [windows] popover material: panel-overlay + panel-background gradients over
+     the opaque panel backdrop, blurred. */
+  background-color: var(--color-panel-backdrop);
+  background-image:
+    linear-gradient(var(--color-panel-overlay), var(--color-panel-overlay)),
+    linear-gradient(to bottom, var(--color-panel-background), var(--color-panel-background));
   box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(var(--blur-3)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur-3)) saturate(180%);
+  backdrop-filter: blur(var(--blur-4)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-4)) saturate(180%);
   animation: action-panel-in 180ms var(--easing-ease-out-expo);
 }
 
@@ -680,15 +704,26 @@
   }
 }
 
-.action-panel__filter {
+.action-panel__search {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-2) var(--space-6);
+  height: 34px;
+  padding: 0 var(--space-12);
   color: var(--color-text-tertiary);
 }
 
-.action-panel__filter input {
+.action-panel__search::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--color-border-separator);
+}
+
+.action-panel__search input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -699,10 +734,20 @@
   font-size: var(--font-size-13);
 }
 
+.action-panel__search input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
 .action-panel__scroll {
+  flex: 1;
+  min-height: 0;
   overflow: hidden auto;
-  margin: 0 calc(-1 * var(--space-6));
   padding: 0 var(--space-6);
+  scrollbar-width: none;
+}
+
+.action-panel__scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .action-panel__empty {
@@ -712,10 +757,11 @@
 }
 
 .action-panel__title {
-  padding: var(--space-2) var(--space-6);
-  font-size: var(--font-size-11);
-  font-weight: var(--font-weight-600);
-  color: var(--color-text-tertiary);
+  flex: none;
+  padding: var(--space-10, 10px) var(--space-12) var(--space-2);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-400);
+  color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -724,29 +770,32 @@
 .action-panel__group {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  padding: var(--space-2) 0;
+}
+
+.action-panel__group + .action-panel__group {
+  border-top: 1px solid var(--color-border-separator);
+  margin: 0 calc(-1 * var(--space-6));
+  padding-inline: var(--space-6);
 }
 
 .action-panel__groupLabel {
-  padding: var(--space-4) var(--space-6) var(--space-2);
-  font-size: var(--font-size-8);
-  font-weight: var(--font-weight-500);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-tertiary);
+  display: none;
 }
 
 .action-panel__item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-6) var(--space-6);
+  gap: var(--space-10, 10px);
+  height: 36px;
+  padding: 0 var(--space-10, 10px);
   border: 0;
   border-radius: var(--radius-6);
   background: transparent;
   color: var(--color-text-primary);
   font: inherit;
+  font-size: var(--font-size-13);
   text-align: left;
   cursor: pointer;
 }
@@ -772,6 +821,9 @@
 }
 
 .action-panel__shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
 }

@@ -261,6 +261,18 @@ export function MainWindow() {
   const popToRootTimeout = popToRootSeconds <= 0 ? 0 : popToRootSeconds * 1000;
   const listRef = useRef<HTMLUListElement>(null);
   const bodyRef = useRef<HTMLElement>(null);
+  const scrollFadeRef = useRef<number>(0);
+  // Raycast's root-search scrollbar: invisible at rest, shown while scrolling, hidden again
+  // after a beat. CSS drives the paint from `data-scrolling`; this feeds it.
+  const handleBodyScroll = useCallback(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.dataset.scrolling = "true";
+    window.clearTimeout(scrollFadeRef.current);
+    scrollFadeRef.current = window.setTimeout(() => {
+      delete el.dataset.scrolling;
+    }, 600);
+  }, []);
   // Mirrors "is an action panel open" for the window-level key handlers. React state inside a
   // keydown closure can be a render stale (an action just closed the panel within the same
   // keystroke), so the guard reads the ref — always current — instead of the closure value.
@@ -1213,10 +1225,20 @@ export function MainWindow() {
       },
       input: (event: ControlInput) => {
         switch (event.type) {
-          case "text":
+          case "text": {
+            // Text goes to the focused input when one holds focus (the action panel's search
+            // field), so the panel is drivable through the control channel too.
+            const active = document.activeElement;
+            if (active instanceof HTMLInputElement && active !== searchRef.current) {
+              const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+              setter?.call(active, active.value + String(event.text ?? ""));
+              active.dispatchEvent(new Event("input", { bubbles: true }));
+              return { ok: true, target: "focused-input" };
+            }
             setSelected(null);
             setSearchText(searchText + String(event.text ?? ""));
             return { ok: true };
+          }
           case "setQuery":
             setSelected(null);
             setSearchText(String(event.query ?? ""));
@@ -1229,11 +1251,23 @@ export function MainWindow() {
             setSelected(null);
             setSearchText(searchText.slice(0, -1));
             return { ok: true };
-          case "key":
+          case "key": {
             // The window-level handlers own navigation/activation; a synthetic keydown runs the
             // exact same code path a physical key would (app-internal, never OS injection).
-            window.dispatchEvent(new KeyboardEvent("keydown", { key: String(event.key ?? ""), bubbles: true, cancelable: true }));
+            const modifiers = event.modifiers ?? [];
+            window.dispatchEvent(
+              new KeyboardEvent("keydown", {
+                key: String(event.key ?? ""),
+                ctrlKey: modifiers.includes("ctrl"),
+                altKey: modifiers.includes("alt"),
+                shiftKey: modifiers.includes("shift"),
+                metaKey: modifiers.includes("meta"),
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
             return { ok: true };
+          }
           case "action":
             if (event.name === "openSettings") {
               openSettings();
@@ -2280,7 +2314,7 @@ export function MainWindow() {
         />
       ) : null}
 
-      <main className="window__body" ref={bodyRef}>
+      <main className="window__body" ref={bodyRef} onScroll={handleBodyScroll}>
         {hostError || applicationsError ? (
           <div className="state">
             <div className="state__title">Something went wrong</div>

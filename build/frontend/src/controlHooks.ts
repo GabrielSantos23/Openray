@@ -27,7 +27,7 @@ export type ControlInput =
   | { type: "setQuery"; query: string }
   | { type: "clear" }
   | { type: "backspace" }
-  | { type: "key"; key: string }
+  | { type: "key"; key: string; modifiers?: Array<"ctrl" | "alt" | "shift" | "meta"> }
   | { type: "action"; name: "openSettings" | "close" | "popToRoot" };
 
 export interface ControlHooks {

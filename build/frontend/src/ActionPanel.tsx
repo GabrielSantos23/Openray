@@ -137,20 +137,6 @@ export function ActionPanel({ open, groups, onClose, onRun, title }: ActionPanel
       <div className="action-panel__popover" role="menu" ref={panelRef} tabIndex={-1}>
         {title ? <div className="action-panel__title">{title}</div> : null}
 
-        {/* Raycast's action panel always carries its own filter ("Search for actions…"). */}
-        <div className="action-panel__filter">
-          <OpenrayIcon name="magnifying-glass" size={14} />
-          <input
-            ref={filterRef}
-            value={filter}
-            placeholder="Search for actions…"
-            onChange={(event) => {
-              setFilter(event.target.value);
-              setActiveIndex(0);
-            }}
-          />
-        </div>
-
         <div className="action-panel__scroll" ref={scrollRef}>
           {visibleGroups.map((group) => {
             const label = ACTION_GROUP_LABELS[group.name] ?? group.name;
@@ -180,7 +166,13 @@ export function ActionPanel({ open, groups, onClose, onRun, title }: ActionPanel
                       </span>
                       <span className="action-panel__label">{action.title}</span>
                       {action.shortcut ? (
-                        <span className="action-panel__shortcut">{action.shortcut}</span>
+                        <span className="action-panel__shortcut">
+                          {action.shortcut.split(" ").filter(Boolean).map((key, keyIndex) => (
+                            <span key={keyIndex} className="kbd">
+                              {key}
+                            </span>
+                          ))}
+                        </span>
                       ) : null}
                     </button>
                   );
@@ -188,6 +180,20 @@ export function ActionPanel({ open, groups, onClose, onRun, title }: ActionPanel
               </div>
             );
           })}
+        </div>
+
+        {/* Shipped menu layout: the search field sits at the bottom of the panel
+            (menu-XUV8Agq8.css `menu__searchFieldWrapper`, separator on top). */}
+        <div className="action-panel__search">
+          <input
+            ref={filterRef}
+            value={filter}
+            placeholder="Search for actions…"
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setActiveIndex(0);
+            }}
+          />
         </div>
       </div>
     </div>

@@ -34,6 +34,7 @@
     inset 0 0 0 1px rgb(from var(--fg) r g b / 20%), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
     0 20px 25px -5px rgba(0, 0, 0, 0.2);
   --settings-popover: color-mix(in srgb, var(--fg) 12%, var(--color-window-bg));
+  --settings-popover-overlay: var(--color-panel-overlay, #ffffff1a);
   --settings-pro: #4da3ff;
   --settings-pro-bg: rgba(77, 163, 255, 0.15);
   --settings-card: rgb(from var(--fg) r g b / 3%);
@@ -896,7 +897,8 @@
   display: inline-flex;
 }
 
-/* Popup menu: opaque panel approximation of the blurred popover, radius 6, panel shadow. */
+/* Popup menu: the shipped [windows] popover material — panel-overlay + panel-background
+   gradients over the opaque panel backdrop, blurred (popover-BU57MK8Q.css). */
 .settings-menu {
   position: fixed;
   z-index: 80;
@@ -907,7 +909,12 @@
   flex-direction: column;
   padding: var(--space-4);
   border-radius: var(--radius-6);
-  background: var(--settings-popover);
+  background-color: var(--color-panel-backdrop);
+  background-image:
+    linear-gradient(var(--settings-popover-overlay), var(--settings-popover-overlay)),
+    linear-gradient(to bottom, var(--color-panel-background), var(--color-panel-background));
+  backdrop-filter: blur(var(--blur-4)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-4)) saturate(180%);
   box-shadow: var(--settings-shadow-panel);
   animation: settings-popover-in 0.2s cubic-bezier(0.3, 0.7, 0, 1.26) both;
   scrollbar-width: thin;
@@ -1211,7 +1218,12 @@
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-8);
-  background: var(--settings-popover);
+  background-color: var(--color-panel-backdrop);
+  background-image:
+    linear-gradient(var(--settings-popover-overlay), var(--settings-popover-overlay)),
+    linear-gradient(to bottom, var(--color-panel-background), var(--color-panel-background));
+  backdrop-filter: blur(var(--blur-4)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-4)) saturate(180%);
   box-shadow: var(--settings-shadow-panel);
   overflow: hidden;
   animation: settings-popover-in 0.2s cubic-bezier(0.3, 0.7, 0, 1.26) both;

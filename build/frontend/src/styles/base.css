@@ -86,7 +86,9 @@
   --color-surface-input-field: var(--fg-5);
   --color-surface-action-bar: var(--fg-5);
   --color-surface-inner-panel: var(--fg-10);
-  --color-panel-backdrop: var(--color-window-bg);
+  --color-panel-backdrop: #333333;
+  --color-panel-overlay: #ffffff1a;
+  --color-panel-background: var(--color-window-bg-secondary);
   --color-brand-red: var(--color-brand);
 
   /* ---- radii, spacing, blur (windows scale) ----------------------------------------- */
