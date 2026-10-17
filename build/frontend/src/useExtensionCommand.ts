@@ -31,6 +31,8 @@ function gunzipToString(data: Uint8Array): string {
 export interface ViewAction {
   id: string;
   title: string;
+  /** Titled ActionPanel.Section this action belongs to (panel grouping, in panel order). */
+  group?: string;
   icon?: unknown;
   shortcut?: string;
   style?: string;
@@ -152,6 +154,8 @@ export interface ViewBody {
   emptyView?: { title?: string; description?: string; icon?: unknown; actions?: ViewAction[] };
   columns?: number;
   itemSize?: string;
+  /** `hidden` drops the per-cell labels (icon-only grids like the emoji picker). */
+  labels?: string;
   aspectRatio?: string;
   fit?: string;
   inset?: string;

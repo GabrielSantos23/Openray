@@ -7,6 +7,8 @@ export interface UiAction {
   title: string;
   primary?: boolean;
   push?: string;
+  /** Titled ActionPanel.Section this action belongs to (panel grouping, in panel order). */
+  group?: string;
   /** `destructive` tints the action row in the action panel. */
   style?: 'destructive';
   /** Display-only shortcut hint (the shell's keycap rendering). */
@@ -16,6 +18,8 @@ export interface UiAction {
   iconName?: string;
   iconColor?: string;
   iconUri?: string;
+  /** Dark-appearance variant of `iconUri` (renderer picks by current theme). */
+  iconUriDark?: string;
   iconSvg?: string;
 }
 
@@ -48,6 +52,8 @@ export interface UiItem {
   iconName?: string;
   iconColor?: string;
   iconUri?: string;
+  /** Dark-appearance variant of `iconUri` (renderer picks by current theme). */
+  iconUriDark?: string;
   /** Raw SVG markup rendered as a vector (tinted by `iconColor`). */
   iconSvg?: string;
   /** Extra search terms matched by the shell's filter. */
@@ -142,6 +148,8 @@ export interface GridTree {
   isLoading?: boolean;
   /** Placeholder text for the search bar while this tree is shown. */
   searchBarPlaceholder?: string;
+  /** `hidden` drops the per-cell labels (icon-only grids like the emoji picker). */
+  labels?: 'visible' | 'hidden';
 }
 
 export interface FormFieldOption {

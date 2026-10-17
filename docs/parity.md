@@ -24,6 +24,8 @@ missing. The per-domain specs in this directory carry the behavioral detail.
 | Settings | Every Settings-page control is reachable via `settings.set`; import/export via advanced |
 | Advanced | Scheduled backups, export/import, connection prefs (`advanced.*`) |
 | Extensions (FlowKey) | Install, run, preferences, native consent gates (`ext.*`, `extensions.*`) |
+| Emoji & Symbols (`ext.emoji.search`) | Emoji/symbol search, categories, skin tones, Frequently Used frecency, pin, custom keywords, paste/copy/copy-unicode/save-as-snippet with the reference shortcut set |
+| Svgl (`ext.svgl.index`) | SVG logo search grid (svgl.app), category dropdown (All/Pinned/Recently Used + categories), titled action panel (Copy SVG/File/Wordmark, shadcn/ui registry, React/Vue/Svelte/Angular/Astro components, URLs, pin/move, open-in-browser), light/dark logo variants, recently used |
 | Agents | Command registry, control channel, MCP, CLI (this work — no Raycast counterpart) |
 
 ## Partial

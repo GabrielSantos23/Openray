@@ -19,8 +19,12 @@ function request(method, params = {}) {
   return new Promise((resolve, reject) => {
     const id = nextId++;
     pendingResults.set(id, (result) => {
-      if (!result.success) reject(new Error(result.error ?? `${method} failed`));
-      else resolve(result.value);
+      if (!result.success) {
+        const message = typeof result.error === "string" ? result.error : (result.error?.message ?? `${method} failed`);
+        const error = new Error(message);
+        if (result.error?.stack) error.stack = result.error.stack;
+        reject(error);
+      } else resolve(result.value);
     });
     queueMicrotask(() => {
       parentPort?.postMessage({ kind: "request", id, method, params });
@@ -53,7 +57,14 @@ function startRpc() {
         parentPort?.postMessage({
           kind: "result",
           id: message.id,
-          result: { success: false, error: error instanceof Error ? error.message : String(error) },
+          // `{ message, stack }` — the backend's failure logger prints `error.stack` when present.
+          result: {
+            success: false,
+            error:
+              error instanceof Error
+                ? { message: error.message, stack: error.stack }
+                : { message: String(error) },
+          },
         });
       }
       return;

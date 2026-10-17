@@ -7,6 +7,8 @@ export interface IconSpec {
   svg?: string;
   color?: string;
   uri?: string;
+  /** Dark-appearance variant of `uri` (svgl-style logos ship light/dark SVG pairs). */
+  uriDark?: string;
 }
 
 export interface FilterOptionSpec {
@@ -111,6 +113,8 @@ export interface GridProps {
   isLoading?: boolean;
   /** Placeholder text for the search bar. */
   searchBarPlaceholder?: string;
+  /** `hidden` drops the per-cell labels (icon-only grids like the emoji picker). */
+  labels?: 'visible' | 'hidden';
   children?: ReactNode;
 }
 
@@ -130,6 +134,12 @@ export interface GridItemProps {
 }
 
 export interface ActionPanelProps {
+  children?: ReactNode;
+}
+
+/** Titled group inside an ActionPanel (Raycast's ActionPanel.Section). */
+export interface ActionSectionProps {
+  title?: string;
   children?: ReactNode;
 }
 

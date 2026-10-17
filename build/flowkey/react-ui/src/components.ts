@@ -1,6 +1,7 @@
 import type {
   ActionPanelProps,
   ActionProps,
+  ActionSectionProps,
   DetailProps,
   EmptyViewProps,
   GridItemProps,
@@ -59,5 +60,7 @@ export const Form = Object.assign(intrinsic<FormProps>('form'), {
   Separator: intrinsic<Record<string, never>>('form-separator'),
 });
 
-export const ActionPanel = intrinsic<ActionPanelProps>('action-panel');
+export const ActionPanel = Object.assign(intrinsic<ActionPanelProps>('action-panel'), {
+  Section: intrinsic<ActionSectionProps>('action-section'),
+});
 export const Action = intrinsic<ActionProps>('action');

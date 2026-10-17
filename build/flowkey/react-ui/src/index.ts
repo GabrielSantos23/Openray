@@ -3,6 +3,7 @@ export { ActionPanel, Action, Detail, Form, Grid, List } from './components';
 export type {
   ActionPanelProps,
   ActionProps,
+  ActionSectionProps,
   FormCheckboxProps,
   FormDescriptionProps,
   FormFilePickerProps,

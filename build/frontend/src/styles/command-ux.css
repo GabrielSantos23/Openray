@@ -72,6 +72,28 @@
   color: var(--color-text-secondary);
 }
 
+/* Icon-only grids (emoji picker): the tile is the whole cell, no label row underneath. */
+.grid[data-labels="hidden"] .grid__label {
+  display: none;
+}
+
+/* Emoji glyphs: no tinted icon box, and the glyph scales with the tile (Raycast's ~1/3 of the
+   column) — container queries because the column width varies with the `columnCount` preference. */
+.grid[data-labels="hidden"] .grid__cell {
+  container-type: inline-size;
+}
+
+.grid[data-labels="hidden"] .grid__content .icon {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+.grid[data-labels="hidden"] .icon--emoji {
+  font-size: 28px;
+  font-size: 34cqw;
+}
+
 .grid__sectionCount {
   margin-left: 8px;
   color: var(--color-text-secondary);
@@ -189,15 +211,67 @@
   padding: 0;
 }
 
+/* Category dropdown (emoji picker): Raycast's `dropdown-button` — bordered box, leading category
+   icon, trailing chevron; opens the blurred popover menu (menu-*.css). */
 .command-view__dropdown {
   border: 0;
-  border-radius: var(--radius-6);
+  border-radius: var(--radius-8);
+  background: none;
+  box-shadow: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  padding: 0;
+}
+
+.command-view__dropdown .settings-dropdownButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 26px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: var(--radius-8);
   background: var(--color-surface-input-field);
   box-shadow: inset 0 0 0 1px var(--color-border-field);
   color: var(--color-text-primary);
   font: inherit;
-  font-size: var(--font-size-11);
-  padding: 2px var(--space-6);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.command-view__dropdown .settings-dropdownButton:hover {
+  box-shadow: inset 0 0 0 1px var(--fg-20);
+}
+
+.command-view__dropdown .settings-dropdownButton__icon {
+  display: inline-flex;
+  color: var(--color-text-secondary);
+}
+
+.command-view__dropdown .settings-dropdownButton__text {
+  white-space: nowrap;
+}
+
+.command-view__dropdown .settings-dropdownButton__indicator {
+  display: inline-flex;
+  color: var(--color-text-secondary);
+}
+
+.command-view__dropdown .settings-menu__item {
+  min-height: 30px;
+  border-radius: var(--radius-6);
+  font-size: 13px;
+}
+
+.command-view__dropdown .settings-menu__itemIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-secondary);
+}
+
+.command-view__dropdown .settings-menu__item[data-selected="true"] .settings-menu__itemIcon,
+.command-view__dropdown .settings-menu__item[data-selected="true"] {
+  color: var(--color-text-primary);
 }
 
 .state__actions {
@@ -1411,4 +1485,10 @@ textarea[data-error="true"] {
 
 .back-button:active {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* svgl-style tile logos: the fetched SVG renders at Raycast's ~55% tile share, not full bleed. */
+.grid__content > img.grid__tileImg {
+  width: 55%;
+  height: 55%;
 }

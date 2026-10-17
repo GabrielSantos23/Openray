@@ -10,3 +10,6 @@ Third-party packages and assets used by Openray, with their licenses.
 | `build/backend` dependency `@modelcontextprotocol/sdk` | MCP TypeScript SDK | Anthropic, MCP contributors | https://github.com/modelcontextprotocol/typescript-sdk | MIT |
 | `build/backend` dependency `zod` (via MCP SDK) | zod | Colin McDonnell | https://zod.dev | MIT |
 | `build/extensions/lucide-icons` | Lucide icon assets | Lucide contributors | https://lucide.dev | ISC |
+| `build/extensions/emoji` (dataset `src/generated/emoji-data.json`) | unicode-emoji-json | Mu-An Chiou and contributors | https://github.com/muan/unicode-emoji-json | MIT |
+| `build/extensions/svgl` (behavior port) | Svgl extension for Raycast | 1weiho, ridemountainpig, 0xdhrv | https://github.com/raycast/extensions/tree/main/extensions/svgl | MIT |
+| `build/extensions/svgl` (runtime logo data + component endpoints) | svgl | pheralb and contributors | https://svgl.app | MIT |

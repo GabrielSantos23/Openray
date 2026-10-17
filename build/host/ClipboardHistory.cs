@@ -318,22 +318,37 @@ public static class ClipboardHistory
     {
         var payloads = new List<ClipboardRepresentationPayload>();
         if (data is null || data.Value.ValueKind != JsonValueKind.Object) return payloads;
-        if (!data.Value.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+        // Callers send either the captured-entry shape (`{ items: [{ representations }] }`) or a
+        // bare `representations` array (snippets paste, the FlowKey clipboard routes).
+        JsonElement[] representations;
+        if (data.Value.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+        {
+            representations = items.EnumerateArray()
+                .Where(item => item.TryGetProperty("representations", out var inner) && inner.ValueKind == JsonValueKind.Array)
+                .SelectMany(item => item.GetProperty("representations").EnumerateArray())
+                .ToArray();
+        }
+        else if (data.Value.TryGetProperty("representations", out var direct) && direct.ValueKind == JsonValueKind.Array)
+        {
+            representations = direct.EnumerateArray().ToArray();
+        }
+        else
         {
             return payloads;
         }
-        foreach (var item in items.EnumerateArray())
+        foreach (var representation in representations)
         {
-            if (!item.TryGetProperty("representations", out var representations)) continue;
-            foreach (var representation in representations.EnumerateArray())
+            // A file-drop representation is `{ path }` alone; mimeType only matters for text.
+            if (!representation.TryGetProperty("mimeType", out var mimeType)
+                && !representation.TryGetProperty("path", out var _))
             {
-                if (!representation.TryGetProperty("mimeType", out var mimeType)) continue;
-                payloads.Add(new ClipboardRepresentationPayload(
-                    mimeType.GetString() ?? "text/plain",
-                    representation.TryGetProperty("text", out var text) ? text.GetString() : null,
-                    representation.TryGetProperty("path", out var path) ? path.GetString() : null,
-                    representation.TryGetProperty("base64", out var base64) ? base64.GetString() : null));
+                continue;
             }
+            payloads.Add(new ClipboardRepresentationPayload(
+                mimeType.ValueKind == JsonValueKind.String ? mimeType.GetString() ?? "text/plain" : "text/plain",
+                representation.TryGetProperty("text", out var text) ? text.GetString() : null,
+                representation.TryGetProperty("path", out var path) ? path.GetString() : null,
+                representation.TryGetProperty("base64", out var base64) ? base64.GetString() : null));
         }
         return payloads;
     }

@@ -1,3 +1,57 @@
+## 2026-10-17 (late) — emoji picker polish + the svgl extension (store-published)
+
+**What landed**
+
+- Emoji picker (`ext.emoji.search`) follow-up to the user's design pass: 34cqw container-query
+  glyphs on hidden-label tiles, `LoadingBar` wired to `Grid isLoading`, and the category
+  dropdown restyled to the shipped settings menu (per-category OpenrayIcon, checkmark,
+  26px icon button with chevron).
+- New extension `build/extensions/svgl` — clean-room port of the MIT-licensed svgl extension
+  (behavior read from the pinned upstream commit; nothing pasted). Grid of svgl.app logos
+  (columns 6, light/dark `uriDark` variants), category dropdown (All/Pinned/Recently Used +
+  svgl categories with counts), and the full titled action panel: Copy SVG Text/File
+  (Ctrl+↵), Wordmark, shadcn/ui registry install command (package-manager preference),
+  React (svgr endpoint) / Vue / Svelte / Angular / Astro components, URLs, Pin/Unpin/Move
+  (Ctrl+P, Ctrl+↑/↓), and SVG Info (copy title, open in browser Ctrl+O, visit
+  website/brand/category). Pinned/Recently Used state lives in extension storage.
+- SDK plumbing needed by svgl: `ActionPanel.Section` (serializer groups actions with the
+  section title; the panel renders titled groups in first-appearance order), `IconSpec.uriDark`
+  (adapter maps `source: { light, dark }`; the renderer picks by `data-theme-appearance`),
+  and grid tiles render remote/data icons as full images (`.grid__tileImg`, ~55% share after
+  the user's "svgs are too big" pass).
+- Backend: FlowKey `clipboard.write` now honors `{ html, paths }` (rich writes) and gained a
+  `files.writeTemp` route (backend-owned scratch under `<dataRoot>/extension-temp`, name
+  sanitized); `setClipboard` translates the FlowKey `text` field to the host verb's `content`
+  (a silent empty-string write before — the emoji Copy-to-Clipboard was broken by this too).
+- Host: `ReadRepresentations` accepts both the captured-entry `{ items: [{ representations }] }`
+  shape and the bare `representations` array every paste caller actually sends, and file-drop
+  representations may be `{ path }` without a mimeType. Before this, `placeInClipboard` from
+  the snippets view and the FlowKey paste routes silently wrote nothing.
+- svgl is NOT preinstalled: it is published through the store (`store.import` →
+  `store.install`, source "uploaded") and installed into the live extensions root that way.
+
+**Verified through MCP + CDP (screenshots in build/shot-svgl-*.png)**
+
+- Store publish → install → registry (`ext.svgl.index/setup-shadcn-registry/request`), launch
+  via root search; grid renders 41 sections / 1007 logos with tile logos, counts, footer
+  "Copy SVG Text ↵ | Actions Ctrl K" (matches the reference screenshot).
+- Action panel: titled groups (Copy SVG / Copy SVG File / Copy shadcn/ui Registry / Copy React
+  Component / …) with shortcut pills over the selected logo.
+- Copy SVG Text (Enter): clipboard reads back the 9.4KB id-prefixed SVG; window closes with the
+  HUD. Copy SVG File: clipboard holds a CF_HDROP drop list pointing at
+  `<dataRoot>/extension-temp/<Logo>.svg`. Recently Used section appears after a copy
+  ("Recently Used 1"); Pin → "Pinned Plausible Analytics" toast + Pinned section; category
+  dropdown selection filters the grid ("Analytics 8").
+- Tests: registry + wiring + fuzz + adapter + contract + store + clipboard-actions 58 pass
+  (adapter gains the group/uriDark pin); layer-check ok (75 files).
+
+**Fixed along the way**
+
+- The FlowKey HTTP capability returns `body`, not `bodyText` (svgl fetched undefined → empty
+  grid); response-body field name documented in the extension's api.ts.
+- `FlowKeyCapabilities.http.fetch` responses were being mis-unwrapped in the worker repro
+  harness only (no product code change).
+
 ## 2026-10-17 (evening) — action panel redesign, scroll-appearing scrollbar, translucent settings popovers
 
 **What landed**

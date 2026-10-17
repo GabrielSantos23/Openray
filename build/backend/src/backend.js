@@ -38,7 +38,10 @@ function paths(options) {
       return path.join(options.extensionsRoot, extension.uuid, "tools", `${tool.name}.js`);
     },
     assetsPath(uuid) {
-      return path.join(options.extensionsRoot, uuid, "assets");
+      // Callers pass either the extension uuid or the whole extension record (the registry
+      // runner sends `{ uuid }` while the frontend sends the full entry).
+      const id = typeof uuid === "string" ? uuid : (uuid?.uuid ?? "unknown");
+      return path.join(options.extensionsRoot, id, "assets");
     },
   };
 }
@@ -396,7 +399,9 @@ function createBackend(options) {
       });
     },
     async setClipboard(ctx, params) {
-      return dispatch("backend", "clipboard.write", params);
+      // The host's raw `clipboard.write` verb reads a `content` field; the FlowKey capability
+      // sends `text`, so translate here (a silent empty-string write otherwise).
+      return dispatch("backend", "clipboard.write", { content: String(params?.text ?? "") });
     },
     async getClipboard(ctx) {
       return dispatch("backend", "clipboard.read", {});
@@ -480,8 +485,52 @@ function createBackend(options) {
         }
         case "clipboard.read":
           return hostHandlers.getClipboard(ctx).then((value) => ({ text: value?.value ?? null }));
-        case "clipboard.write":
+        case "clipboard.write": {
+          // Rich writes (svgl's Copy SVG File): html and file paths ride as representations on
+          // one clipboard publication via the pasteboard-only host route (no paste, no hide).
+          const files = Array.isArray(call.paths) ? call.paths.map((f) => String(f)) : [];
+          if (call.html != null || files.length > 0) {
+            const representations = [];
+            if (call.text != null) representations.push({ mimeType: "text/plain", text: String(call.text) });
+            if (call.html != null) representations.push({ mimeType: "text/html", text: String(call.html) });
+            for (const file of files) representations.push({ path: file });
+            return dispatch("backend", "clipboardHistory.placeInClipboard", {
+              target: "pasteboard",
+              shouldCloseWindow: false,
+              overridePasteboard: true,
+              representations,
+            }).then(() => ({}));
+          }
           return hostHandlers.setClipboard(ctx, { text: String(call.text ?? "") });
+        }
+        case "files.writeTemp":
+          // Backend-owned scratch space for extension artifacts (svgl writes fetched SVGs here
+          // before putting them on the clipboard as a file drop list).
+          {
+            const name = String(call.name ?? "file").replace(/[^a-zA-Z0-9._-]+/g, "-");
+            if (!name || name === "." || name === "..") throw new Error("files.writeTemp: invalid name");
+            const dir = path.join(dataRoot, "extension-temp");
+            fs.mkdirSync(dir, { recursive: true });
+            const file = path.join(dir, name);
+            fs.writeFileSync(file, Buffer.from(String(call.content ?? ""), "utf-8"));
+            return { path: file };
+          }
+        case "clipboard.paste":
+          // The emoji picker's `Paste`: write the text, hand focus back to the frontmost app and
+          // deliver the paste keystroke there (same host route the Snippets view uses), then the
+          // launcher window hides itself.
+          return dispatch("backend", "clipboardHistory.placeInClipboard", {
+            target: "frontmost",
+            shouldCloseWindow: true,
+            overridePasteboard: true,
+            representations: [{ mimeType: "text/plain", text: String(call.text ?? "") }],
+          }).then(() => ({}));
+        case "snippets.create":
+          return dispatch("backend", "snippets.create", {
+            title: String(call.title ?? "Snippet"),
+            keyword: call.keyword ? String(call.keyword) : undefined,
+            text: String(call.text ?? ""),
+          }).then(() => ({}));
         case "storage.get": {
           const store = await storage(ctx);
           const raw = store[`flowkey:${call.key}`];

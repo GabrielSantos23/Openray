@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { OpenrayIcon } from "./icons";
+import { shortcutPills } from "./shortcuts";
 import { markdownTitle, renderMarkdown } from "./markdown";
 import { onNotification } from "./ipc";
 import { isDevExtensions, overrideTestHooks } from "./testHooks";
@@ -39,7 +40,13 @@ function Icon({ icon, fallback = "AppWindow" }: { icon?: unknown; fallback?: str
       />
     );
   }
-  const source = spec?.source?.light;
+  // svgl-style light/dark icon pairs: the adapter ships both variants and the current theme
+  // appearance (see themes.ts `applyTheme`) picks one.
+  const appearance = document.documentElement.dataset.themeAppearance;
+  const source =
+    appearance !== "light" && typeof spec?.source?.dark === "string"
+      ? spec.source.dark
+      : spec?.source?.light;
   if (typeof source === "string" && source.startsWith("emoji://")) {
     return (
       <span className="icon icon--emoji" aria-hidden>
@@ -96,7 +103,7 @@ function ActionList({
           onClick={() => onRun(action)}
         >
           <span>{action.title}</span>
-          {action.shortcut ? <span className="kbd">{action.shortcut}</span> : null}
+          {action.shortcut ? <span className="kbd">{shortcutPills(action.shortcut).join(" ")}</span> : null}
         </button>
       ))}
     </div>
@@ -494,6 +501,25 @@ export function RenderedView({
  * Value changes flow to the worker through `onValueChange` (the extension re-renders with the
  * new `filterValue`); an extension-declared `onChange` callback still fires when present.
  */
+/**
+ * Icons for the emoji picker's category dropdown (Raycast ships one icon per category —
+ * `KL` in the shipped picker); unknown values fall back to the grid glyph.
+ */
+const CATEGORY_ICON_NAMES: Record<string, string> = {
+  all: "Grid",
+  pinned: "tack",
+  recent: "clock",
+  smileys_people: "smile",
+  animals_nature: "Bird",
+  food_drink: "coffee",
+  activity: "game-controller",
+  travel_places: "plane",
+  objects: "Lightbulb",
+  symbols: "hash",
+  flags: "flag",
+  unicode_symbols: "sigma",
+};
+
 export function SearchBarDropdown({
   accessory,
   createCallback,
@@ -554,9 +580,12 @@ export function SearchBarDropdown({
         title={tooltip}
         onClick={toggle}
       >
+        <span className="settings-dropdownButton__icon" aria-hidden>
+          <OpenrayIcon name={CATEGORY_ICON_NAMES[current?.id ?? ""] ?? "Grid"} size={14} />
+        </span>
         <span className="settings-dropdownButton__text">{current?.title ?? current?.id ?? ""}</span>
         <span className="settings-dropdownButton__indicator">
-          <OpenrayIcon name="Forward" size={12} />
+          <OpenrayIcon name="chevron-down" size={12} />
         </span>
       </button>
       {open ? (
@@ -588,7 +617,15 @@ export function SearchBarDropdown({
                 setOpen(false);
               }}
             >
+              <span className="settings-menu__itemIcon" aria-hidden>
+                <OpenrayIcon name={CATEGORY_ICON_NAMES[option.id] ?? "Grid"} size={15} />
+              </span>
               {option.title ?? option.id}
+              {option.id === current?.id ? (
+                <span className="settings-menu__check" aria-hidden>
+                  <OpenrayIcon name="Checkmark" size={13} />
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -730,7 +767,7 @@ function GridBody({
     ["--grid-inset" as string]: inset === "zero" ? "0px" : inset === "sm" ? "4px" : inset === "md" ? "8px" : "16px",
   });
   return (
-    <div className="grid">
+    <div className="grid" data-labels={body.labels}>
       {sections
         ? sections.map((section, sectionIndex) => {
             const columns = Math.max(1, Math.min(8, section.columns ?? body.columns ?? GRID_DEFAULT_COLUMNS));
@@ -787,6 +824,14 @@ function GridCell({
   runAction: (action: ViewAction) => void;
 }) {
   const content = (item as { content?: unknown }).content;
+  // Remote/data-URL item icons (svgl logos) render as the tile's full-bleed image, the way
+  // Raycast's `Grid.Item content={{ value: uri }}` grids do; emoji/lucide icons stay in ItemIcon.
+  const iconSource = (item.icon as { source?: { light?: string; dark?: string } } | undefined)?.source;
+  const tileImage =
+    appearanceIcon(iconSource) ??
+    (typeof content === "string"
+      ? content
+      : ((content as { value?: string } | undefined)?.value ?? null));
   return (
     <button
       type="button"
@@ -801,8 +846,8 @@ function GridCell({
     >
       {/* The tile fills the column (Raycast's compact grids — no fixed pixel box); the icon stays ~45%. */}
       <span className="grid__content">
-        {content ? (
-          <img src={String((content as { value?: string })?.value ?? content)} alt="" loading="lazy" />
+        {tileImage ? (
+          <img src={tileImage} alt="" className="grid__tileImg" loading="lazy" />
         ) : (
           <ItemIcon item={item} />
         )}
@@ -810,6 +855,18 @@ function GridCell({
       <span className="grid__label">{item.title ?? item.id}</span>
     </button>
   );
+}
+
+/** Theme-aware image URL for a grid tile: dark-variant when the app renders dark. */
+function appearanceIcon(source: { light?: string; dark?: string } | undefined): string | null {
+  if (!source) return null;
+  const candidate =
+    document.documentElement.dataset.themeAppearance !== "light" && typeof source.dark === "string"
+      ? source.dark
+      : source.light;
+  if (typeof candidate !== "string") return null;
+  // Only remote/data images become tiles; icon:// and emoji:// stay in ItemIcon.
+  return /^https?:/.test(candidate) || candidate.startsWith("data:image/") ? candidate : null;
 }
 
 // ------------------------------------------------------------------------------------------

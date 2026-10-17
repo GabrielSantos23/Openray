@@ -1,0 +1,56 @@
+{
+  "id": "emoji",
+  "name": "Emoji & Symbols",
+  "version": "1.0.0",
+  "description": "Search emoji and symbols and paste, copy or save them.",
+  "icon": "command-icon.png",
+  "commands": [
+    {
+      "id": "search",
+      "title": "Search Emoji & Symbols",
+      "keywords": ["emoji", "symbols", "emoticon", "smiley", "unicode"],
+      "mode": "view",
+      "icon": "command-icon.png"
+    }
+  ],
+  "nativeMethods": ["clipboard.write", "clipboard.paste", "hud.show", "snippets.create"],
+  "httpHosts": [],
+  "preferences": [
+    {
+      "name": "primaryAction",
+      "type": "dropdown",
+      "title": "Primary action",
+      "description": "Action run when pressing enter on an emoji.",
+      "default": "paste",
+      "required": false,
+      "options": [
+        { "value": "paste", "title": "Paste" },
+        { "value": "copy", "title": "Copy to Clipboard" }
+      ]
+    },
+    {
+      "name": "columnCount",
+      "type": "text",
+      "title": "Grid columns",
+      "description": "Number of emoji tiles per row (2-12).",
+      "default": "8",
+      "required": false
+    },
+    {
+      "name": "skinTone",
+      "type": "dropdown",
+      "title": "Emoji skin tone",
+      "description": "Skin tone applied to the emoji glyphs.",
+      "default": "none",
+      "required": false,
+      "options": [
+        { "value": "none", "title": "None" },
+        { "value": "light", "title": "Light" },
+        { "value": "mediumLight", "title": "Medium Light" },
+        { "value": "medium", "title": "Medium" },
+        { "value": "mediumDark", "title": "Medium Dark" },
+        { "value": "dark", "title": "Dark" }
+      ]
+    }
+  ]
+}

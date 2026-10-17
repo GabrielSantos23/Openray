@@ -57,7 +57,7 @@ const LIST_ITEM_DETAIL_ALLOWED = ['preview', 'previewImageUri'];
 const DETAIL_ALLOWED = ['title', 'mediaKeys', 'subtitle', 'imageUri', 'markdown', 'actions'];
 const DETAIL_METADATA_ALLOWED: string[] = [];
 const DETAIL_FIELD_ALLOWED = ['label', 'value', 'valueIconUri', 'href', 'tags', 'kind'];
-const GRID_ALLOWED = ['columns', 'title', 'filter', 'isLoading', 'searchBarPlaceholder'];
+const GRID_ALLOWED = ['columns', 'title', 'filter', 'isLoading', 'searchBarPlaceholder', 'labels'];
 const GRID_ITEM_ALLOWED = [
   'id',
   'title',
@@ -70,6 +70,7 @@ const GRID_ITEM_ALLOWED = [
 ];
 const GRID_SECTION_ALLOWED = ['title', 'subtitle'];
 const ACTION_PANEL_ALLOWED: string[] = [];
+const ACTION_SECTION_ALLOWED = ['title'];
 const ACTION_ALLOWED = ['title', 'icon', 'primary', 'push', 'onAction', 'id', 'style', 'shortcut'];
 const EMPTY_VIEW_ALLOWED = ['title', 'description'];
 
@@ -170,7 +171,13 @@ function optionalIcon(type: string, props: Record<string, unknown>, key: string)
     );
   }
   if (typeof spec.emoji === 'string') return { icon: spec.emoji };
-  if (typeof spec.uri === 'string') return { iconUri: spec.uri };
+  if (typeof spec.uri === 'string') {
+    const out: Partial<UiItem> = { iconUri: spec.uri };
+    // svgl-style light/dark logo pairs: the dark variant rides along and the renderer picks it
+    // by current theme appearance.
+    if (typeof spec.uriDark === 'string' && spec.uriDark.length > 0) out.iconUriDark = spec.uriDark;
+    return out;
+  }
   if (typeof spec.svg === 'string') {
     if (spec.svg.length === 0) {
       throw new ReactUiError(`<${type}> prop '${key}' has empty svg content`);
@@ -628,6 +635,13 @@ function serializeGrid(node: HostNode, state: SerializeState): GridTree {
   if (isLoading !== undefined) tree.isLoading = isLoading;
   const placeholder = optionalString('grid', node.props, 'searchBarPlaceholder');
   if (placeholder !== undefined) tree.searchBarPlaceholder = placeholder;
+  const labels = node.props['labels'];
+  if (labels !== undefined) {
+    if (labels !== 'visible' && labels !== 'hidden') {
+      throw new ReactUiError(`<grid> prop 'labels' must be 'visible' or 'hidden'`);
+    }
+    if (labels === 'hidden') tree.labels = 'hidden';
+  }
   let emptyView: UiEmptyView | undefined;
   let emptyViewCount = 0;
   let looseItemCount = 0;
@@ -827,11 +841,11 @@ function serializeEmptyView(node: HostNode): UiEmptyView {
 
 function serializeActions(actionsValue: unknown, state: SerializeState): UiAction[] {
   const actions: UiAction[] = [];
-  visitActions(actionsValue, actions, state);
+  visitActions(actionsValue, actions, state, undefined);
   return actions;
 }
 
-function visitActions(node: unknown, out: UiAction[], state: SerializeState): void {
+function visitActions(node: unknown, out: UiAction[], state: SerializeState, group: string | undefined): void {
   for (const child of flattenElements(node)) {
     if (!isElement(child)) {
       throw new ReactUiError(
@@ -839,22 +853,46 @@ function visitActions(node: unknown, out: UiAction[], state: SerializeState): vo
       );
     }
     if (isFragment(child)) {
-      visitActions(child.props['children'], out, state);
+      visitActions(child.props['children'], out, state, group);
       continue;
     }
+    visitActionElement(child, out, state, group);
+  }
+}
+
+function visitActionElement(
+  child: ReactElement<Record<string, unknown>>,
+  out: UiAction[],
+  state: SerializeState,
+  group: string | undefined,
+): void {
+  {
     const intrinsic = requireIntrinsic(child.type, 'actions prop children');
     if (intrinsic === 'action-panel') {
       const panelProps = child.props as Record<string, unknown>;
       checkProps('action-panel', panelProps, ACTION_PANEL_ALLOWED);
-      visitActions(panelProps['children'], out, state);
-      continue;
+      visitActions(panelProps['children'], out, state, undefined);
+      return;
+    }
+    if (intrinsic === 'action-section') {
+      // Raycast's ActionPanel.Section: a titled group; the title rides on every action so the
+      // renderer can group and label them in panel order.
+      const sectionProps = child.props as Record<string, unknown>;
+      checkProps('action-section', sectionProps, ACTION_SECTION_ALLOWED);
+      const title = optionalString('action-section', sectionProps, 'title');
+      const before = out.length;
+      visitActions(sectionProps['children'], out, state, title);
+      if (out.length === before) {
+        throw new ReactUiError(`<action-section> must contain at least one <action>`);
+      }
+      return;
     }
     if (intrinsic === 'action') {
-      out.push(serializeActionElement(child, state));
-      continue;
+      out.push(serializeActionElement(child, state, group));
+      return;
     }
     throw new ReactUiError(
-      `actions prop children must be <ActionPanel> or <Action>, got <${String(child.type)}>`,
+      `actions prop children must be <ActionPanel>, <ActionPanel.Section> or <Action>, got <${String(child.type)}>`,
     );
   }
 }
@@ -862,6 +900,7 @@ function visitActions(node: unknown, out: UiAction[], state: SerializeState): vo
 function serializeActionElement(
   element: ReactElement<Record<string, unknown>>,
   state: SerializeState,
+  group: string | undefined,
 ): UiAction {
   const props = element.props;
   checkProps('action', props, ACTION_ALLOWED);
@@ -888,6 +927,7 @@ function serializeActionElement(
     id = state.registry.register(onAction as ActionHandler);
   }
   const action: UiAction = { id, title };
+  if (group !== undefined) action.group = group;
   Object.assign(action, optionalIcon('action', props, 'icon'));
   const primary = optionalBoolean('action', props, 'primary');
   const push = optionalString('action', props, 'push');

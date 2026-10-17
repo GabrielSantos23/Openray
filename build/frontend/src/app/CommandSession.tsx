@@ -15,6 +15,7 @@ import {
   type CommandPagesState,
 } from "../commandPages";
 import { ipc, onNotification, openSettings } from "../ipc";
+import { shortcutMatches } from "../shortcuts";
 import { useSetting } from "../settings/store";
 import { isDevExtensionsEnabled, overrideTestHooks } from "../testHooks";
 import { readFlowkeyPreferences } from "../features/extensions/preferences";
@@ -199,7 +200,17 @@ export function CommandSession({
       .filter((item) => item.id === effectiveSelectedId)
       .flatMap((item) => item.actions ?? []);
     const models = [...(body.actions ?? []), ...itemActions];
-    return models.length ? [{ name: "actions", actions: models }] : [];
+    if (models.length === 0) return [];
+    // Untitled actions collapse into one "actions" group; titled ActionPanel.Sections keep their
+    // own group each, in first-appearance order (svgl's Copy SVG / Copy SVG File / … panel).
+    const byName = new Map<string, ViewAction[]>();
+    for (const action of models) {
+      const name = action.group ?? "actions";
+      const bucket = byName.get(name);
+      if (bucket) bucket.push(action);
+      else byName.set(name, [action]);
+    }
+    return [...byName.entries()].map(([name, actions]) => ({ name, actions }));
   }, [entry, body, bodyItems, effectiveSelectedId]);
 
   // Dev-only automation hooks for the running command (see testHooks.ts).
@@ -498,6 +509,8 @@ export function CommandSession({
         </button>
 
         <LoadingBar isLoading={command.isLoading || command.phase === "loading"} />
+        {/* The extension's own `isLoading` (Grid/List prop) drives the same header loader. */}
+        <LoadingBar isLoading={body?.isLoading === true} />
       </header>
 
       <main className="window__body" style={{ padding: 0 }}>
@@ -594,7 +607,9 @@ export function CommandSession({
 
       <ActionPanel
         open={panelOpen}
-        title="Actions"
+        // Raycast's menu header carries the highlighted item's name ("Upside-Down Face") and
+        // falls back to "Actions" when nothing is selected.
+        title={selectedItem?.title ?? "Actions"}
         groups={[...groups, ...toastGroups]}
         onClose={() => setPanelOpen(false)}
         onRun={async (action) => {
@@ -679,7 +694,9 @@ function ClipboardCommandRedirect({
  * Window-level keyboard for a running command view: arrows move the selection (1D lists and 2D
  * grids), Enter runs the selected item's primary action, Escape/Ctrl+[ pop, Shift+Escape pops to
  * root — Raycast's `goBack`/`popToRoot` shortcuts (`shortcuts-C1kqjDmf.js`). Delegated to a child so
- * the key map can read the current page's items.
+ * the key map can read the current page's items. Modifier-key actions declare display shortcuts
+ * (`ctrl+shift+return` from the worker adapter) that trigger here too — Raycast's secondary
+ * actions (Copy to Clipboard on Ctrl+↵ and friends).
  */
 function CommandViewKeyboard({
   body,
@@ -718,6 +735,17 @@ function CommandViewKeyboard({
       ) {
         event.preventDefault();
         onPopOne();
+        return;
+      }
+      // Declared action shortcuts fire before the modifier early-return below (an action on
+      // Ctrl+↵ would otherwise be unreachable from the keyboard).
+      const selectedForShortcut = items.find((item) => item.id === selectedItemId) ?? items[0];
+      const shortcutAction = [...(selectedForShortcut?.actions ?? []), ...(body.actions ?? [])].find(
+        (action) => shortcutMatches(action.shortcut, event),
+      );
+      if (shortcutAction) {
+        event.preventDefault();
+        onRunPrimary(shortcutAction);
         return;
       }
       if (event.ctrlKey || event.metaKey || event.altKey) return;

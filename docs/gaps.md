@@ -19,3 +19,14 @@ closes or discovers them.
    scopes via `fileSearch.setSettings`.
 6. **Public GitHub mirror is behind** the local main; refresh with the filtered-snapshot
    push when asked.
+7. **Emoji extension (`ext.emoji.search`) gaps vs the shipped picker**: no skin-tone
+   submenus (tone is a preference), no Edit-Custom-Keywords view (keywords are
+   deletable only), no AI keyword suggestions; the shipped dataset is embedded in a
+   native Swift module, so the clone derives its dataset from `unicode-emoji-json`
+   (version drift: 559 Smileys & People entries vs the shipped 555).
+8. **Svgl extension (`ext.svgl.index`) gaps vs the Raycast svgl extension**: the
+   package-manager first-run setup view is replaced by a pnpm fallback (Raycast's own
+   runner lookup falls back the same way; the preference still exists); the grid filter
+   dropdown does not persist the last selection across sessions; framework component
+   output is byte-identical templates, but React components go through the svgl svgr
+   endpoint like the original.

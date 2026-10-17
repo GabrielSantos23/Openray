@@ -38,7 +38,10 @@ function mapIcon(item) {
       svg: item.iconSvg,
     };
   } else if (item.iconUri) {
-    mapped = { source: { light: item.iconUri } };
+    // svgl-style light/dark pairs: the renderer picks by current theme appearance.
+    mapped = item.iconUriDark
+      ? { source: { light: item.iconUri, dark: item.iconUriDark } }
+      : { source: { light: item.iconUri } };
   } else if (typeof item.icon === "string" && item.icon.length > 0) {
     if (/^(https?:|data:|file:)/.test(item.icon) || /\.(png|jpe?g|gif|svg|webp|ico)$/i.test(item.icon)) {
       mapped = { source: { light: item.icon } };
@@ -61,6 +64,7 @@ function mapActions(actions) {
   return (actions ?? []).map((action) => ({
     id: action.id,
     title: action.title ?? "Action",
+    group: action.group,
     icon: mapIcon(action),
     shortcut: action.shortcut ? [action.shortcut.modifiers ?? [], action.shortcut.key].flat().join("+") : undefined,
     style: action.style,
@@ -178,6 +182,7 @@ function toBody(tree) {
     sections,
     isLoading: tree.isLoading,
     searchBarPlaceholder: tree.searchBarPlaceholder,
+    labels: tree.labels,
     searchBarAccessory: filterAccessory(tree.filter),
     emptyView: tree.emptyView,
     actions: mapActions(tree.actions),

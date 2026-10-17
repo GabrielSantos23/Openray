@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { OpenrayIcon } from "./icons";
+import { shortcutPills } from "./shortcuts";
 import type { ViewAction } from "./useExtensionCommand";
 
 export interface ActionGroup {
@@ -167,7 +168,7 @@ export function ActionPanel({ open, groups, onClose, onRun, title }: ActionPanel
                       <span className="action-panel__label">{action.title}</span>
                       {action.shortcut ? (
                         <span className="action-panel__shortcut">
-                          {action.shortcut.split(" ").filter(Boolean).map((key, keyIndex) => (
+                          {shortcutPills(action.shortcut).map((key, keyIndex) => (
                             <span key={keyIndex} className="kbd">
                               {key}
                             </span>

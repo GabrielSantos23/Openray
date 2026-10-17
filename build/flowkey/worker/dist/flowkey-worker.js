@@ -1873,7 +1873,9 @@ var init_components = __esm({
       Description: intrinsic("form-description"),
       Separator: intrinsic("form-separator")
     });
-    ActionPanel = intrinsic("action-panel");
+    ActionPanel = Object.assign(intrinsic("action-panel"), {
+      Section: intrinsic("action-section")
+    });
     Action = intrinsic("action");
   }
 });
@@ -24689,7 +24691,11 @@ function optionalIcon(type, props, key) {
     );
   }
   if (typeof spec.emoji === "string") return { icon: spec.emoji };
-  if (typeof spec.uri === "string") return { iconUri: spec.uri };
+  if (typeof spec.uri === "string") {
+    const out = { iconUri: spec.uri };
+    if (typeof spec.uriDark === "string" && spec.uriDark.length > 0) out.iconUriDark = spec.uriDark;
+    return out;
+  }
   if (typeof spec.svg === "string") {
     if (spec.svg.length === 0) {
       throw new ReactUiError(`<${type}> prop '${key}' has empty svg content`);
@@ -25071,6 +25077,13 @@ function serializeGrid(node, state) {
   if (isLoading !== void 0) tree.isLoading = isLoading;
   const placeholder = optionalString("grid", node.props, "searchBarPlaceholder");
   if (placeholder !== void 0) tree.searchBarPlaceholder = placeholder;
+  const labels = node.props["labels"];
+  if (labels !== void 0) {
+    if (labels !== "visible" && labels !== "hidden") {
+      throw new ReactUiError(`<grid> prop 'labels' must be 'visible' or 'hidden'`);
+    }
+    if (labels === "hidden") tree.labels = "hidden";
+  }
   let emptyView;
   let emptyViewCount = 0;
   let looseItemCount = 0;
@@ -25235,10 +25248,10 @@ function serializeEmptyView(node) {
 }
 function serializeActions(actionsValue, state) {
   const actions = [];
-  visitActions(actionsValue, actions, state);
+  visitActions(actionsValue, actions, state, void 0);
   return actions;
 }
-function visitActions(node, out, state) {
+function visitActions(node, out, state, group) {
   for (const child of flattenElements(node)) {
     if (!isElement(child)) {
       throw new ReactUiError(
@@ -25246,26 +25259,42 @@ function visitActions(node, out, state) {
       );
     }
     if (isFragment(child)) {
-      visitActions(child.props["children"], out, state);
+      visitActions(child.props["children"], out, state, group);
       continue;
     }
+    visitActionElement(child, out, state, group);
+  }
+}
+function visitActionElement(child, out, state, group) {
+  {
     const intrinsic2 = requireIntrinsic(child.type, "actions prop children");
     if (intrinsic2 === "action-panel") {
       const panelProps = child.props;
       checkProps("action-panel", panelProps, ACTION_PANEL_ALLOWED);
-      visitActions(panelProps["children"], out, state);
-      continue;
+      visitActions(panelProps["children"], out, state, void 0);
+      return;
+    }
+    if (intrinsic2 === "action-section") {
+      const sectionProps = child.props;
+      checkProps("action-section", sectionProps, ACTION_SECTION_ALLOWED);
+      const title = optionalString("action-section", sectionProps, "title");
+      const before = out.length;
+      visitActions(sectionProps["children"], out, state, title);
+      if (out.length === before) {
+        throw new ReactUiError(`<action-section> must contain at least one <action>`);
+      }
+      return;
     }
     if (intrinsic2 === "action") {
-      out.push(serializeActionElement(child, state));
-      continue;
+      out.push(serializeActionElement(child, state, group));
+      return;
     }
     throw new ReactUiError(
-      `actions prop children must be <ActionPanel> or <Action>, got <${String(child.type)}>`
+      `actions prop children must be <ActionPanel>, <ActionPanel.Section> or <Action>, got <${String(child.type)}>`
     );
   }
 }
-function serializeActionElement(element, state) {
+function serializeActionElement(element, state, group) {
   const props = element.props;
   checkProps("action", props, ACTION_ALLOWED);
   const title = requireString("action", props, "title");
@@ -25291,6 +25320,7 @@ function serializeActionElement(element, state) {
     id = state.registry.register(onAction);
   }
   const action = { id, title };
+  if (group !== void 0) action.group = group;
   Object.assign(action, optionalIcon("action", props, "icon"));
   const primary = optionalBoolean("action", props, "primary");
   const push = optionalString("action", props, "push");
@@ -25355,7 +25385,7 @@ function describeNode(node) {
   }
   return typeof node;
 }
-var import_react4, LIST_ALLOWED, LIST_SECTION_ALLOWED, LIST_ITEM_ALLOWED, LIST_ITEM_DETAIL_ALLOWED, DETAIL_ALLOWED, DETAIL_METADATA_ALLOWED, DETAIL_FIELD_ALLOWED, GRID_ALLOWED, GRID_ITEM_ALLOWED, GRID_SECTION_ALLOWED, ACTION_PANEL_ALLOWED, ACTION_ALLOWED, EMPTY_VIEW_ALLOWED, ROOT_TYPES, ACCESSORY_COLORS, FIELD_KINDS, FORM_FIELD_TAGS, FORM_FIELD_KIND_BY_TAG;
+var import_react4, LIST_ALLOWED, LIST_SECTION_ALLOWED, LIST_ITEM_ALLOWED, LIST_ITEM_DETAIL_ALLOWED, DETAIL_ALLOWED, DETAIL_METADATA_ALLOWED, DETAIL_FIELD_ALLOWED, GRID_ALLOWED, GRID_ITEM_ALLOWED, GRID_SECTION_ALLOWED, ACTION_PANEL_ALLOWED, ACTION_SECTION_ALLOWED, ACTION_ALLOWED, EMPTY_VIEW_ALLOWED, ROOT_TYPES, ACCESSORY_COLORS, FIELD_KINDS, FORM_FIELD_TAGS, FORM_FIELD_KIND_BY_TAG;
 var init_serialize = __esm({
   "../react-ui/src/serialize.ts"() {
     import_react4 = __toESM(require_react(), 1);
@@ -25378,7 +25408,7 @@ var init_serialize = __esm({
     DETAIL_ALLOWED = ["title", "mediaKeys", "subtitle", "imageUri", "markdown", "actions"];
     DETAIL_METADATA_ALLOWED = [];
     DETAIL_FIELD_ALLOWED = ["label", "value", "valueIconUri", "href", "tags", "kind"];
-    GRID_ALLOWED = ["columns", "title", "filter", "isLoading", "searchBarPlaceholder"];
+    GRID_ALLOWED = ["columns", "title", "filter", "isLoading", "searchBarPlaceholder", "labels"];
     GRID_ITEM_ALLOWED = [
       "id",
       "title",
@@ -25391,6 +25421,7 @@ var init_serialize = __esm({
     ];
     GRID_SECTION_ALLOWED = ["title", "subtitle"];
     ACTION_PANEL_ALLOWED = [];
+    ACTION_SECTION_ALLOWED = ["title"];
     ACTION_ALLOWED = ["title", "icon", "primary", "push", "onAction", "id", "style", "shortcut"];
     EMPTY_VIEW_ALLOWED = ["title", "description"];
     ROOT_TYPES = /* @__PURE__ */ new Set(["list", "detail", "grid", "form"]);
@@ -26572,8 +26603,12 @@ var require_rpc = __commonJS({
       return new Promise((resolve, reject) => {
         const id = nextId++;
         pendingResults.set(id, (result) => {
-          if (!result.success) reject(new Error(result.error ?? `${method} failed`));
-          else resolve(result.value);
+          if (!result.success) {
+            const message = typeof result.error === "string" ? result.error : result.error?.message ?? `${method} failed`;
+            const error = new Error(message);
+            if (result.error?.stack) error.stack = result.error.stack;
+            reject(error);
+          } else resolve(result.value);
         });
         queueMicrotask(() => {
           parentPort?.postMessage({ kind: "request", id, method, params });
@@ -26601,7 +26636,11 @@ var require_rpc = __commonJS({
             parentPort?.postMessage({
               kind: "result",
               id: message.id,
-              result: { success: false, error: error instanceof Error ? error.message : String(error) }
+              // `{ message, stack }` — the backend's failure logger prints `error.stack` when present.
+              result: {
+                success: false,
+                error: error instanceof Error ? { message: error.message, stack: error.stack } : { message: String(error) }
+              }
             });
           }
           return;
@@ -26643,7 +26682,7 @@ var require_adapter = __commonJS({
           svg: item.iconSvg
         };
       } else if (item.iconUri) {
-        mapped = { source: { light: item.iconUri } };
+        mapped = item.iconUriDark ? { source: { light: item.iconUri, dark: item.iconUriDark } } : { source: { light: item.iconUri } };
       } else if (typeof item.icon === "string" && item.icon.length > 0) {
         if (/^(https?:|data:|file:)/.test(item.icon) || /\.(png|jpe?g|gif|svg|webp|ico)$/i.test(item.icon)) {
           mapped = { source: { light: item.icon } };
@@ -26661,6 +26700,7 @@ var require_adapter = __commonJS({
       return (actions ?? []).map((action) => ({
         id: action.id,
         title: action.title ?? "Action",
+        group: action.group,
         icon: mapIcon(action),
         shortcut: action.shortcut ? [action.shortcut.modifiers ?? [], action.shortcut.key].flat().join("+") : void 0,
         style: action.style,
@@ -26768,6 +26808,7 @@ var require_adapter = __commonJS({
           sections,
           isLoading: tree.isLoading,
           searchBarPlaceholder: tree.searchBarPlaceholder,
+          labels: tree.labels,
           searchBarAccessory: filterAccessory(tree.filter),
           emptyView: tree.emptyView,
           actions: mapActions(tree.actions)

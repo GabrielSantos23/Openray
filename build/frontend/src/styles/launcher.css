@@ -780,7 +780,12 @@
 }
 
 .action-panel__groupLabel {
-  display: none;
+  /* Titled ActionPanel.Sections (svgl's Copy SVG / Copy SVG File / …): small secondary headers,
+     like Raycast's menu section labels. Untitled groups pass empty names and render nothing. */
+  display: block;
+  padding: var(--space-6, 6px) var(--space-10, 10px) var(--space-2, 2px);
+  font-size: 12px;
+  color: var(--color-text-tertiary);
 }
 
 .action-panel__item {

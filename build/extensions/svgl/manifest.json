@@ -1,0 +1,157 @@
+{
+  "id": "svgl",
+  "name": "Svgl",
+  "version": "1.0.0",
+  "description": "Search SVG logos via svgl and copy them as text, files, components or URLs.",
+  "icon": "command-icon.png",
+  "commands": [
+    {
+      "id": "index",
+      "title": "Search SVG Logos",
+      "keywords": [
+        "svg",
+        "logos",
+        "svgl",
+        "icons",
+        "brands"
+      ],
+      "mode": "view",
+      "icon": "command-icon.png"
+    },
+    {
+      "id": "setup-shadcn-registry",
+      "title": "Setup shadcn/ui Registry",
+      "keywords": [
+        "shadcn",
+        "registry",
+        "svgl"
+      ],
+      "mode": "view",
+      "icon": "command-icon.png"
+    },
+    {
+      "id": "request",
+      "title": "Request SVG Logo",
+      "keywords": [
+        "request",
+        "svg",
+        "logo",
+        "svgl"
+      ],
+      "mode": "view",
+      "icon": "command-icon.png"
+    }
+  ],
+  "nativeMethods": [
+    "http.fetch",
+    "clipboard.write",
+    "hud.show",
+    "toast.show",
+    "shell.openUrl",
+    "files.writeTemp",
+    "cache.get",
+    "cache.set",
+    "storage.get",
+    "storage.set"
+  ],
+  "httpHosts": [
+    "svgl.app",
+    "api.svgl.app"
+  ],
+  "preferences": [
+    {
+      "name": "svgDefaultAction",
+      "type": "dropdown",
+      "title": "Default action for the SVG",
+      "description": "Action run when pressing enter on a logo; it also leads the action panel.",
+      "default": "copySvg",
+      "required": false,
+      "options": [
+        {
+          "value": "copySvg",
+          "title": "Copy SVG"
+        },
+        {
+          "value": "copySvgFile",
+          "title": "Copy SVG File"
+        },
+        {
+          "value": "copySvgWordmark",
+          "title": "Copy SVG Wordmark"
+        },
+        {
+          "value": "copyShadcnRegistry",
+          "title": "Copy shadcn/ui Registry"
+        },
+        {
+          "value": "copyReactComponent",
+          "title": "Copy React Component"
+        },
+        {
+          "value": "copyVueComponent",
+          "title": "Copy Vue Component"
+        },
+        {
+          "value": "copySvelteComponent",
+          "title": "Copy Svelte Component"
+        },
+        {
+          "value": "copyAngularComponent",
+          "title": "Copy Angular Component"
+        },
+        {
+          "value": "copySvgUrl",
+          "title": "Copy SVG URL"
+        },
+        {
+          "value": "copySvgWordmarkUrl",
+          "title": "Copy SVG Wordmark URL"
+        },
+        {
+          "value": "copyAstroComponent",
+          "title": "Copy Astro Component"
+        },
+        {
+          "value": "operation",
+          "title": "Operation"
+        },
+        {
+          "value": "svgInfo",
+          "title": "SVG Info"
+        }
+      ]
+    },
+    {
+      "name": "showWordmark",
+      "type": "checkbox",
+      "title": "Show wordmark SVG copy actions in the action panel",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "defaultPackageManager",
+      "type": "dropdown",
+      "title": "Default package manager",
+      "description": "Runner used by the Copy shadcn/ui Registry install command.",
+      "required": false,
+      "options": [
+        {
+          "value": "pnpm",
+          "title": "pnpm"
+        },
+        {
+          "value": "npm",
+          "title": "npm"
+        },
+        {
+          "value": "yarn",
+          "title": "yarn"
+        },
+        {
+          "value": "bun",
+          "title": "bun"
+        }
+      ]
+    }
+  ]
+}

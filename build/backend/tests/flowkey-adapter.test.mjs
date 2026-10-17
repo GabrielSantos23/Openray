@@ -255,6 +255,40 @@ test("grid tree: sections, flat items, columns, filter accessory", () => {
   assert.equal(flatBody.sections[0].items[0].id, "solo");
 });
 
+test("svgl-era additions: ActionPanel.Section groups ride on actions; uriDark pairs map to light/dark icon sources", () => {
+  const { model } = renderComponent(
+    h(
+      lib.Grid,
+      { columns: 6 },
+      h(
+        lib.Grid.Item,
+        {
+          id: "logo",
+          title: "Logo",
+          icon: { uri: "https://svgl.app/library/x.svg", uriDark: "https://svgl.app/library/x_dark.svg" },
+          actions: h(
+            lib.ActionPanel,
+            null,
+            h(
+              lib.ActionPanel.Section,
+              { title: "Copy SVG" },
+              h(lib.Action, { title: "Copy SVG Text", onAction: () => undefined }),
+            ),
+            h(lib.Action, { title: "Ungrouped", onAction: () => undefined }),
+          ),
+        },
+      ),
+    ),
+  );
+  const item = model.navigationStack.body.sections[0].items[0];
+  assert.deepEqual(item.icon.source, {
+    light: "https://svgl.app/library/x.svg",
+    dark: "https://svgl.app/library/x_dark.svg",
+  });
+  const groups = item.actions.map((action) => action.group);
+  assert.deepEqual(groups, ["Copy SVG", undefined]);
+});
+
 test("form tree: every field kind maps to the ray form vocabulary; onSubmit synthesizes the submit-form action", () => {
   const { tree, model } = renderComponent(
     h(
