@@ -2440,7 +2440,7 @@ export function MainWindow() {
                         <li key="color:root-row">
                           <button
                             type="button"
-                            className="list__row calc-row color-row"
+                            className="list__row color-panel-row"
                             data-selected={index === selectedIndex}
                             onMouseEnter={() => setSelectedIndex(index)}
                             onClick={() => copyColorValue(entry.hex)}
@@ -2449,26 +2449,23 @@ export function MainWindow() {
                               setColorPanel(entry);
                             }}
                           >
-                            <span className="calc-row__left">
-                              <span className="color-row__chip" style={{ background: entry.hex }} />
-                              <span className="calc-row__expression">{entry.query}</span>
+                            <span className="color-panel-row__half">
+                              <span className="color-panel-row__value">{entry.query}</span>
                               <span className="calc-row__badge">
-                                {entry.formats.find((f) => f.id === "hex" && entry.query.trim().toUpperCase() === f.value)
-                                  ? "HEX"
-                                  : entry.query.includes("rgb")
-                                    ? "RGB"
-                                    : entry.query.includes("hsl")
-                                      ? "HSL"
-                                      : entry.query.startsWith("#")
-                                        ? "HEX"
-                                        : "Color"}
+                                {entry.query.includes("rgb")
+                                  ? "RGB"
+                                  : entry.query.includes("hsl")
+                                    ? "HSL"
+                                    : entry.query.startsWith("#")
+                                      ? "HEX"
+                                      : "Color"}
                               </span>
                             </span>
-                            <span className="calc-row__divider" aria-hidden>
-                              <OpenrayIcon name="arrow-right" size={14} />
+                            <span className="color-panel-row__arrow" aria-hidden>
+                              <OpenrayIcon name="arrow-right" size={16} />
                             </span>
-                            <span className="calc-row__right">
-                              <span className="color-row__swatch" style={{ background: entry.hex }} />
+                            <span className="color-panel-row__half">
+                              <span className="color-panel-row__swatch" style={{ background: entry.hex }} />
                               <span className="calc-row__badge">{entry.name}</span>
                             </span>
                           </button>

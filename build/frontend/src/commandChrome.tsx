@@ -52,7 +52,6 @@ export function CommandFooter({
       </span>
       {leftActions}
       <span className="footer__spacer" />
-      {actions}
       {primary ? (
         <button type="button" className="footer-action footer-action--kbd footer-primary" onClick={primary.onPress}>
           {primary.label}
@@ -66,6 +65,7 @@ export function CommandFooter({
           ) : null}
         </button>
       ) : null}
+      {actions}
     </footer>
   );
 }

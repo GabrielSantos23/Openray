@@ -463,7 +463,12 @@ export function buildSections(
 
   // Web search suggestions (lowest priority)
   if (webSearchEntries.length > 0) {
-    sections.push({ id: "web-search", title: "Search Web", icon: "globe", entries: webSearchEntries });
+    sections.push({
+    id: "web-search",
+    title: colorEntry ? `Use "${colorEntry.query}" with…` : "Search Web",
+    icon: "globe",
+    entries: webSearchEntries,
+  });
   }
 
   if (showFallbacks && fallbackEntries.length > 0) {

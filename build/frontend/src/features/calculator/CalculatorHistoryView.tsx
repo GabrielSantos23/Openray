@@ -463,12 +463,6 @@ export function CalculatorHistoryView({
         </button>
 
         <div className="searchbar">
-          <span className="searchbar__icon" aria-hidden>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" strokeLinecap="round" />
-            </svg>
-          </span>
           <input
             ref={searchRef}
             className="searchbar__input"
@@ -491,7 +485,6 @@ export function CalculatorHistoryView({
             </div>
           </div>
         ) : (
-          <div className="clipboard-split">
             <ul className="list clipboard-list" ref={listRef}>
               {live ? (
                 <li>
@@ -530,37 +523,11 @@ export function CalculatorHistoryView({
                 <li key={section.id} className="list__section">
                   <div className="list__sectionHeader">
                     <span className="list__sectionTitle">{section.title}</span>
-                    <span className="list__sectionCount">{section.entries.length}</span>
                   </div>
                   <ul className="list__sectionBody">{section.entries.map(renderHistoryRow)}</ul>
                 </li>
               ))}
             </ul>
-
-            {selectedHistory ? (
-              <aside className="clipboard-detail">
-                <div className="clipboard-detail__section">
-                  <div className="clipboard-detail__heading">Information</div>
-                  <div className="clipboard-detail__row">
-                    <span className="clipboard-detail__label">Expression</span>
-                    <span className="clipboard-detail__value">{selectedHistory.expression}</span>
-                  </div>
-                  <div className="clipboard-detail__row">
-                    <span className="clipboard-detail__label">Answer</span>
-                    <span className="clipboard-detail__value">{selectedHistory.answer}</span>
-                  </div>
-                  <div className="clipboard-detail__row">
-                    <span className="clipboard-detail__label">Category</span>
-                    <span className="clipboard-detail__value">{selectedHistory.category}</span>
-                  </div>
-                  <div className="clipboard-detail__row">
-                    <span className="clipboard-detail__label">Calculated</span>
-                    <span className="clipboard-detail__value">{new Date(selectedHistory.createdAt).toLocaleString()}</span>
-                  </div>
-                </div>
-              </aside>
-            ) : null}
-          </div>
         )}
       </main>
 
