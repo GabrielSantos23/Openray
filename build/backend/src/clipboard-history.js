@@ -815,7 +815,9 @@ function createClipboardHistory({ dispatch, store = createClipboardStore() }) {
   }
 
   store.subscribeStateChanged(() => {
-    dispatch("clipboard.stateChanged", {});
+    // Fire-and-forget renderer notification: a failed push (window hidden, pipe down,
+    // headless runtime) must never surface as an unhandled rejection.
+    Promise.resolve(dispatch("clipboard.stateChanged", {})).catch(() => undefined);
   });
 
   function startTasks() {

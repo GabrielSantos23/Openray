@@ -89,10 +89,16 @@ From the outside, listing = `allExtensions()` (already exposed as `extensions.li
   off by default, enabled with `--control` (argv) or `OPENRAY_CONTROL=1`. Random bearer token per
   launch written to `<dataRoot>/control-token` (user-only directory); the path, never the token, is
   printed at startup.
-- **MCP server**: `build/backend/src/mcp-server.js` over stdio (`@modelcontextprotocol/sdk`). Bridged
-  mode talks to the control channel using the token file; headless mode builds the registry in-process
-  with no pipe. Auto-detect by probing the control channel; `--mode bridged|headless` forces one.
-- **CLI**: `node build/backend/src/cli.js run <command.id> [jsonParams]` and `cli.js mcp`.
+- **MCP server**: `build/backend/src/mcp-server.mjs` over stdio (`@modelcontextprotocol/sdk`,
+  1.x). Bridged mode talks to the control channel using the token file
+  (`--data-root <dir>` or `OPENRAY_DATA_DIR` picks the instance); headless mode builds the
+  registry in-process with no pipe. Auto-detect by probing the control endpoint;
+  `--mode bridged|headless` forces one. After a backend restart the gateway re-reads the
+  endpoint/token files and retries for a grace period, so a killed sidecar recovers without
+  restarting the client.
+- **CLI**: `node build/backend/src/cli.mjs run <command.id> [jsonParams] [--allow-destructive]`,
+  `cli.mjs list [filter]` and `cli.mjs mcp`. Same registry, same envelopes; bridged when the
+  app is running, headless otherwise.
 - **`get_state` / `send_input` / `screenshot`**: `get_state` and `send_input` are answered by the
   renderer (a serializable state hook and an input hook injected in the frontend, both reachable
   through the host's `window.eval` route — app-internal event routing, no OS input injection);
@@ -111,6 +117,51 @@ From the outside, listing = `allExtensions()` (already exposed as `extensions.li
 - **Pipe writer discipline**: the backend has exactly one pipe reader; the control channel must use
   the existing `send` path, never open a second connection.
 
-## 4. Phase 6 verification log
+## 4. MCP client config (Claude Code)
 
-*(filled in at the end of the work)*
+```json
+{
+  "mcpServers": {
+    "openray": {
+      "command": "node",
+      "args": ["C:\\path\\to\\Openray\\build\\backend\\src\\mcp-server.mjs"],
+      "env": { "OPENRAY_DATA_DIR": "C:\\Users\\<you>\\AppData\\Local\\Openray" }
+    }
+  }
+}
+```
+
+The server auto-detects: bridged when the app is running (endpoint + token under the data
+dir), headless otherwise. `--data-root <dir>` / `--mode bridged|headless` override.
+
+## 5. Phase 6 verification log (2026-10-17)
+
+All steps ran through the MCP server over stdio (`build/backend/scripts/phase6-verify.mjs`,
+13/13 pass) against the running app with the control channel on:
+
+1. `tools/list` — the seven tools (`list_commands`, `describe_command`, `run_command`,
+   `get_state`, `send_input`, `screenshot`, `get_events`) plus the `openray://commands`
+   resource.
+2. `list_commands filter=calculator` — 14 commands; `describe_command settings.set` — risk
+   `write`, params schema present.
+3. `run_command settings.set {values:{phase6-probe}}` → `settings.get` round-trips the value.
+4. `run_command calculator.calculate {expression:"6*7"}` → answer `42`.
+5. `get_state` — `{window:"launcher", view:"root", items:123}`; `send_input setQuery
+   "clipboard"` → `get_state` shows `query:"clipboard"`, items filtered to 18 (UI matched).
+6. `screenshot` — PNG (magic `89504e47…`), visually verified as the real launcher window
+   (`build/shot-control2.png`).
+7. `run_command extensions.list` — installed extensions with their commands.
+8. `run_command clipboard.deleteAll` without the flag → `destructive_refused`.
+9. Killed the backend `node` process mid-session: the bridged gateway re-read the endpoint,
+   the host watchdog restarted the backend, and `calculator.calculate` answered again
+   (recovery verified through the same MCP connection).
+10. `get_events` — the ring buffer carried `command.finished` for the run.
+11. Headless mode with the app closed: `cli.mjs run calculator.calculate '{"expression":"2+2"}'`
+    → `{"ok":true,...answer:"4"}`; `get_state`/`screenshot`/`send_input` return the typed
+    `needs_ui` envelope.
+
+Known limits (documented, not bugs): the Settings window is a separate WebView2 browser
+process, so `get_state`/`screenshot` cover the launcher window only; settings changes are
+verified through `settings.get`/`settings.list`. The launcher auto-hides on deactivation;
+`screenshot` makes it visible first, so a capture may surface the window.
+

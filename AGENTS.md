@@ -90,7 +90,7 @@ node --test build/tests/                    # frontend logic tests
 cd build/frontend && npm run build          # typecheck + bundle the frontend
 dotnet build build/host/Openray.csproj -c m3-release   # host build
 node build/scripts/layer-check.mjs          # layer check
-node --test build/backend/tests/command-fuzz.test.mjs  # after adding/changing commands
+node --test --test-force-exit build/backend/tests/command-fuzz.test.mjs  # after adding/changing commands
 ```
 
 While iterating, run only the tests for what you touched, and keep the full set as the final gate.

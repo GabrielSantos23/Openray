@@ -87,8 +87,10 @@ const backend = createBackend({
 if (options.connectPipe) {
   backend.connect();
 } else {
-  // Headless runtime (MCP/CLI): nothing dials the host, so every native/UI hop fails typed.
+  // Headless runtime (MCP/CLI): nothing dials the host. Renderer pushes are fire-and-forget
+  // by contract (the host never answers them), so they resolve null; native hops fail typed.
   backend.setTransport(async (module, method) => {
+    if (module === "frontend") return null;
     throw needsUi(
       `${module}.${method} needs the running app`,
       "start Openray (optionally with --control) or use bridged mode",
@@ -160,6 +162,7 @@ quietly(() => snippets.pushExpansionConfigToHost(), "snippets.pushExpansionConfi
 // File indexer — indexes the user's scopes in the background and answers fileSearch.* searches.
 const fileIndexer = createFileIndexer({
   pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+  dataRoot: process.env.OPENRAY_DATA_DIR ?? path.dirname(config.extensionsRoot),
 });
 backend.registerFileIndexerHandler(fileIndexer.handlers);
 
@@ -470,7 +473,28 @@ if (options.connectPipe) {
 }
 
 
-  return { backend, registry, config, clipboard, calculator, translator, quicklinks, snippets, fileIndexer, focus, games, taskbar, settingsStore, advanced, notes, extensionStore };
+  function close() {
+    // Headless one-shots (CLI, tests) stop the stores' watchers and DB handles so the
+    // event loop can drain; a live process never calls this.
+    const closers = [
+      () => clipboard.stopTasks(),
+      () => fileIndexer.close(),
+      () => notes.close(),
+      () => quicklinks.close(),
+      () => snippets.close(),
+      () => calculator.close(),
+      () => translator.close(),
+    ];
+    for (const closer of closers) {
+      try {
+        closer();
+      } catch {
+        /* already closed */
+      }
+    }
+  }
+
+  return { backend, registry, config, close, clipboard, calculator, translator, quicklinks, snippets, fileIndexer, focus, games, taskbar, settingsStore, advanced, notes, extensionStore };
 }
 
 module.exports = { createRuntime };
