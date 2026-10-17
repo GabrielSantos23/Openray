@@ -1,5 +1,39 @@
 # Devlog
 
+## 2026-10-17 (later) — launcher restyle to the shipped palette + MCP theme commands
+
+**What landed**
+
+- `build/frontend/src/styles/themes.css`: one `:root[data-theme="<id>"]` block per bundled
+  theme (8 themes, verbatim palettes from artifacts/frontend/themes-BIClSzcF.js) plus the
+  appearance-level constants from css-FlvQZ5S4.css (.theme-root[dark]/[light]: window base,
+  fg/bg max, panel backdrop, Windows backdrop #333c / #fffc). Default dark theme: Raycast
+  Dark (shipped `themeDarkId` default).
+- `themes.ts`: applying a theme now switches the `data-theme`/`data-theme-appearance`
+  attributes (values live in CSS, no inline overrides); chrome base exported for the WPF
+  backdrop (#333 dark / #fff light).
+- Launcher restyle to the shipped metrics: 750x475 window (host geometry), 12px radius,
+  64px search bar with 20px padding, 18px input with the caret hidden while empty, muted
+  grayscale 22px logo, 8px list padding with hidden scrollbars, 12px/500 section headers
+  (12/12/6 padding), 40px rows (12px padding, 8px radius) with 28px icon tiles, 14px/600
+  titles + 14px secondary subtitles, 13px accessories, Pro pill (fg-20 ground, 11px/500),
+  44px footer (16px padding) with the list icon left and primary-action + Enter keycap,
+  divider, Actions Ctrl K right, 20px keycaps with the shipped transparent/fg-20-ring style.
+- MCP surface: `themes.list` / `themes.get` / `themes.set` (build/backend/src/commands/themes.js),
+  switching writes `theme-dark`/`theme-light` plus `active-theme` (the frontend's live-preview
+  precedence), so a switch applies immediately.
+
+**Verification (through the MCP server only)**
+
+- phase6-verify 13/13 on the restyled build.
+- Pixel probes of control-channel screenshots match the shipped derivations exactly:
+  Raycast Dark window #1f1f1f (bg-40 over the #333c backdrop), selected row #363636
+  (selection-10), hover/rows/dividers consistent; Noon (#fff5e7 -> #fee8dd gradient) and Sky
+  (#242a37 -> #3a4548) apply live through `themes.set`.
+- send_input/get_state flows: query "calcul" filters 123 -> 35 items, footer primary action
+  adapts (Open Command / Open Application).
+- Regression: fuzz + wiring + registry + control-server suites 30/30.
+
 ## 2026-10-17 — command registry, control channel, MCP server (the agent-facing milestone)
 
 **What landed**

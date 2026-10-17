@@ -72,19 +72,6 @@ export const BUNDLED_THEMES: ThemeDefinition[] = [
   },
 ];
 
-const THEME_VARIABLES: Array<[string, keyof ThemeDefinition]> = [
-  ["--bg", "background"],
-  ["--bg-secondary", "backgroundSecondary"],
-  ["--fg", "foreground"],
-  ["--accent", "accent"],
-  ["--selection", "selection"],
-  ["--loader", "loader"],
-  ["--red", "red"],
-  ["--orange", "orange"],
-  ["--yellow", "yellow"],
-  ["--green", "green"],
-];
-
 // Picking a theme row applies that theme immediately (Raycast's live preview) and stays until
 // the OS appearance flips.
 let activeOverride: string | null = null;
@@ -93,38 +80,36 @@ export function setActiveThemeOverride(name: string | null): void {
   activeOverride = name;
 }
 
+export function clearThemeOverride(): void {
+  activeOverride = null;
+}
+
 export function resolveThemeName(followSystem: boolean, systemDark: boolean, darkTheme: string, lightTheme: string): string {
   if (activeOverride) return activeOverride;
   if (!followSystem) return darkTheme;
   return systemDark ? darkTheme : lightTheme;
 }
 
-export function clearThemeOverride(): void {
-  activeOverride = null;
+export const DEFAULT_THEME_ID = "bundled-raycast-dark";
+
+/** The opaque WPF chrome color behind the WebView (css-FlvQZ5S4.css reduced-transparency
+ * backdrop: [windows][dark] #333 / [windows][light] #ccc; the light window reads white, so the
+ * chrome lifts to white). */
+export function themeChromeBase(theme: ThemeDefinition | null): string {
+  return theme?.appearance === "light" ? "#ffffff" : "#333333";
 }
 
-/** Raycast Dark is base.css's compiled-in default; clearing restores it exactly. */
+/** Applies the theme by switching the `data-theme` attribute; styles/themes.css carries the
+ * per-theme values (same variable names across themes). Raycast Dark is the compiled-in
+ * default and clears the inline overrides. */
 export function applyTheme(theme: ThemeDefinition | null): void {
-  const style = document.documentElement.style;
-  if (!theme || theme.id === "bundled-raycast-dark") {
-    for (const [variable] of THEME_VARIABLES) style.removeProperty(variable);
-    style.setProperty("--theme-backdrop-base", "#333333");
-    style.removeProperty("--color-window-base");
-    document.documentElement.removeAttribute("data-theme-appearance");
-    return;
+  const root = document.documentElement;
+  const style = root.style;
+  for (const variable of ["--bg", "--bg-secondary", "--fg", "--accent", "--selection", "--loader", "--red", "--orange", "--yellow", "--green", "--theme-backdrop-base", "--color-window-base"]) {
+    style.removeProperty(variable);
   }
-  for (const [variable, key] of THEME_VARIABLES) style.setProperty(variable, theme[key] as string);
-  style.setProperty("--theme-backdrop-base", theme.appearance === "light" ? "#ffffff" : "#333333");
-  // The launcher's frosted panel (::before) paints this at 92% opacity — it IS the visible
-  // background, so it must carry the theme hue (dark blends into the graphite base, light lifts
-  // toward the theme paper).
-  style.setProperty(
-    "--color-window-base",
-    theme.appearance === "light"
-      ? `color-mix(in srgb, ${theme.background} 85%, #ffffff)`
-      : `color-mix(in srgb, ${theme.background} 45%, #262626)`,
-  );
-  document.documentElement.setAttribute("data-theme-appearance", theme.appearance);
+  root.setAttribute("data-theme", theme?.id ?? DEFAULT_THEME_ID);
+  root.setAttribute("data-theme-appearance", theme?.appearance ?? "dark");
 }
 
 export function themeByName(name: string): ThemeDefinition | null {

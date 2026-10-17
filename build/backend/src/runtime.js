@@ -244,11 +244,14 @@ backend.registerStoreHandler(extensionStore.handlers);
 // with the same id, so the pipe, the control channel, the CLI and MCP share one dispatch path.
 // ---------------------------------------------------------------------------------------------
 const { createWiring, CATALOG } = require("./commands");
+const { createThemeCommands } = require("./commands/themes");
 const { createExtensionCommands } = require("./commands/extensions");
 
 const registry = createRegistry();
 backend.registerRegistry(registry);
 const wiring = createWiring({ registry, backend });
+
+createThemeCommands({ registry, settingsStore });
 
 wiring.registerTable("settings", settingsStore.handlers, { risk: { replaceAll: "destructive" } });
 wiring.registerTable("clipboard", clipboard.handlers);

@@ -53,8 +53,8 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         Title = "Openray";
-        Width = 720;
-        Height = 480;
+        Width = 750;
+        Height = 475;
         Topmost = true;
         ShowInTaskbar = false;
         CenterOnScreen();
@@ -1113,7 +1113,7 @@ public partial class MainWindow : Window
 
     // Launcher sizes for the Window Mode setting (compact = search bar only until typing).
     internal const double CompactLauncherHeight = 64;
-    internal const double ExpandedLauncherHeight = 480;
+    internal const double ExpandedLauncherHeight = 475;
     // The last height the renderer asked for; re-applied on show because the WebView child does
     // not re-layout a size change that happened while the window was hidden.
     private double _launcherHeight = ExpandedLauncherHeight;

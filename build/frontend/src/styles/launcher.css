@@ -2,29 +2,22 @@
    Window frame — Raycast's `--radius-window: 8px` + `--shadow-panel` for Windows.
    ========================================================================================== */
 
+/* Shipped window (css-FlvQZ5S4.css): [windows] .theme-root paints the OS backdrop
+   (--color-window-backdrop-os-windows, #333c dark / #fffc light) and .theme-root::before layers
+   the --color-window-bg gradient (bg at 40%) over it. The WPF chrome behind carries the opaque
+   reduced-transparency backdrop (#333) so the rounded corners stay theme-colored. */
 .window {
   position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-radius: var(--radius-window);
-  background: var(--color-window-bg);
-  box-shadow: inset 0 0 0 1px var(--fg-30, rgb(from var(--fg) r g b / 30%)),
-    var(--shadow-panel-shadow);
+  border-radius: var(--radius-12);
+  background:
+    linear-gradient(to bottom, var(--color-window-bg), var(--color-window-bg-secondary)),
+    var(--color-window-backdrop-os-windows);
+  box-shadow: var(--shadow-panel-border), var(--shadow-panel-shadow);
   isolation: isolate;
   overflow: hidden;
-}
-
-.window::before {
-  /* Raycast's frosted panel: backdrop-filter with the Windows blur ramp. */
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: var(--color-window-base);
-  opacity: 0.92;
-  backdrop-filter: blur(var(--blur-2)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--blur-2)) saturate(180%);
 }
 
 /* ==========================================================================================
@@ -37,7 +30,7 @@
   gap: var(--space-8);
   height: var(--window-header-height);
   min-height: var(--window-header-height);
-  padding: 0 var(--space-12);
+  padding: 0 20px;
   border-bottom: 1px solid var(--color-border-separator);
   /* Mirrors `navigation-bar-ui__root`: the loader is clipped to the header's box. */
   position: relative;
@@ -80,12 +73,15 @@
   }
 }
 
+/* The launcher mark: the app logo in muted gray (opacity 50, grayscale), 22px. */
 .openray-mark {
   display: grid;
   place-items: center;
-  width: var(--space-24);
-  height: var(--space-24);
-  color: var(--color-brand-red);
+  width: 22px;
+  height: 22px;
+  color: var(--color-text-primary);
+  opacity: 0.5;
+  filter: grayscale(1);
   flex: none;
 }
 
@@ -106,12 +102,17 @@
   background: transparent;
   color: var(--color-text-primary);
   font: inherit;
-  font-size: var(--font-size-16);
+  font-size: var(--font-size-18);
   font-weight: var(--font-weight-400);
 }
 
 .searchbar__input::placeholder {
   color: var(--color-text-placeholder);
+}
+
+/* The caret stays hidden while the query is empty (the shipped launcher input). */
+.searchbar__input[data-empty="true"] {
+  caret-color: transparent;
 }
 
 .searchbar__icon {
@@ -129,7 +130,13 @@
   flex: 1;
   min-height: 0;
   overflow: hidden auto;
-  padding: var(--space-6);
+  padding: var(--space-8);
+  /* Scrolling works; the scrollbar never shows (shipped root search). */
+  scrollbar-width: none;
+}
+
+.window__body::-webkit-scrollbar {
+  display: none;
 }
 
 .list {
@@ -152,11 +159,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-8);
-  height: var(--space-24);
-  padding: 0 var(--space-12);
-  color: var(--color-text-tertiary);
+  padding: var(--space-12) var(--space-12) var(--space-6);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-400);
+  font-weight: var(--font-weight-500);
   user-select: none;
 }
 
@@ -194,7 +200,8 @@
   align-items: center;
   gap: var(--space-12);
   width: 100%;
-  padding: var(--space-6) var(--space-8);
+  height: 40px;
+  padding: 0 var(--space-12);
   border: 0;
   border-radius: var(--radius-8);
   background: transparent;
@@ -221,14 +228,19 @@
 .icon {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   flex: none;
   border-radius: var(--radius-6);
   background: var(--fg-10);
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
   overflow: hidden;
+}
+
+.icon > svg {
+  width: 18px;
+  height: 18px;
 }
 
 .icon--plain {
@@ -265,8 +277,8 @@
 }
 
 .list__title {
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-500);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-600);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -276,7 +288,7 @@
 .list__subtitle {
   flex: 1;
   min-width: 0;
-  font-size: var(--font-size-12);
+  font-size: var(--font-size-14);
   font-weight: var(--font-weight-400);
   color: var(--color-text-secondary);
   white-space: nowrap;
@@ -289,18 +301,17 @@
   align-items: center;
   gap: var(--space-6);
   color: var(--color-text-secondary);
-  font-size: var(--font-size-11);
+  font-size: var(--font-size-13);
 }
 
+/* The Pro pill (shipped base-badge, gray standout: fg-20 ground, primary text). */
 .pill {
-  padding: 1px var(--space-6);
-  border-radius: var(--radius-full);
-  background: var(--fg-5);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-8);
+  padding: 2px var(--space-8);
+  border-radius: var(--radius-6);
+  background: var(--fg-20);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-11);
   font-weight: var(--font-weight-500);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 /* ==========================================================================================
@@ -310,13 +321,13 @@
 .window__footer {
   display: flex;
   align-items: center;
-  gap: var(--space-16);
+  gap: var(--space-8);
   height: var(--window-footer-height);
   min-height: var(--window-footer-height);
-  padding: 0 var(--space-12);
+  padding: 0 var(--space-16);
   border-top: 1px solid var(--color-border-separator);
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
+  font-size: var(--font-size-13);
 }
 
 .hint {
@@ -327,16 +338,18 @@
   font-size: var(--font-size-11);
 }
 
+/* Shipped shortcut kbd (shortcut-CTGoT4wQ.css, default variant): transparent ground,
+   fg-20 inset ring, secondary text, 20spx square, radius token. */
 .kbd {
   display: inline-grid;
   place-items: center;
-  min-width: 18px;
-  height: 18px;
+  min-width: 20px;
+  height: 20px;
   padding: 0 var(--space-4);
-  border-radius: var(--radius-4);
-  background: var(--fg-10);
-  box-shadow: inset 0 0 0 1px var(--fg-20);
-  color: var(--color-text-primary);
+  border-radius: var(--radius-6);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-border-token, var(--fg-20));
+  color: var(--color-text-secondary);
   font-size: var(--font-size-11);
   font-family: inherit;
 }
@@ -394,6 +407,19 @@
   gap: var(--space-4);
   flex: none;
   color: var(--color-text-tertiary);
+}
+
+.footer-action--primary {
+  gap: var(--space-6);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+.footer__divider {
+  width: 1px;
+  height: 16px;
+  background: var(--color-border-separator);
+  flex: none;
 }
 
 .footer-action--kbd .kbd {

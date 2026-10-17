@@ -115,6 +115,8 @@
   --font-size-13: 13px;
   --font-size-16: 16px;
   --font-size-18: 18px;
+  --font-size-12: 12px;
+  --font-size-14: 14px;
   --font-size-20: 20px;
   --font-size-24: 24px;
   --font-weight-400: 400;
@@ -133,15 +135,20 @@
   --space-32: 32px;
   --space-40: 40px;
 
-  --window-header-height: 52px;
-  --window-footer-height: 42px;
+  /* Shipped launcher metrics (css-FlvQZ5S4.css --main-window-*): header 64spx, footer 42spx
+     with a 44spx default-window-footer variant; the shipped window is 750x475spx. */
+  --window-header-height: 64px;
+  --window-footer-height: 44px;
   --shadow-panel-border: inset 0 0 0 1px var(--fg-20);
   --shadow-panel-shadow: 0 8px 10px -6px #0000001a, 0 20px 25px -5px #0003;
   --shadow-panel: var(--shadow-panel-border), var(--shadow-panel-shadow);
   /* The launcher window paints `--bg` at 40% over this opaque backdrop, Raycast's `#333c`
      panel material; themes switch it per appearance (themes.ts). */
   --theme-backdrop-base: #333333;
-  --color-window-bg: color-mix(in srgb, var(--bg) 40%, var(--theme-backdrop-base));
+  /* Real derivations (css-FlvQZ5S4.css): --color-window-bg: var(--bg-40); the backdrop layer
+     (.window::before) shows through the 40% alpha. */
+  --color-window-bg: rgb(from var(--bg) r g b / 40%);
+  --color-window-bg-secondary: rgb(from var(--bg-secondary) r g b / 40%);
 
   color-scheme: dark;
   font-family: "InterVariable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;

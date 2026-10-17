@@ -25,7 +25,7 @@ import { readCommandHotkeys, registerAllCommandHotkeys, syncCommandHotkeysWithEx
 import { installSystemAccent } from "./systemAccent";
 import { installSettingsPush, subscribeSettings, syncFromBackend, updateSettings, useSetting } from "../settings/store";
 import { POP_TO_ROOT_BY_LABEL } from "../settings/persistence";
-import { applyTheme, clearThemeOverride, resolveThemeName, themeByName } from "./themes";
+import { applyTheme, clearThemeOverride, resolveThemeName, themeByName, themeChromeBase } from "./themes";
 import { ActionPanel, type ActionGroup } from "../ActionPanel";
 import {
   hudStore,
@@ -150,6 +150,31 @@ function focusSessionSubtitle(entry: FocusSessionEntry): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return hours > 0 ? `${hours}h ${rest}m remaining` : `${rest}m remaining`;
+}
+
+function footerPrimaryLabel(entry: RootEntry | null): string {
+  if (!entry) return "Open";
+  switch (entry.kind) {
+    case "application":
+    case "game":
+      return "Open Application";
+    case "quicklink":
+    case "quicklink-create":
+      return "Open Quicklink";
+    case "file":
+    case "open-in-explorer":
+      return "Open File";
+    case "calculator":
+      return "Copy Answer";
+    case "translate":
+      return "Copy Translation";
+    case "wm-command":
+      return "Apply Command";
+    case "inline":
+      return entry.result.type === "snippet" ? "Copy Snippet" : "Search Web";
+    default:
+      return "Open Command";
+  }
 }
 
 export function MainWindow() {
@@ -309,7 +334,7 @@ export function MainWindow() {
         "settings.setChromeAppearance",
         {
           light: theme?.appearance === "light",
-          color: getComputedStyle(document.querySelector(".window") ?? document.body).backgroundColor,
+          color: themeChromeBase(theme),
         },
         { module: "frontend" },
       ).catch(() => undefined);
@@ -2092,7 +2117,7 @@ export function MainWindow() {
     >
       <header className="window__header">
         <span className="openray-mark" aria-hidden>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
             <path fill="currentColor" d="M3.6 3.6h6.4v6.4H3.6zM14 3.6h6.4v6.4H14zM3.6 14h6.4v6.4H3.6zM14 14h6.4v6.4H14z" />
             <path fill="currentColor" d="M14 10.4h-3.6V14H10a3.6 3.6 0 1 0 4 0z" opacity=".9" />
           </svg>
@@ -2103,6 +2128,7 @@ export function MainWindow() {
             ref={searchRef}
             className="searchbar__input"
             autoFocus
+            data-empty={searchText ? undefined : "true"}
             value={searchText}
             placeholder="Search for apps and commands…"
             onChange={(event) => setSearchText(event.target.value)}
@@ -2858,7 +2884,9 @@ export function MainWindow() {
           aria-label="Settings"
           onClick={openSettings}
         >
-          <OpenrayIcon name="cog" size={16} />
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
         </button>
         <span className="footer__spacer" />
         {selectedEntry?.kind === "color" ? (
@@ -2869,7 +2897,18 @@ export function MainWindow() {
           >
             Copy Color as…
           </button>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            className="footer-action footer-action--primary"
+            onClick={() => {
+              window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+            }}
+          >
+            {footerPrimaryLabel(selectedEntry)} <span className="kbd">↵</span>
+          </button>
+        )}
+        <span className="footer__divider" aria-hidden />
         <button
           type="button"
           className="footer-action footer-action--kbd"

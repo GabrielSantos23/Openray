@@ -1,0 +1,187 @@
+/* ==========================================================================================
+   Bundled themes — verbatim palettes from the shipped app (artifacts/frontend/themes-BIClSzcF.js,
+   `t`, `n`, `a`), applied through the same variable names the shipped CSS consumes
+   (artifacts/frontend/register-query-client-ClJ2lE6k.js `Tn()` + css-FlvQZ5S4.css).
+
+   One selector per theme: :root[data-theme="<id>"]. The derived semantic tokens in base.css
+   (--color-text-*, --color-border-*, --color-surface-*, the alpha ramps) read these base
+   variables, so one set of names serves every theme.
+
+   Appearance-level constants (artifacts/frontend/css-FlvQZ5S4.css):
+     .theme-root[dark]  { --color-window-base:#262626; --color-fg-max:white; --color-bg-max:black }
+     .theme-root[light] { --color-window-base:#fff;    --color-fg-max:black;  --color-bg-max:white }
+     .theme-root[dark]  { --color-panel-backdrop:#333 }
+     .theme-root[light] { --color-panel-backdrop:#e6e6e6 }
+     .theme-root[windows][dark]  { --color-window-backdrop-os-windows:#333c;  reduced: #333 }
+     .theme-root[windows][light] { --color-window-backdrop-os-windows:#fffc;  reduced: #ccc }
+
+   Default dark theme: `themeDarkId: r = t.id` = `bundled-raycast-dark` (themes-BIClSzcF.js).
+   ========================================================================================== */
+
+:root[data-theme="bundled-raycast-dark"] {
+  --bg: #000000;
+  --bg-secondary: #000000;
+  --fg: #ffffff;
+  --theme-accent: #4fa3f8;
+  --selection: #ffffff;
+  --loader: #ffffff;
+  --red: #ff6363;
+  --orange: #ff9217;
+  --yellow: #ffc531;
+  --green: #59d499;
+  --blue: #56c2ff;
+  --purple: #a485ff;
+  --magenta: #cf2f98;
+}
+
+:root[data-theme="bundled-raycast-light"] {
+  --bg: #ffffff;
+  --bg-secondary: #ffffff;
+  --fg: #000000;
+  --theme-accent: #138af2;
+  --selection: #000000;
+  --loader: #000000;
+  --red: #b12424;
+  --orange: #c75d07;
+  --yellow: #f8a300;
+  --green: #006b4f;
+  --blue: #138af2;
+  --purple: #6a3dec;
+  --magenta: #9a1b6e;
+}
+
+:root[data-theme="bundled-sky"] {
+  --bg: #0e1c3f;
+  --bg-secondary: #173036;
+  --fg: #d7f0f4;
+  --theme-accent: #4fa3f8;
+  --selection: #6688ff;
+  --loader: #47ffff;
+  --red: #ed5959;
+  --orange: #ed8659;
+  --yellow: #edd559;
+  --green: #47ff91;
+  --blue: #1a9fff;
+  --purple: #7759ed;
+  --magenta: #ed59b2;
+}
+
+:root[data-theme="bundled-sunset"] {
+  --bg: #451a08;
+  --bg-secondary: #0a3943;
+  --fg: #faddd1;
+  --theme-accent: #4fa3f8;
+  --selection: #7698ef;
+  --loader: #47e0ff;
+  --red: #ed5959;
+  --orange: #ed8659;
+  --yellow: #edd559;
+  --green: #59ed7a;
+  --blue: #30bbe8;
+  --purple: #7759ed;
+  --magenta: #ed59b2;
+}
+
+:root[data-theme="bundled-midnight"] {
+  --bg: #070034;
+  --bg-secondary: #11005b;
+  --fg: #faf0ff;
+  --theme-accent: #4fa3f8;
+  --selection: #b1a7ff;
+  --loader: #f4c4ff;
+  --red: #f84141;
+  --orange: #ffc100;
+  --yellow: #feff7f;
+  --green: #63ba89;
+  --blue: #6ab7fb;
+  --purple: #c58afa;
+  --magenta: #ff5db3;
+}
+
+:root[data-theme="bundled-dawn"] {
+  --bg: #fff1f7;
+  --bg-secondary: #d0c1ff;
+  --fg: #120032;
+  --theme-accent: #4fa3f8;
+  --selection: #602aff;
+  --loader: #5a00ff;
+  --red: #e14848;
+  --orange: #e5753c;
+  --yellow: #b7b400;
+  --green: #00ac5d;
+  --blue: #4f80ff;
+  --purple: #9454ff;
+  --magenta: #d756bf;
+}
+
+:root[data-theme="bundled-overcast"] {
+  --bg: #d9f9ff;
+  --bg-secondary: #c7e0fc;
+  --fg: #002369;
+  --theme-accent: #4fa3f8;
+  --selection: #0075ff;
+  --loader: #0019ff;
+  --red: #ee5050;
+  --orange: #fa8542;
+  --yellow: #eba200;
+  --green: #30b475;
+  --blue: #5271d8;
+  --purple: #b35aeb;
+  --magenta: #dd43a7;
+}
+
+:root[data-theme="bundled-noon"] {
+  --bg: #ffe7c6;
+  --bg-secondary: #fcbfa5;
+  --fg: #1e003c;
+  --theme-accent: #4fa3f8;
+  --selection: #7b46ff;
+  --loader: #6100ff;
+  --red: #da4c4c;
+  --orange: #d76f33;
+  --yellow: #d49200;
+  --green: #09b664;
+  --blue: #5876d8;
+  --purple: #a543e3;
+  --magenta: #c4228b;
+}
+
+/* ---- appearance-level constants (css-FlvQZ5S4.css `.theme-root[dark]` / `[light]`) ------- */
+
+:root[data-theme-appearance="dark"] {
+  --color-window-base: #262626;
+  --color-fg-max: #ffffff;
+  --color-bg-max: #000000;
+  --color-panel-backdrop: #333333;
+  --color-window-backdrop-os-windows: rgb(51 51 51 / 0.8);
+  --color-window-backdrop-os-windows-reduced-transparency: #333333;
+  --theme-backdrop-base: #333333;
+}
+
+:root[data-theme-appearance="light"] {
+  --color-window-base: #ffffff;
+  --color-fg-max: #000000;
+  --color-bg-max: #ffffff;
+  --color-panel-backdrop: #e6e6e6;
+  --color-window-backdrop-os-windows: rgb(255 255 255 / 0.8);
+  --color-window-backdrop-os-windows-reduced-transparency: #cccccc;
+  --theme-backdrop-base: #ffffff;
+}
+
+/* Default: Raycast Dark (the shipped `themeDarkId` default). Without the attribute the
+   base.css :root block carries the identical values. */
+:root:not([data-theme]) {
+  --bg: #000000;
+  --bg-secondary: #000000;
+  --fg: #ffffff;
+  --theme-accent: #4fa3f8;
+  --selection: #ffffff;
+  --loader: #ffffff;
+  --red: #ff6363;
+  --orange: #ff9217;
+  --yellow: #ffc531;
+  --green: #59d499;
+  --blue: #56c2ff;
+  --purple: #a485ff;
+  --magenta: #cf2f98;
+}
