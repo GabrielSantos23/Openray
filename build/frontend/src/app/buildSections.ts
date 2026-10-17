@@ -89,11 +89,13 @@ export function buildSections(
   showFilesInRoot: boolean,
   focusSession: FocusSessionState | null,
   gameApps: ApplicationCommand[],
-  colorEntry: ColorEntry | null = null
-): RootSection[] {  // Build searchable entries for all applications
+  colorEntry: ColorEntry | null = null,
+  disabledAreas: string[] = []
+): RootSection[] {
+  const off = (area: string) => disabledAreas.includes(area);  // Build searchable entries for all applications
   const appAliases = readAppAliases();
   const disabledShortcuts = readShortcutDisabled();
-  const appSearchables: SearchableEntry[] = applications
+  const appSearchables: SearchableEntry[] = (off("applications") ? [] : applications)
     .filter((app) => !isShortcutDisabled(appConfigKey(app.payload.id)))
     .map((app) => ({
     title: app.title,
@@ -122,6 +124,7 @@ export function buildSections(
   const internalCommandSearchables: SearchableEntry[] = INTERNAL_COMMANDS.filter(
     (definition) => !isShortcutDisabled(internalConfigKey(definition.area, definition.command)),
   )
+    .filter((definition) => !off(definition.area))
     .filter((definition) => !(definition.area === "clipboard-history" && definition.command === "history"))
     .map((definition) => ({
     title: definition.title,
@@ -229,7 +232,17 @@ export function buildSections(
   }
 
   // Combine all searchable entries
-  const allSearchables = [...appSearchables, clipboardSearchable, ...internalCommandSearchables, ...windowManagementSearchables, ...focusSearchables, ...gamesSearchables, ...gameSearchables, ...commandSearchables, ...quicklinkSearchables, ...customTranslateSearchables];
+  const allSearchables = [
+    ...appSearchables,
+    ...(off("clipboard-history") ? [] : [clipboardSearchable]),
+    ...internalCommandSearchables,
+    ...(off("window-management") ? [] : windowManagementSearchables),
+    ...(off("raycast-focus") ? [] : focusSearchables),
+    ...(off("games") ? [] : [...gamesSearchables, ...gameSearchables]),
+    ...commandSearchables,
+    ...(off("quicklinks") ? [] : quicklinkSearchables),
+    ...(off("translator") ? [] : customTranslateSearchables),
+  ];
 
   // Rank all entries using the full Raycast algorithm with fallback support
   const { results: ranked, showFallbacks } = rankEntriesWithFallbacks(
@@ -416,7 +429,7 @@ export function buildSections(
   // Focus section: the dynamic `session` row (rootSearch:{section:'focus',when:'empty'}) shows
   // with an empty query while a session runs; the Focus view/ephemeral commands file under
   // Commands. The Game Launcher command gets the same treatment under its own area.
-  if (!searching && focusSession) {
+  if (!searching && focusSession && !off("raycast-focus")) {
     sections.push({
       id: "focus",
       title: "Focus",
@@ -442,22 +455,22 @@ export function buildSections(
   const customTranslateRowsShown = searching
     ? regularResults.filter((r) => r.entry.rootEntry.kind === "translator-command").map((r) => r.entry.rootEntry)
     : [];
-  if (quicklinkCreateEntries.length > 0 || quicklinkRowsShown.length > 0) {
+  if (!off("quicklinks") && (quicklinkCreateEntries.length > 0 || quicklinkRowsShown.length > 0)) {
     sections.push({ id: "quicklinks", title: "Quicklinks", icon: "link", entries: [...quicklinkCreateEntries, ...quicklinkRowsShown] });
   }
 
   // Custom translate commands: dynamic command rows under their own section, shown while searching.
-  if (customTranslateRowsShown.length > 0) {
+  if (!off("translator") && customTranslateRowsShown.length > 0) {
     sections.push({ id: "translate-commands", title: "Translate", icon: "Globe", entries: customTranslateRowsShown });
   }
 
   // Snippets section
-  if (snippetEntries.length > 0) {
+  if (!off("snippets") && snippetEntries.length > 0) {
     sections.push({ id: "snippets", title: "Snippets", icon: "copy", entries: snippetEntries });
   }
 
   // Files section (after commands, before fallback); the indexing row keeps it visible alone.
-  if (showFilesInRoot && fileEntries.length > 0) {
+  if (showFilesInRoot && !off("file-search") && fileEntries.length > 0) {
     sections.push({ id: "files", title: "Files", icon: "file-text", entries: fileEntries });
   }
 

@@ -53,6 +53,15 @@ export function useSetting(id: string): SettingsValue | undefined {
   return useSyncExternalStore(subscribeSettings, () => values[id]);
 }
 
+/**
+ * System-extension switches (`ext-enabled:<area>`): an area whose switch is off in the Settings
+ * titlebar is fully disabled in the launcher — no root-search rows, no hotkeys, no aliases.
+ * Absent counts as enabled (the default).
+ */
+export function isExtensionEnabled(area: string): boolean {
+  return values[`ext-enabled:${area}`] !== false;
+}
+
 /** Optimistic write: update locally, persist, then let the backend fan the change back out. */
 export function updateSettings(patch: SettingsMap): void {
   values = { ...values, ...patch };

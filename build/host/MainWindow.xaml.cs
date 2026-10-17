@@ -496,6 +496,26 @@ public partial class MainWindow : Window
         // Auto Quit: idle installed applications get quit on this timer (a no-op while disabled).
         AutoQuit.Start(Dispatcher);
 
+        // System-extension switches the host enforces natively (snippet expansion). Polled on the
+        // dispatcher — file IO must never run inside the keyboard hook itself.
+        var extensionSwitchTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromSeconds(5),
+        };
+        extensionSwitchTimer.Tick += (_, _) =>
+        {
+            try
+            {
+                SnippetHook.SetSnippetsEnabled(ReadStoredSetting("ext-enabled:snippets") is not false);
+            }
+            catch
+            {
+                /* settings file unreadable — keep the previous value */
+            }
+        };
+        extensionSwitchTimer.Start();
+        SnippetHook.SetSnippetsEnabled(ReadStoredSetting("ext-enabled:snippets") is not false);
+
         // The Windows accent drives every toggle/link color; re-push when the user changes it.
         try
         {
@@ -958,8 +978,12 @@ public partial class MainWindow : Window
             }
             else if (wParam.ToInt32() == ClipboardHotkeyId)
             {
-                // The Clipboard History shortcut opens that command directly rather than toggling.
-                App.OpenClipboardHistory();
+                // The Clipboard History shortcut opens that command directly rather than toggling;
+                // the system-extension switch in its Settings page disables it.
+                if (ReadStoredSetting("ext-enabled:clipboard-history") is not false)
+                {
+                    App.OpenClipboardHistory();
+                }
                 handled = true;
             }
             else

@@ -20,7 +20,7 @@ import { useExtensionCommand } from "../useExtensionCommand";
 import { alertStore, type ExtensionAlertPayload } from "../alertStore";
 import AlertHost from "../AlertHost";
 import { installTestHooks, isDevExtensionsEnabled, overrideTestHooks, setDevExtensions } from "../testHooks";
-import { readCommandHotkeys, registerAllCommandHotkeys } from "../commandConfig";
+import { readCommandHotkeys, registerAllCommandHotkeys, syncCommandHotkeysWithExtensions } from "../commandConfig";
 import { installSystemAccent } from "./systemAccent";
 import { installSettingsPush, subscribeSettings, syncFromBackend, updateSettings, useSetting } from "../settings/store";
 import { POP_TO_ROOT_BY_LABEL } from "../settings/persistence";
@@ -195,6 +195,24 @@ export function MainWindow() {
   const [colorEntry, setColorEntry] = useState<ColorEntry | null>(null);
   const [calcSyntaxHighlighting, setCalcSyntaxHighlighting] = useState(true);
   const [colorConversionEnabled, setColorConversionEnabled] = useState(true);
+
+  // System-extension switches (Settings titlebar): a disabled area contributes nothing to the
+  // launcher — no root-search rows, no inline rows, no hotkeys, no aliases.
+  const extensionEnabled = {
+    applications: useSetting("ext-enabled:applications") !== false,
+    calculator: useSetting("ext-enabled:calculator") !== false,
+    "clipboard-history": useSetting("ext-enabled:clipboard-history") !== false,
+    quicklinks: useSetting("ext-enabled:quicklinks") !== false,
+    snippets: useSetting("ext-enabled:snippets") !== false,
+    "file-search": useSetting("ext-enabled:file-search") !== false,
+    translator: useSetting("ext-enabled:translator") !== false,
+    games: useSetting("ext-enabled:games") !== false,
+    focus: useSetting("ext-enabled:raycast-focus") !== false,
+    "window-management": useSetting("ext-enabled:window-management") !== false,
+  };
+  const disabledAreas = Object.entries(extensionEnabled)
+    .filter(([, enabled]) => !enabled)
+    .map(([area]) => area);
   // Action panels for the Focus session row and the dynamic game rows.
   const [focusSessionPanel, setFocusSessionPanel] = useState<FocusSessionEntry | null>(null);
   const [gamePanel, setGamePanel] = useState<GameEntry | null>(null);
@@ -404,7 +422,7 @@ export function MainWindow() {
   const [calculatorEntry, setCalculatorEntry] = useState<CalculatorEntry | null>(null);
   useEffect(() => {
     const query = searchText.trim();
-    if (!query || !inlineSectionSettings.calculator) {
+    if (!query || !inlineSectionSettings.calculator || !extensionEnabled.calculator) {
       setCalculatorEntry(null);
       return;
     }
@@ -456,7 +474,7 @@ export function MainWindow() {
   useEffect(() => {
     const query = searchText.trim();
     let cancelled = false;
-    if (!query) {
+    if (!query || !extensionEnabled.calculator) {
       setColorEntry(null);
       return;
     }
@@ -486,7 +504,7 @@ export function MainWindow() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchText, colorConversionEnabled]);
+  }, [searchText, colorConversionEnabled, extensionEnabled.calculator]);
 
   // The quick-translate row runs the backend's confirmed parser (`in|into <language>`, ≥ 3 chars,
   // prefix match) with the confirmed 150 ms debounce. Row states pending/failed/ready: the row
@@ -924,13 +942,20 @@ export function MainWindow() {
   // and whenever the Settings window edits them (the store push bumps this subscription).
   useEffect(() => {
     void registerAllCommandHotkeys();
+    // Extension switches (Settings titlebar) also ride the settings push: a flipped switch
+    // unregisters/re-registers that area's hotkeys on the host.
+    const offExtensionSync = subscribeSettings(() => void syncCommandHotkeysWithExtensions());
     let last = JSON.stringify(readCommandHotkeys());
-    return subscribeSettings(() => {
+    const offHotkeys = subscribeSettings(() => {
       const next = JSON.stringify(readCommandHotkeys());
       if (next === last) return;
       last = next;
       void registerAllCommandHotkeys();
     });
+    return () => {
+      offExtensionSync();
+      offHotkeys();
+    };
   }, []);
 
   const { applications, error: applicationsError, loading: applicationsLoading } = useApplications(true);
@@ -1049,8 +1074,8 @@ export function MainWindow() {
   // Root Search renders Favorites / Applications / Commands as named sections, exactly like
   // Raycast's root search, and the flat selection index walks all of them in order.
   const sections = useMemo(
-    () => buildSections(searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false, focusState?.session ?? null, gameApps, colorEntry),
-    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings, focusState, gameApps, colorEntry],
+    () => buildSections(searchText, extensionEnabled.applications ? applications : [], extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, extensionEnabled["file-search"] ? fileResults : [], inlineResults, extensionEnabled.quicklinks ? quicklinkRows : [], extensionEnabled.calculator ? calculatorEntry : null, extensionEnabled.translator ? translateEntry : null, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false, extensionEnabled.focus ? focusState?.session ?? null : null, extensionEnabled.games ? gameApps : [], colorEntry, disabledAreas),
+    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings, focusState, gameApps, colorEntry, disabledAreas],
   );
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);

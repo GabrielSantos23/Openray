@@ -2205,3 +2205,24 @@
   color: var(--settings-text-secondary);
 }
 
+
+/* Extension switch in the Settings titlebar + the disabled page dim. */
+.settings-titlebar__extension {
+  display: inline-flex;
+  align-items: center;
+  margin-right: var(--space-8);
+}
+.settings-page--disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Commands cards are self-contained cards — keep all four corners rounded even as the last
+   child (the stretched-group rule above is only for the Shortcuts page). */
+.settings-commands .settings-shortcuts__group:last-child {
+  flex: initial;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--settings-separator);
+  border-radius: 12px;
+}

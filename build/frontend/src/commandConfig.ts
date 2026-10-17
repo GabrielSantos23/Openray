@@ -5,7 +5,7 @@
 // `cmd:<uuid>/<command>` so they never collide with the WM preset keys.
 
 import { ipc } from "./ipc";
-import { updateSettings } from "./settings/store";
+import { updateSettings , isExtensionEnabled } from "./settings/store";
 
 // The Settings window runs in its own WebView2 profile, so its localStorage is invisible to the
 // launcher. All per-command config therefore lives in the settings store (backend-persisted,
@@ -195,8 +195,40 @@ export async function registerCommandHotkeyWithHost(commandKey: string, hotkey: 
   }
 }
 
-/** Re-register every stored command hotkey (after a backend restart or on launcher mount). */
+/**
+ * Which system extension (Settings titlebar switch) a shortcut key belongs to; null = no page
+ * switch covers it (installed extensions, favorites).
+ */
+export function areaForCommandKey(key: string): string | null {
+  if (key.startsWith("app:")) return "applications";
+  if (key.startsWith("quicklink:")) return "quicklinks";
+  if (key.startsWith("wm-")) return "window-management";
+  if (key.startsWith("command:internal/")) return key.split("/")[2] ?? null;
+  return null;
+}
+
+/** Re-register every stored command hotkey (after a backend restart or on launcher mount).
+ * Keys of disabled system extensions are skipped — a disabled extension has no hotkeys. */
 export async function registerAllCommandHotkeys(): Promise<void> {
   const hotkeys = readCommandHotkeys();
-  await Promise.all(Object.entries(hotkeys).map(([key, hotkey]) => registerCommandHotkeyWithHost(key, hotkey)));
+  await Promise.all(
+    Object.entries(hotkeys).map(([key, hotkey]) => {
+      const area = areaForCommandKey(key);
+      if (area && !isExtensionEnabled(area)) return Promise.resolve();
+      return registerCommandHotkeyWithHost(key, hotkey);
+    }),
+  );
+}
+
+/** Reconcile host registrations after an extension switch flips: unregister every key of the
+ * disabled area, re-register the enabled ones. */
+export async function syncCommandHotkeysWithExtensions(): Promise<void> {
+  const hotkeys = readCommandHotkeys();
+  await Promise.all(
+    Object.entries(hotkeys).map(([key, hotkey]) => {
+      const area = areaForCommandKey(key);
+      if (!area) return Promise.resolve();
+      return registerCommandHotkeyWithHost(key, isExtensionEnabled(area) ? hotkey : null);
+    }),
+  );
 }

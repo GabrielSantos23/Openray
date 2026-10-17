@@ -316,6 +316,8 @@ export function Settings() {
   const [shortcutsFilter, setShortcutsFilter] = useState<ShortcutsFilter>({ query: "", categories: [], modifications: new Set() });
   const shortcutsContext = useMemo(() => ({ filter: shortcutsFilter, setFilter: setShortcutsFilter }), [shortcutsFilter]);
   const page = useMemo(() => PAGES.find((candidate) => candidate.id === route) ?? PAGES[0], [route]);
+  // The extension switch in the titlebar (undefined = enabled, the default).
+  const pageExtensionEnabled = useSetting(`ext-enabled:${page.id}`) !== false;
   // `ext-<uuid>` routes are installed-extension detail pages (sidebar entries appended to the
   // extensions group); everything else resolves through PAGES.
   const extensionRoute = route.startsWith("ext-") ? route.slice(4) : null;
@@ -343,7 +345,16 @@ export function Settings() {
   return (
     <ShortcutsFilterContext.Provider value={shortcutsContext}>
     <div className="settings-window">
-<Titlebar onNavigate={navigate} actions={page.id === "shortcuts" ? <ShortcutsTitlebarActions /> : null} />
+<Titlebar
+          onNavigate={navigate}
+          actions={
+            page.id === "shortcuts" ? (
+              <ShortcutsTitlebarActions />
+            ) : EXTENSION_PAGE_IDS.includes(page.id) ? (
+              <ExtensionEnabledSwitch area={page.id} />
+            ) : null
+          }
+        />
       <div className="settings-chrome">
         <Sidebar
           route={route}
@@ -356,7 +367,7 @@ export function Settings() {
         <main className="settings-main">
           <header className="settings-header" data-raycast-window-draggable-region="true" />
           <div className="settings-page__scroll">
-            <div className="settings-page">
+            <div className={`settings-page${EXTENSION_PAGE_IDS.includes(page.id) && !pageExtensionEnabled ? " settings-page--disabled" : ""}`}>
               {!extensionRoute && EXTENSION_PAGE_IDS.includes(page.id) ? <PageIntro page={page} /> : null}
               {extensionRoute ? (
                 <ExtensionDetailPage uuid={extensionRoute} />
@@ -415,6 +426,21 @@ export function Settings() {
 }
 
 /** The in-page titlebar: sidebar "Settings" label, back/forward, page title, caption buttons. */
+/** The titlebar switch of a system-extension page: off disables the whole extension in the
+ * launcher — root-search rows, inline rows, hotkeys and aliases all stop. Default: enabled. */
+function ExtensionEnabledSwitch({ area }: { area: string }) {
+  const enabled = useSetting(`ext-enabled:${area}`) !== false;
+  return (
+    <div className="settings-titlebar__extension">
+      <Switch
+        checked={enabled}
+        onChange={(next) => updateSettings({ [`ext-enabled:${area}`]: next })}
+        label={`Enable ${area}`}
+      />
+    </div>
+  );
+}
+
 function Titlebar({ onNavigate, actions }: { onNavigate: (pageId: string) => void; actions?: ReactNode }) {
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);

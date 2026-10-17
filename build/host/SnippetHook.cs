@@ -76,6 +76,13 @@ public static class SnippetHook
     private static readonly nuint InjectedMarker = 0x524D_434E;
 
     private static NamedPipeBridge? _pipe;
+
+    /// <summary>The `ext-enabled:snippets` switch, pushed by a UI-thread timer
+    /// (`MainWindow.RefreshExtensionSwitches`). The hook callback itself only ever reads this
+    /// volatile bool — a low-level keyboard hook must never touch the file system.</summary>
+    private static volatile bool _snippetsEnabled = true;
+
+    public static void SetSnippetsEnabled(bool enabled) => _snippetsEnabled = enabled;
     private static IntPtr _hook;
     private static readonly LowLevelKeyboardProc HookCallback = HookProc;
     private static SnippetMatcher _matcher = new(Array.Empty<SnippetMatcher.Keyword>());
@@ -221,7 +228,7 @@ public static class SnippetHook
                 var keyboard = Marshal.PtrToStructure<KbdLlHookStruct>(lParam);
                 var message = wParam.ToInt32();
                 var injected = (keyboard.Flags & LLKHF_INJECTED) != 0 || keyboard.ExtraInfo == (UIntPtr)InjectedMarker;
-                if (!injected && message is WmKeyDown or WmSysKeyDown)
+                if (!injected && message is WmKeyDown or WmSysKeyDown && _snippetsEnabled)
                 {
                     ProcessKey(keyboard.VkCode, keyboard.ScanCode);
                 }
