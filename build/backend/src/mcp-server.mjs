@@ -13,8 +13,13 @@ import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 
-const DATA_ROOT =
-  process.env.OPENRAY_DATA_DIR ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
+// Data root resolution order: --data-root flag, OPENRAY_DATA_DIR, the default user store.
+// Some MCP clients sanitize the environment, so the flag is the reliable override.
+const DATA_ROOT = (() => {
+  const flag = process.argv.indexOf("--data-root");
+  if (flag >= 0 && process.argv[flag + 1]) return process.argv[flag + 1];
+  return process.env.OPENRAY_DATA_DIR ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
+})();
 
 function controlEndpoint(dataRoot = DATA_ROOT) {
   try {
@@ -33,23 +38,36 @@ function controlToken(dataRoot = DATA_ROOT) {
 }
 
 /** The HTTP client for bridged mode; every call is bounded so a dead app cannot hang MCP. */
-function createBridgedGateway(endpoint, token) {
-  const base = `http://${endpoint.address}`;
+function createBridgedGateway(endpoint, token, dataRoot = DATA_ROOT) {
+  // The backend restarts (crash, update, watchdog): each restart serves a new port and token,
+  // so a failed call re-reads the endpoint file and retries for a grace period.
+  let current = { endpoint, token };
 
   async function call(pathname, { method = "GET", body } = {}) {
-    const response = await fetch(base + pathname, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(20_000),
-    });
-    const contentType = response.headers.get("content-type") ?? "";
-    if (contentType.includes("application/json")) return response.json();
-    if ((contentType ?? "").startsWith("image/")) return Buffer.from(await response.arrayBuffer());
-    return null;
+    const deadline = Date.now() + 12_000;
+    for (;;) {
+      try {
+        const response = await fetch(`http://${current.endpoint.address}${pathname}`, {
+          method,
+          headers: {
+            Authorization: `Bearer ${current.token}`,
+            ...(body ? { "Content-Type": "application/json" } : {}),
+          },
+          body: body ? JSON.stringify(body) : undefined,
+          signal: AbortSignal.timeout(20_000),
+        });
+        const contentType = response.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) return response.json();
+        if ((contentType ?? "").startsWith("image/")) return Buffer.from(await response.arrayBuffer());
+        return null;
+      } catch (error) {
+        const freshEndpoint = controlEndpoint(dataRoot);
+        const freshToken = controlToken(dataRoot);
+        if (freshEndpoint && freshToken) current = { endpoint: freshEndpoint, token: freshToken };
+        if (Date.now() >= deadline) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+    }
   }
 
   return {
@@ -81,10 +99,19 @@ function createBridgedGateway(endpoint, token) {
 async function createHeadlessGateway() {
   const { createRuntime } = await import("./runtime.js");
   // stdio is the MCP protocol channel: runtime logging (store maintenance, ready lines) must
-  // never land on stdout, so it moves to stderr inside this process only.
+  // never land on stdout. The redirect holds only while the runtime wires up (its async
+  // chatter re-checks the flag); the CLI restores its own stdout after this returns.
+  const originalLog = console.log;
+  const originalInfo = console.info;
   console.log = (...parts) => console.error(...parts);
   console.info = (...parts) => console.error(...parts);
-  const runtime = createRuntime({ connectPipe: false });
+  let runtime;
+  try {
+    runtime = createRuntime({ connectPipe: false });
+  } finally {
+    console.log = originalLog;
+    console.info = originalInfo;
+  }
   return {
     kind: "headless",
     async probe() {
@@ -157,6 +184,12 @@ async function main() {
   }
 
   const gateway = await resolveGateway(forcedMode);
+  if (gateway.kind === "headless") {
+    // Permanent for this process: the runtime logs asynchronously (maintenance, ready lines)
+    // and stdout is the MCP protocol channel for the rest of the server's life.
+    console.log = (...parts) => console.error(...parts);
+    console.info = (...parts) => console.error(...parts);
+  }
 
   const server = new McpServer({
     name: "openray",

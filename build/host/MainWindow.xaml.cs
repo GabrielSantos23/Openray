@@ -413,7 +413,7 @@ public partial class MainWindow : Window
         }
         if (method == "window.capture")
         {
-            return System.Text.Json.JsonSerializer.SerializeToElement(CaptureWindowAsPng());
+            return System.Text.Json.JsonSerializer.SerializeToElement(await CaptureWindowAsPngAsync());
         }
 
         if (isBackend)
@@ -1392,16 +1392,26 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern bool PrintWindow(IntPtr window, IntPtr hdc, uint flags);
 
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr window);
+
     /// <summary>
     /// Captures the launcher window as PNG (base64). PrintWindow with PW_RENDERFULLCONTENT (2)
     /// is required: the content is Chromium's, composed through DWM, so a plain PrintWindow or
-    /// a WPF RenderTargetBitmap captures only the chrome and leaves the web content out.
-    /// Works while the window is visible; a hidden window has no reliable pixels — callers get
-    /// a typed error instead of a black image.
+    /// a WPF RenderTargetBitmap captures only the chrome and leaves the web content out. The
+    /// launcher hides itself on deactivation, and a hidden window's web layer does not compose
+    /// (a black frame) — so the capture first makes the window visible, like the manual
+    /// capture script does.
     /// </summary>
-    private object CaptureWindowAsPng()
+    private async Task<object> CaptureWindowAsPngAsync()
     {
         var handle = new WindowInteropHelper(this).Handle;
+        if (!IsWindowVisible(handle))
+        {
+            ShowMainWindow();
+            // Give DWM a few frames of the composed window before the pixels exist.
+            await Task.Delay(300);
+        }
         if (!GetWindowRect(handle, out var rect) || rect.Width <= 0 || rect.Height <= 0)
             throw new InvalidOperationException("the launcher window has no on-screen bounds; show it before capturing");
         int width = rect.Width;

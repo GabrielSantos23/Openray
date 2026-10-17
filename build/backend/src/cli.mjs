@@ -28,7 +28,13 @@ function positional(args) {
 
 async function gatewayFor(args) {
   const { resolveGateway } = await import("./mcp-server.mjs");
-  return resolveGateway(modeForced(args));
+  const gateway = await resolveGateway(modeForced(args));
+  if (gateway.kind === "headless") {
+    // The headless runtime logs asynchronously; keep its chatter off our stdout.
+    console.log = (...parts) => console.error(...parts);
+    console.info = (...parts) => console.error(...parts);
+  }
+  return gateway;
 }
 
 function usage() {
@@ -60,9 +66,9 @@ async function main() {
     const filter = positional(rest)[0] ?? "";
     const gateway = await gatewayFor(rest);
     const envelope = await gateway.listCommands(filter || undefined);
-    console.log(JSON.stringify(envelope, null, 2));
-    process.exitCode = envelope.ok ? 0 : 1;
-    return;
+    process.stdout.write(JSON.stringify(envelope, null, 2) + "\n");
+    // One-shot: the headless runtime holds store handles that would keep the loop alive.
+    process.exit(envelope.ok ? 0 : 1);
   }
   if (command === "run") {
     const args = positional(rest);
@@ -84,9 +90,8 @@ async function main() {
     }
     const gateway = await gatewayFor(rest);
     const envelope = await gateway.runCommand(id, params, rest.includes("--allow-destructive"));
-    console.log(JSON.stringify(envelope, null, 2));
-    process.exitCode = envelope.ok ? 0 : 1;
-    return;
+    process.stdout.write(JSON.stringify(envelope, null, 2) + "\n");
+    process.exit(envelope.ok ? 0 : 1);
   }
   usage();
   process.exitCode = command === undefined ? 0 : 2;
