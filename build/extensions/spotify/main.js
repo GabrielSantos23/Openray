@@ -484,6 +484,9 @@ var SpotifyApiError = class extends Error {
 var SpotifyClient = class {
   constructor(call) {
     this.call = call;
+    /** Session-level lyrics cache; hits also persist through `storage` so reopening Find Lyrics
+     * for the same track does not touch the network again. */
+    this.lyricsCache = /* @__PURE__ */ new Map();
     this.devicesCache = null;
     this.oauth = createCapabilities(call).oauth;
   }
@@ -560,6 +563,13 @@ var SpotifyClient = class {
     return this.api("/me/player?additional_types=episode", { signal });
   }
   async findLyrics(trackName, artistName, signal) {
+    const cacheKey = `${trackName.toLowerCase()}|${artistName.toLowerCase()}`;
+    if (this.lyricsCache.has(cacheKey)) return this.lyricsCache.get(cacheKey) ?? null;
+    const stored = await this.readLyricsCache(cacheKey).catch(() => null);
+    if (stored) {
+      this.lyricsCache.set(cacheKey, stored);
+      return stored;
+    }
     const cleanedTitle = cleanMediaTitle(trackName) || trackName;
     const cleanedArtist = cleanMediaTitle(artistName) || artistName;
     const queries = [
@@ -568,17 +578,54 @@ var SpotifyClient = class {
       `q=${encodeURIComponent(`${cleanedTitle} ${cleanedArtist}`.trim())}`,
       `q=${encodeURIComponent(cleanedTitle)}`
     ];
-    for (const query of queries) {
-      const hit = await this.searchLyricsOnce(query, trackName, artistName, signal);
-      if (hit) return hit;
+    const hit = await new Promise((resolve) => {
+      let pending = queries.length;
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+      if (signal) {
+        signal.addEventListener("abort", () => finish(null), { once: true });
+      }
+      queries.forEach((query, index) => {
+        setTimeout(() => {
+          this.searchLyricsOnce(query, trackName, artistName, signal).then((found) => {
+            if (found) finish(found);
+            else if (--pending === 0) finish(null);
+          }).catch(() => {
+            if (--pending === 0) finish(null);
+          });
+        }, index * 700);
+      });
+    });
+    if (hit) {
+      this.lyricsCache.set(cacheKey, hit);
+      void this.writeLyricsCache(cacheKey, hit);
     }
-    return null;
+    return hit;
+  }
+  async readLyricsCache(cacheKey) {
+    const result = await this.call("storage.get", { key: "lyrics-cache" });
+    const map = result?.value ?? {};
+    return map[cacheKey] ?? null;
+  }
+  async writeLyricsCache(cacheKey, hit) {
+    const result = await this.call("storage.get", { key: "lyrics-cache" }).catch(() => void 0);
+    const map = result?.value ?? {} ?? {};
+    const keys = Object.keys(map);
+    if (keys.length >= 60) {
+      for (const key of keys.slice(0, keys.length - 40)) delete map[key];
+    }
+    map[cacheKey] = hit;
+    await this.call("storage.set", { key: "lyrics-cache", value: map });
   }
   async searchLyricsOnce(query, trackName, artistName, signal) {
     const url = `https://lrclib.net/api/search?${query}`;
     const call = () => this.call(
       "http.fetch",
-      { url, method: "GET", timeoutMs: 15e3 },
+      { url, method: "GET", timeoutMs: 8e3 },
       { signal, timeoutMs: API_CALL_TIMEOUT_MS }
     );
     let result;
@@ -593,6 +640,7 @@ var SpotifyClient = class {
       } catch (error) {
         throw normalizeNativeError(error);
       }
+      if (result.status === 503) return null;
     }
     const hits = parseBody(result.status, result.bodyText, "lyrics service");
     const hit = hits?.find((entry) => typeof entry.syncedLyrics === "string" && entry.syncedLyrics) ?? hits?.find((entry) => typeof entry.plainLyrics === "string" && entry.plainLyrics);

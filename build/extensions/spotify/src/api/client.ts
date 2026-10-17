@@ -39,6 +39,13 @@ interface FetchResult {
   bodyText: string;
 }
 
+type LyricsHit = {
+  trackName: string;
+  artistName: string;
+  plainLyrics: string;
+  syncedLyrics?: string | null;
+};
+
 /** OAuth route result — the shell vaults tokens and only reports state. */
 export type AuthorizeResult = OAuthStatus;
 
@@ -147,16 +154,23 @@ export class SpotifyClient {
     return this.api('/me/player?additional_types=episode', { signal });
   }
 
+  /** Session-level lyrics cache; hits also persist through `storage` so reopening Find Lyrics
+   * for the same track does not touch the network again. */
+  private lyricsCache = new Map<string, LyricsHit | null>();
+
   async findLyrics(
     trackName: string,
     artistName: string,
     signal?: AbortSignal,
-  ): Promise<{
-    trackName: string;
-    artistName: string;
-    plainLyrics: string;
-    syncedLyrics?: string | null;
-  } | null> {
+  ): Promise<LyricsHit | null> {
+    const cacheKey = `${trackName.toLowerCase()}|${artistName.toLowerCase()}`;
+    if (this.lyricsCache.has(cacheKey)) return this.lyricsCache.get(cacheKey) ?? null;
+    const stored = await this.readLyricsCache(cacheKey).catch(() => null);
+    if (stored) {
+      this.lyricsCache.set(cacheKey, stored);
+      return stored;
+    }
+
     // SMTC titles carry noise ("(Official Video)", "feat. X", "- Remastered 2011"); the exact
     // query runs first, then cleaned variants, then a free-text search, so junk titles still hit.
     const cleanedTitle = cleanMediaTitle(trackName) || trackName;
@@ -167,11 +181,58 @@ export class SpotifyClient {
       `q=${encodeURIComponent(`${cleanedTitle} ${cleanedArtist}`.trim())}`,
       `q=${encodeURIComponent(cleanedTitle)}`,
     ];
-    for (const query of queries) {
-      const hit = await this.searchLyricsOnce(query, trackName, artistName, signal);
-      if (hit) return hit;
+
+    // lrclib is slow and answers 503 under load; run the variants concurrently with a small
+    // stagger (exact query first) and let a stalled or failing variant be a miss instead of
+    // holding the whole lookup hostage — the sequential chain could sit in "Searching" for a
+    // minute when the service had a bad moment.
+    const hit = await new Promise<LyricsHit | null>((resolve) => {
+      let pending = queries.length;
+      let settled = false;
+      const finish = (value: LyricsHit | null) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+      if (signal) {
+        signal.addEventListener('abort', () => finish(null), { once: true });
+      }
+      queries.forEach((query, index) => {
+        setTimeout(() => {
+          this.searchLyricsOnce(query, trackName, artistName, signal)
+            .then((found) => {
+              if (found) finish(found);
+              else if (--pending === 0) finish(null);
+            })
+            .catch(() => {
+              if (--pending === 0) finish(null);
+            });
+        }, index * 700);
+      });
+    });
+    if (hit) {
+      this.lyricsCache.set(cacheKey, hit);
+      void this.writeLyricsCache(cacheKey, hit);
     }
-    return null;
+    return hit;
+  }
+
+  private async readLyricsCache(cacheKey: string): Promise<LyricsHit | null> {
+    const result = await this.call<{ value: unknown }>('storage.get', { key: 'lyrics-cache' });
+    const map = (result?.value ?? {}) as Record<string, LyricsHit>;
+    return map[cacheKey] ?? null;
+  }
+
+  private async writeLyricsCache(cacheKey: string, hit: LyricsHit): Promise<void> {
+    const result = await this.call<{ value: unknown }>('storage.get', { key: 'lyrics-cache' }).catch(() => undefined);
+    const map = ((result?.value ?? {}) as Record<string, LyricsHit>) ?? {};
+    // Keep the cache bounded: drop the oldest entries once it outgrows a reasonable set.
+    const keys = Object.keys(map);
+    if (keys.length >= 60) {
+      for (const key of keys.slice(0, keys.length - 40)) delete map[key];
+    }
+    map[cacheKey] = hit;
+    await this.call('storage.set', { key: 'lyrics-cache', value: map });
   }
 
   private async searchLyricsOnce(
@@ -189,7 +250,7 @@ export class SpotifyClient {
     const call = () =>
       this.call<FetchResult>(
         'http.fetch',
-        { url, method: 'GET', timeoutMs: 15_000 },
+        { url, method: 'GET', timeoutMs: 8_000 },
         { signal, timeoutMs: API_CALL_TIMEOUT_MS },
       );
     let result: FetchResult;
@@ -199,11 +260,13 @@ export class SpotifyClient {
       throw normalizeNativeError(error);
     }
     if (result.status === 503) {
+      // A second 503 is a miss for this variant, not a chain-aborting service error.
       try {
         result = await call();
       } catch (error) {
         throw normalizeNativeError(error);
       }
+      if (result.status === 503) return null;
     }
     const hits = parseBody<
       {
