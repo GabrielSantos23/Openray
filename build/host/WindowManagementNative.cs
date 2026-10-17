@@ -565,6 +565,11 @@ public static class WindowManagementNative
         "Equal" => 0xBB,
         "Space" => 0x20,
         "Tab" => 0x09,
+        "Home" => 0x24,
+        "End" => 0x23,
+        "PageUp" => 0x21,
+        "PageDown" => 0x22,
+        "Insert" => 0x2D,
         _ when key.Length == 1 && char.IsAsciiLetterOrDigit(key[0]) => (ushort)char.ToUpperInvariant(key[0]),
         _ when key.Length is 2 or 3 && key[0] == 'F' && ushort.TryParse(key[1..], out var fn) && fn is >= 1 and <= 24
             => (ushort)(0x6F + fn),

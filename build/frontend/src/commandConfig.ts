@@ -147,19 +147,32 @@ export interface HotkeyCombo {
   key: string;
 }
 
-/** `"Ctrl+Shift+G"` → `{modifiers:["ctrl","shift"], key:"G"}` — the host's parser shape. */
+/** Named keys the host's `VirtualKey` switch accepts, in exactly the casing it matches. */
+const NAMED_HOTKEY_KEYS = new Set([
+  "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown",
+  "Backspace", "Delete", "Enter", "Return", "Escape",
+  "Minus", "Equal", "Space", "Tab", "Home", "End", "PageUp", "PageDown", "Insert",
+]);
+
+/** `"Ctrl+Shift+G"` → `{modifiers:["ctrl","shift"], key:"G"}` — the host's parser shape.
+ * Named keys (arrows, F-keys, media-adjacent keys) pass through with their canonical casing;
+ * a length check alone would reject them and silently drop the registration. */
 export function parseHotkeyCombo(hotkey: string): HotkeyCombo | null {
   const parts = hotkey.split("+").map((part) => part.trim()).filter(Boolean);
   if (parts.length < 2) return null;
-  const key = parts[parts.length - 1];
-  if (!key || key.length !== 1) return null;
+  const rawKey = parts[parts.length - 1];
+  if (!rawKey) return null;
   const modifiers: string[] = [];
   for (const part of parts.slice(0, -1)) {
     const lower = part.toLowerCase();
     if (lower === "ctrl" || lower === "alt" || lower === "shift" || lower === "meta") modifiers.push(lower);
     else return null;
   }
-  return { modifiers, key: key.toUpperCase() };
+  const key = NAMED_HOTKEY_KEYS.has(rawKey) || /^F\d{1,2}$/.test(rawKey)
+    ? rawKey
+    : rawKey.length === 1 ? rawKey.toUpperCase() : null;
+  if (!key) return null;
+  return { modifiers, key };
 }
 
 /** Push one command hotkey to the host. `null` unregisters. */

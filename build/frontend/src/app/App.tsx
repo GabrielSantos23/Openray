@@ -1743,10 +1743,27 @@ export function MainWindow() {
         const [, area, command] = payload.commandKey.split("/");
         void ipcRequest("window.showMainWindow", {}, { module: "frontend" }).catch(() => undefined);
         setSelected(internalCommandEntry(area as InternalArea, command as InternalCommandName));
+        return;
+      }
+      if (payload.commandKey.startsWith("command:")) {
+        // Installed-extension command hotkey (`command:<uuid>/<command>`): no-view commands run
+        // exactly like their root rows — the window hides and the command lands in the HUD —
+        // while view commands open the launcher on the command.
+        const [uuid, ...rest] = payload.commandKey.slice("command:".length).split("/");
+        const extension = extensions.find((candidate) => candidate.uuid === uuid);
+        const commandName = rest.join("/");
+        const command = extension?.commands?.find((candidate) => candidate.name === commandName);
+        if (extension && command && !command.disabledReason) {
+          if (command.mode === "no-view") closeMainWindow();
+          else {
+            void ipcRequest("window.showMainWindow", {}, { module: "frontend" }).catch(() => undefined);
+          }
+          setSelected({ kind: "extension", extension, command });
+        }
       }
     });
     // openApplicationEntry/openQuicklinkRow are stable; data flows through the deps below.
-  }, [applications, quicklinkRows, openApplicationEntry, openQuicklinkRow, setSelected]);
+  }, [applications, quicklinkRows, extensions, openApplicationEntry, openQuicklinkRow, closeMainWindow, setSelected]);
 
   // Toast actions merge into whatever action panel is open, like Raycast's `getToastActions()`.
   const toastGroups = useToastActionGroups();
