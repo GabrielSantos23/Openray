@@ -4,6 +4,7 @@
   "private": true,
   "description": "Node extension host for Openray: worker pool + named-pipe bridge to the .NET launcher",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "jsqr": "^1.4.0"
   }
 }

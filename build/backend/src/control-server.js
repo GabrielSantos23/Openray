@@ -195,4 +195,31 @@ function readControlToken(dataRoot) {
   }
 }
 
-module.exports = { createControlServer, writeControlToken, readControlToken };
+/** Endpoint discovery for bridged clients: loopback address + port of the live server. */
+function writeControlEndpoint(dataRoot, address) {
+  const dir = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "control-endpoint.json");
+  fs.writeFileSync(
+    file,
+    JSON.stringify({ address, pid: process.pid, startedAt: Date.now() }, null, 2),
+  );
+  return file;
+}
+
+function readControlEndpoint(dataRoot) {
+  const dir = dataRoot ?? path.join(process.env.LOCALAPPDATA ?? process.env.HOME ?? ".", "Openray");
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, "control-endpoint.json"), "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+module.exports = {
+  createControlServer,
+  writeControlToken,
+  readControlToken,
+  writeControlEndpoint,
+  readControlEndpoint,
+};
