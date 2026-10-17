@@ -60,6 +60,7 @@ import {
 } from "../applications";
 import { ArgsForm as QuicklinkArgsForm, type ArgsState as QuicklinkArgsState, type QuicklinksCommandName } from "../features/quicklinks/QuicklinksView";
 import { openQuicklink, setPendingCreateLink, useQuicklinks, type QuicklinkEntry } from "../quicklinks";
+import { useUpdateState, type UpdateState } from "../update";
 import { LoadingBar } from "../LoadingBar";
 import type { TranslateSeed } from "../features/translator/TranslateView";
 import { useSnippets } from "../snippets";
@@ -124,6 +125,7 @@ import {
   type SearchableEntry,
   type TranslateEntry,
   type TranslatorCustomCommand,
+  type UpdateEntry,
 } from "./entries";
 import { buildSections, FOCUS_COMMANDS } from "./buildSections";
 import {
@@ -155,6 +157,8 @@ function focusSessionSubtitle(entry: FocusSessionEntry): string {
 function footerPrimaryLabel(entry: RootEntry | null): string {
   if (!entry) return "Open";
   switch (entry.kind) {
+    case "update":
+      return "Install Update";
     case "application":
     case "game":
       return "Open Application";
@@ -246,9 +250,13 @@ export function MainWindow() {
   // the Translate view when "Open in Translator" runs.
   const [customTranslateCommands, setCustomTranslateCommands] = useState<TranslatorCustomCommand[]>([]);
   const [translatePanel, setTranslatePanel] = useState<TranslateEntry | null>(null);
+  // Action panel for the update card (Install / Open Release Page / Skip This Version).
+  const [updatePanel, setUpdatePanel] = useState<UpdateEntry | null>(null);
   const [translatorSeed, setTranslatorSeed] = useState<TranslateSeed | null>(null);
   // Quicklinks: one root row per stored quicklink, refreshed on `quicklinks.updated`.
   const { quicklinks: quicklinkRows } = useQuicklinks();
+  // Update check (`updates.*`): the backend pushes `updates.changed`; null until the first read.
+  const updateState: UpdateState | null = useUpdateState();
   const [quicklinkArgs, setQuicklinkArgs] = useState<QuicklinkEntry | null>(null);
   const [quicklinkCreateLink, setQuicklinkCreateLink] = useState<string | { link: string; name?: string } | null>(null);
   // Argument input state
@@ -1111,9 +1119,22 @@ export function MainWindow() {
 
   // Root Search renders Favorites / Applications / Commands as named sections, exactly like
   // Raycast's root search, and the flat selection index walks all of them in order.
+  // The pinned update card: only while the backend reports a newer, non-skipped release.
+  const updateEntry = useMemo<UpdateEntry | null>(() => {
+    if (!updateState?.available || !updateState.latestVersion) return null;
+    return {
+      kind: "update",
+      latestVersion: updateState.latestVersion,
+      currentVersion: updateState.currentVersion,
+      url: updateState.url ?? "",
+      downloadUrl: updateState.downloadUrl ?? "",
+      publishedAt: updateState.publishedAt,
+    };
+  }, [updateState]);
+
   const sections = useMemo(
-    () => buildSections(searchText, extensionEnabled.applications ? applications : [], extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, extensionEnabled["file-search"] ? fileResults : [], inlineResults, extensionEnabled.quicklinks ? quicklinkRows : [], extensionEnabled.calculator ? calculatorEntry : null, extensionEnabled.translator ? translateEntry : null, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false, extensionEnabled.focus ? focusState?.session ?? null : null, extensionEnabled.games ? gameApps : [], colorEntry, disabledAreas),
-    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings, focusState, gameApps, colorEntry, disabledAreas],
+    () => buildSections(searchText, extensionEnabled.applications ? applications : [], extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, extensionEnabled["file-search"] ? fileResults : [], inlineResults, extensionEnabled.quicklinks ? quicklinkRows : [], extensionEnabled.calculator ? calculatorEntry : null, extensionEnabled.translator ? translateEntry : null, customTranslateCommands, fileIndexState, fileSearchSettings?.showInRootSearch ?? false, extensionEnabled.focus ? focusState?.session ?? null : null, extensionEnabled.games ? gameApps : [], colorEntry, disabledAreas, updateEntry),
+    [searchText, applications, extensions, favorites, sensitivity, rootUsageScores, fallbackCommands, fileResults, inlineResults, quicklinkRows, calculatorEntry, translateEntry, customTranslateCommands, fileIndexState, fileSearchSettings, focusState, gameApps, colorEntry, disabledAreas, updateEntry],
   );
 
   const entries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
@@ -1187,6 +1208,8 @@ export function MainWindow() {
           return entry.app.name;
         case "clipboard":
           return "Clipboard History";
+        case "update":
+          return "New Update Available";
       }
     };
     const controlItem = (entry: RootEntry | undefined, index: number): ControlItem | null =>
@@ -1284,6 +1307,7 @@ export function MainWindow() {
             setColorPanel(null);
             setTranslatePanel(null);
             setQuicklinkArgs(null);
+            setUpdatePanel(null);
             return { ok: true };
         }
       },
@@ -1291,7 +1315,7 @@ export function MainWindow() {
   }, [sections, entries, selectedIndex, searchText, windowMode, openApplication, commandPanelEntry, calculatorPanel, colorPanel, translatePanel, quicklinkArgs, selected]);
 
   const selectedEntry = entries[selectedIndex];
-  panelOpenRef.current = openApplication !== null || commandPanelEntry !== null || calculatorPanel !== null || colorPanel !== null || translatePanel !== null;
+  panelOpenRef.current = openApplication !== null || commandPanelEntry !== null || calculatorPanel !== null || colorPanel !== null || translatePanel !== null || updatePanel !== null;
 
   // Hooks must run before any early return, so the action source is resolved here.
   const panelApp = openApplication?.payload ?? null;
@@ -1395,6 +1419,8 @@ export function MainWindow() {
     else if (entry.kind === "focus-view" || entry.kind === "games-view") setSelected(entry);
     else if (entry.kind === "focus-session") setFocusSessionPanel(entry);
     else if (entry.kind === "game") setGamePanel(entry);
+    // The update card gets its own panel; running "Install" is never the Ctrl+K default.
+    else if (entry.kind === "update") setUpdatePanel(entry);
     // A custom translate command's primary action IS opening the view; the panel would add
     // nothing, so Ctrl+K opens the prefilled Translate view directly.
     else if (entry.kind === "translator-command") setSelected(entry);
@@ -1730,6 +1756,35 @@ export function MainWindow() {
     ];
   }, [translatePanel]);
 
+  // --- Update card actions (docs/updates.md) ---------------------------------------------------
+
+  /** Downloads the release zip and reveals it in Explorer (Enter on the card, footer, panel). */
+  const installUpdate = useCallback(() => {
+    showToast("Downloading update…");
+    void ipc
+      .backend("updates.install", {}, { module: "backend" })
+      .then((result) => {
+        const path = (result as { path?: string }).path ?? "";
+        showToast("Update downloaded", path ? `Run the installer from ${path}` : undefined);
+      })
+      .catch((error) => showToast("Update failed", error instanceof Error ? error.message : String(error)));
+  }, [showToast]);
+
+  const updatePanelGroups = useMemo<ActionGroup[]>(() => {
+    if (!updatePanel) return [];
+    return [
+      {
+        name: "actions",
+        actions: [
+          { id: "upd:install", title: "Install Update", itemId: "update" },
+          { id: "upd:openRelease", title: "Open Release Page", itemId: "update" },
+          { id: "upd:copyUrl", title: "Copy Download URL", itemId: "update" },
+          { id: "upd:skip", title: "Skip This Version", itemId: "update" },
+        ],
+      },
+    ];
+  }, [updatePanel]);
+
   // Opening a quicklink from root search: required placeholders collect their values through the
   // shared argument form first (Raycast's `/snippets/argument-form`), then the backend resolves the
   // link and the host opens it.
@@ -1941,6 +1996,9 @@ export function MainWindow() {
           setSelected({ kind: "focus-view", command: "edit", title: "Edit Focus Session" });
         } else if (entry.kind === "game") {
           openGameEntry(entry.app);
+        } else if (entry.kind === "update") {
+          // Enter on the card = the primary action: download the release and reveal it.
+          installUpdate();
         } else {
           setSelected(entry);
         }
@@ -1948,7 +2006,7 @@ export function MainWindow() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry, showToast, closeMainWindow, refreshFocus, openGameEntry, navigationBindings, windowMode, searchText]);
+  }, [entries, selectedIndex, openApplication, commandPanelEntry, selected, quicklinkArgs, openQuicklinkRow, openRootActionPanel, copyCalculatorAnswer, copyTranslation, openFileEntry, openExplorerEntry, showToast, closeMainWindow, refreshFocus, openGameEntry, installUpdate, navigationBindings, windowMode, searchText]);
 
   // Escape per the Escape Key Behavior setting: "Navigate back or close window" closes at the root
   // (command views pop back on their own); "Close window and pop to root" intercepts every Escape
@@ -2331,13 +2389,44 @@ export function MainWindow() {
               section.entries.length === 0 ||
               (windowMode === "compact" && !showFavoritesCompact && section.id === "favorites") ? null : (
                 <li key={section.id} className="list__section">
-                  <div className="list__sectionHeader">
-                    <span className="list__sectionTitle">{section.title}</span>
-                  </div>
+                  {section.title ? (
+                    <div className="list__sectionHeader">
+                      <span className="list__sectionTitle">{section.title}</span>
+                    </div>
+                  ) : null}
                   <ul className="list__sectionBody">
                     {section.entries.map((entry) => {
                       const index = entries.indexOf(entry);
-                      return entry.kind === "application" ? (
+                      return entry.kind === "update" ? (
+                        <li key={`update:${entry.latestVersion}`}>
+                          <button
+                            type="button"
+                            className="list__row"
+                            data-selected={index === selectedIndex}
+                            onMouseEnter={() => setSelectedIndex(index)}
+                            onClick={installUpdate}
+                            onContextMenu={(event) => {
+                              event.preventDefault();
+                              setUpdatePanel(entry);
+                            }}
+                          >
+                            <span className="icon-wrap command-tile command-tile--update" aria-hidden>
+                              <OpenrayIcon name="download" size={13} />
+                            </span>
+                            <span className="list__text">
+                              <span className="list__title">New Update Available</span>
+                              <span className="list__subtitle">
+                                Version {entry.latestVersion.replace(/^v/, "")} — you have{" "}
+                                {entry.currentVersion}
+                              </span>
+                            </span>
+                            <span className="list__accessory">
+                              <span className="list__command-type">Update</span>
+                              {renderRowActions(entry)}
+                            </span>
+                          </button>
+                        </li>
+                      ) : entry.kind === "application" ? (
                         <li key={`app:${entry.application.commandId}`}>
                           <button
                             type="button"
@@ -2951,6 +3040,15 @@ export function MainWindow() {
           Actions <span className="kbd">Ctrl</span>
           <span className="kbd">K</span>
         </button>
+        {updateState?.available ? (
+          <button
+            type="button"
+            className="footer-action footer-action--primary"
+            onClick={installUpdate}
+          >
+            Install Update <span className="kbd">↗</span>
+          </button>
+        ) : null}
       </footer>
 
       <ActionPanel
@@ -3114,6 +3212,43 @@ export function MainWindow() {
             return;
           }
           runFocusPanelAction(action.id);
+        }}
+      />
+
+      <ActionPanel
+        open={updatePanel !== null}
+        title="New Update Available"
+        groups={[...updatePanelGroups, ...toastGroups]}
+        onClose={() => setUpdatePanel(null)}
+        onRun={async (action) => {
+          const entry = updatePanel;
+          if (!entry) return;
+          if (await runToastAction(action.id)) {
+            setUpdatePanel(null);
+            return;
+          }
+          setUpdatePanel(null);
+          switch (action.id) {
+            case "upd:install":
+              installUpdate();
+              break;
+            case "upd:openRelease":
+              if (entry.url) {
+                closeMainWindow();
+                void ipc.backend("shell.openUrl", { url: entry.url }, { module: "backend" }).catch(() => undefined);
+              }
+              break;
+            case "upd:copyUrl":
+              void ipc.backend("clipboard.write", { content: entry.downloadUrl || entry.url }, { module: "backend" })
+                .then(() => showToast("Copied download URL"))
+                .catch(() => showToast("Failed copying URL"));
+              break;
+            case "upd:skip":
+              void ipc.backend("updates.skipVersion", { version: entry.latestVersion }, { module: "backend" })
+                .then(() => showToast("Version skipped", `You won't be notified about ${entry.latestVersion.replace(/^v/, "")} again`))
+                .catch(() => showToast("Failed to skip version"));
+              break;
+          }
         }}
       />
 

@@ -43,6 +43,7 @@ const { createTaskbar } = require("./taskbar");
 const { createSettingsStore } = require("./settings-store");
 const { createNotes } = require("./notes");
 const { createExtensionStore } = require("./store");
+const { createUpdates, APP_VERSION } = require("./updates");
 
 
 // The runtime is shared by the live app (index.js) and the headless MCP/CLI mode: one wiring
@@ -239,6 +240,17 @@ const extensionStore = createExtensionStore({
 });
 backend.registerStoreHandler(extensionStore.handlers);
 
+// Updates (`updates.*`): the GitHub Releases check behind the root-search update card.
+// Version + repo come from docs/updates.md; the schedule is boot + every 6 hours.
+const updates = createUpdates({
+  dispatch: (method, data) => backend.dispatch("backend", method, data),
+  pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
+  dataRoot: process.env.OPENRAY_DATA_DIR ?? path.dirname(config.extensionsRoot),
+  appVersion: APP_VERSION,
+});
+backend.registerUpdatesHandler(updates.handlers);
+updates.schedule();
+
 // ---------------------------------------------------------------------------------------------
 // Command registry (docs/mcp-architecture.md): every handler method above becomes a command
 // with the same id, so the pipe, the control channel, the CLI and MCP share one dispatch path.
@@ -272,6 +284,7 @@ wiring.registerTable("taskbar", taskbar.handlers);
 wiring.registerTable("advanced", advanced.handlers, { risk: { importFromFile: "destructive" } });
 wiring.registerTable("notes", notes.handlers);
 wiring.registerTable("store", extensionStore.handlers);
+wiring.registerTable("updates", updates.handlers, { risk: { install: "write" } });
 
 for (const [method, risk] of [
   ["clipboard.read", "read"],
@@ -487,6 +500,7 @@ if (options.connectPipe) {
       () => snippets.close(),
       () => calculator.close(),
       () => translator.close(),
+      () => updates.close(),
     ];
     for (const closer of closers) {
       try {
@@ -497,7 +511,7 @@ if (options.connectPipe) {
     }
   }
 
-  return { backend, registry, config, close, clipboard, calculator, translator, quicklinks, snippets, fileIndexer, focus, games, taskbar, settingsStore, advanced, notes, extensionStore };
+  return { backend, registry, config, close, clipboard, calculator, translator, quicklinks, snippets, fileIndexer, focus, games, taskbar, settingsStore, advanced, notes, extensionStore, updates };
 }
 
 module.exports = { createRuntime };

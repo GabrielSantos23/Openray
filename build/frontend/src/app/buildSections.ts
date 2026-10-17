@@ -30,9 +30,10 @@ import {
   type SearchableEntry,
   type TranslateEntry,
   type TranslatorCustomCommand,
+  type UpdateEntry,
 } from "./entries";
 
-type RootSectionId = "favorites" | "suggestions" | "results" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search" | "window-management" | "focus" | "focus-commands" | "games" | "color";
+type RootSectionId = "update" | "favorites" | "suggestions" | "results" | "applications" | "commands" | "fallback-commands" | "files" | "calculator" | "translate" | "translate-commands" | "quicklinks" | "snippets" | "web-search" | "window-management" | "focus" | "focus-commands" | "games" | "color";
 
 interface RootSection {
   id: RootSectionId;
@@ -90,7 +91,8 @@ export function buildSections(
   focusSession: FocusSessionState | null,
   gameApps: ApplicationCommand[],
   colorEntry: ColorEntry | null = null,
-  disabledAreas: string[] = []
+  disabledAreas: string[] = [],
+  updateEntry: UpdateEntry | null = null
 ): RootSection[] {
   const off = (area: string) => disabledAreas.includes(area);  // Build searchable entries for all applications
   const appAliases = readAppAliases();
@@ -383,6 +385,12 @@ export function buildSections(
   const sections: RootSection[] = searching
     ? []
     : [{ id: "favorites", title: "Favorites", icon: "star", entries: favoriteEntries }];
+
+  // The update card is the unsectioned first row on the empty-query root (the shipped design
+  // pins it above Favorites); it disappears while searching.
+  if (!searching && updateEntry) {
+    sections.unshift({ id: "update", title: "", icon: "download", entries: [updateEntry] });
+  }
 
   // Suggestions: usage-ranked top five while the search bar is empty (after Favorites, like the
   // shipped root layout). Every searchable section below needs a query.

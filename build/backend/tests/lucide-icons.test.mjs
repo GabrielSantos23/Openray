@@ -177,16 +177,25 @@ test(
       assert.equal(clipboardWrites.length, 1, "clipboard.write reached the host handler");
       assert.match(clipboardWrites[0].text, /A[A-Z]/, "PascalCase preference applies to the copied name");
 
-      // The typed error path: clipboard.paste is declared but not routed yet.
+      // Paste SVG routes now (`clipboard.paste` → `clipboardHistory.placeInClipboard`,
+      // target "frontmost"): the call resolves and reaches the host transport.
       const paste = item.actions.find((action) => action.title === "Paste SVG");
-      await assert.rejects(
-        () =>
-          backend.dispatchMessage("backend", "extensionHost.callNodeCallback", {
-            sessionId: session.sessionId,
-            callbackId: paste.id,
-            data: {},
-          }),
-        /FlowKey native method clipboard\.paste is not implemented yet/,
+      const pasteCalls = rendered.length;
+      await backend.dispatchMessage("backend", "extensionHost.callNodeCallback", {
+        sessionId: session.sessionId,
+        callbackId: paste.id,
+        data: {},
+      });
+      const pasteDeadline = Date.now() + 8000;
+      while (
+        Date.now() < pasteDeadline &&
+        !rendered.slice(pasteCalls).some((entry) => entry.method === "clipboardHistory.placeInClipboard")
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      assert.ok(
+        rendered.slice(pasteCalls).some((entry) => entry.method === "clipboardHistory.placeInClipboard"),
+        "clipboard.paste reached the host as placeInClipboard(frontmost)",
       );
     } finally {
       await backend.dispatchMessage("backend", "extensionHost.unloadEntryPoint", { sessionId: session.sessionId }).catch(() => undefined);

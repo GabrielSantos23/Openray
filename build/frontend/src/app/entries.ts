@@ -312,7 +312,19 @@ export interface GamesViewEntry {
   title: string;
 }
 
-export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | FileIndexingEntry | OpenInExplorerEntry | InlineEntry | CalculatorEntry | ColorEntry | TranslateEntry | TranslatorCommandEntry | WindowManagementEntry | WindowManagementArgsEntry | FocusViewEntry | FocusActionEntry | FocusSessionEntry | GameEntry | GamesViewEntry;
+/** The update-check card pinned above Favorites (docs/updates.md). */
+export interface UpdateEntry {
+  kind: "update";
+  latestVersion: string;
+  currentVersion: string;
+  /** The GitHub release page. */
+  url: string;
+  /** The release's `.zip` asset (what Install downloads). */
+  downloadUrl: string;
+  publishedAt: string | null;
+}
+
+export type RootEntry = ExtensionEntry | ApplicationEntry | ClipboardEntryResult | InternalCommandEntry | QuicklinkRowEntry | QuicklinkCreateEntry | FallbackCommandEntry | FileEntry | FileIndexingEntry | OpenInExplorerEntry | InlineEntry | CalculatorEntry | ColorEntry | TranslateEntry | TranslatorCommandEntry | WindowManagementEntry | WindowManagementArgsEntry | FocusViewEntry | FocusActionEntry | FocusSessionEntry | GameEntry | GamesViewEntry | UpdateEntry;
 
 export interface SearchableEntry {
   title: string;

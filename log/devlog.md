@@ -1,3 +1,39 @@
+## 2026-10-17 (later) — update check + update card (GitHub Releases)
+
+**What landed**
+
+- `build/backend/src/updates.js` — the `updates.*` module: an unauthenticated GitHub Releases
+  check against `OPENRAY_UPDATE_REPO` (default `GabrielSantos23/Openray`), boot check after
+  15s then every 6h, numeric version compare (`v` stripped, `2.10 > 2.9`), 404 = "no releases
+  yet" not an error, and `updates.install` (streams the release `.zip` asset to
+  `%TEMP%\Openray-update\`, reveals it in Explorer via `shell.revealFile`). Skipped
+  versions persist in `<dataRoot>/updates-state.json`; every state change pushes
+  `updates.changed` to the renderer. APP_VERSION constant must be bumped with the csproj.
+- Root-search card: headerless first section above Favorites (empty query only) —
+  "New Update Available / Version X — you have Y", green download tile. Enter or click =
+  Install; Ctrl+K panel = Install / Open Release Page / Copy Download URL / Skip This
+  Version. Footer gains a persistent "Install Update ↗" button while an update is available.
+  New `UpdateEntry` kind in `entries.ts`, `useUpdateState()` in `update.ts`.
+- `.github/workflows/release.yml` — on a `v*` tag: vite build, backend `npm ci --omit=dev`,
+  `dotnet publish`, stage the runtime layout the host expects (`app/` + `backend/` +
+  `frontend/dist` + `Start Openray.cmd` setting OPENRAY_ROOT), zip it, `gh release create`
+  with generated notes. Release process documented in docs/updates.md (three version bumps,
+  then push the tag).
+- Tests: new `tests/updates.test.mjs` (7 tests: compare, zip pick, check state machine,
+  404, skip persistence across restarts, install download + reveal, install refusals) —
+  all pass; full backend suite 234/234. Stale assertion fixed in `lucide-icons.test.mjs`
+  (it expected `clipboard.paste` to be unrouted, but the paste route shipped in the emoji
+  milestone — now asserts the call reaches the host as `placeInClipboard(frontmost)`).
+- Verified live in an isolated instance (own pipe/data-dir/CDP port, `OPENRAY_UPDATE_REPO`
+  pointed at `cli/cli` so a real newer release exists): boot check flips the card on via the
+  `updates.changed` push (no reload), card is the selected first row, footer shows
+  "Install Update ↗", Ctrl+K panel lists Install / Open Release Page / Copy Download URL /
+  Skip This Version, Enter downloads the real 15.5MB `gh_2.102.0_windows_amd64.zip` into
+  `%TEMP%\Openray-update\` and reveals it in Explorer, Copy Download URL puts the asset URL
+  on the clipboard, Skip removes the card and persists `skippedVersion`. Multi-asset
+  releases prefer a 64-bit Windows zip (the first pick grabbed `windows_386`). Rate-limited
+  (HTTP 403) degrades to `lastError` with no card — observed before the API quota reset.
+
 ## 2026-10-17 (late) — emoji picker polish + the svgl extension (store-published)
 
 **What landed**

@@ -1492,3 +1492,14 @@ textarea[data-error="true"] {
   width: 55%;
   height: 55%;
 }
+
+/* Update check card (docs/updates.md): a green download tile, distinct from the purple
+   command tiles, pinned as the unsectioned first row of the root search. */
+.command-tile--update {
+  background: linear-gradient(140deg, #6fd6a0 0%, #2e9e68 100%);
+}
+
+/* The update section has no header; keep its spacing rhythm like a named section. */
+.list__sectionBody:only-child {
+  margin-top: 0;
+}

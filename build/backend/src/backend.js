@@ -69,6 +69,7 @@ function createBackend(options) {
   let notesHandlers = {};
   let storeHandlers = {};
   let settingsStoreHandlers = {};
+  let updatesHandlers = {};
   // Set by index.js to a launch gate; loadCommand refuses commands the gate rejects.
   let launchGate = null;
   // Set by index.js; registry-resolvable methods dispatch through the command registry so the
@@ -1169,6 +1170,12 @@ function createBackend(options) {
         if (handler) return handler(data ?? {});
       }
 
+      // Updates (`updates.*`): the GitHub Releases update check (docs/updates.md).
+      if (method.startsWith("updates.")) {
+        const handler = updatesHandlers[method.slice("updates.".length)];
+        if (handler) return handler(data ?? {});
+      }
+
       if (method.startsWith("games.") || method.startsWith("taskbar.") || method.startsWith("advanced.")) {
         const table = method.startsWith("games.") ? gamesHandlers : method.startsWith("taskbar.") ? taskbarHandlers : advancedHandlers;
         const handler = table[method.slice(method.indexOf(".") + 1)];
@@ -1285,6 +1292,10 @@ function createBackend(options) {
     /** Install the settings store handler table. */
     registerSettingsStoreHandler(handlers) {
       settingsStoreHandlers = handlers ?? {};
+    },
+    /** Install the updates handler table (GitHub Releases update check). */
+    registerUpdatesHandler(handlers) {
+      updatesHandlers = handlers ?? {};
     },
     /** Install the advanced handler table. */
     registerAdvancedHandler(handlers) {

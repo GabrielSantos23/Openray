@@ -1,0 +1,80 @@
+# Release pipeline (docs/updates.md): builds the app on a `v*` tag and publishes a GitHub
+# Release whose `.zip` asset the launcher's update check downloads. The release page URL and
+# the zip asset are all `updates.*` reads — nothing else to publish.
+#
+# Cutting a release:
+#   1. Bump `<Version>` in build/host/Openray.csproj, `version` in build/frontend/package.json
+#      and APP_VERSION in build/backend/src/updates.js (all three must match the tag).
+#   2. `git tag v2.4.1 && git push origin v2.4.1` — this workflow does the rest.
+#
+# The zip layout matches what the host expects at runtime (build/host/BackendProcess.cs:
+# repoRoot contains `backend/` and `frontend/`); `Start Openray.cmd` points OPENRAY_ROOT at it
+# so the extracted folder runs as-is. Node.js 20+ must be installed on the target machine (the
+# host spawns `node backend/src/index.js`).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build frontend
+        working-directory: build/frontend
+        run: |
+          npm ci
+          npx vite build
+
+      - name: Install backend runtime dependencies
+        working-directory: build/backend
+        run: npm ci --omit=dev
+
+      - name: Publish host
+        run: dotnet publish build/host/Openray.csproj -c Release -o build/publish
+
+      - name: Stage release layout
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          if (-not $version) { $version = "dev" }
+          $stage = "stage/Openray-$version"
+          New-Item -ItemType Directory -Force -Path "$stage/app" | Out-Null
+          Copy-Item build/publish/* "$stage/app/" -Recurse -Force
+          New-Item -ItemType Directory -Force -Path "$stage/app/backend" | Out-Null
+          Copy-Item build/backend/src "$stage/app/backend/src" -Recurse -Force
+          Copy-Item build/backend/node_modules "$stage/app/backend/node_modules" -Recurse -Force
+          Copy-Item build/backend/package.json "$stage/app/backend/" -Force
+          New-Item -ItemType Directory -Force -Path "$stage/app/frontend" | Out-Null
+          Copy-Item build/frontend/dist "$stage/app/frontend/dist" -Recurse -Force
+          Set-Content -Path "$stage/Start Openray.cmd" -Value @'
+          @echo off
+          set "OPENRAY_ROOT=%~dp0app"
+          start "" "%~dp0app\Openray.exe"
+          '@
+          Compress-Archive -Path "$stage/*" -DestinationPath "Openray-$version-win-x64.zip" -Force
+          "version=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$env:GITHUB_REF_NAME" --title "Openray $env:GITHUB_REF_NAME" --generate-notes "Openray-$env:version-win-x64.zip"
