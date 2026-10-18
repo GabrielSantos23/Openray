@@ -43,7 +43,7 @@ const { createTaskbar } = require("./taskbar");
 const { createSettingsStore } = require("./settings-store");
 const { createNotes } = require("./notes");
 const { createExtensionStore } = require("./store");
-const { createUpdates, APP_VERSION } = require("./updates");
+const { createUpdates } = require("./updates");
 
 
 // The runtime is shared by the live app (index.js) and the headless MCP/CLI mode: one wiring
@@ -246,7 +246,6 @@ const updates = createUpdates({
   dispatch: (method, data) => backend.dispatch("backend", method, data),
   pushToFrontend: (method, data) => backend.dispatch("frontend", method, data),
   dataRoot: process.env.OPENRAY_DATA_DIR ?? path.dirname(config.extensionsRoot),
-  appVersion: APP_VERSION,
 });
 backend.registerUpdatesHandler(updates.handlers);
 updates.schedule();
