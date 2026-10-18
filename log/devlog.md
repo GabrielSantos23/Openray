@@ -1,3 +1,28 @@
+## 2026-10-18 — proper installer (setup.exe) + bundled Node for v1.0.1
+
+The user wanted a real installer instead of the zip-only release. Landed:
+
+- `build/installer/openray.iss` — Inno Setup 6 script: per-user install
+  (`%LOCALAPPDATA%\Programs\Openray`, `PrivilegesRequired=lowest`, no admin prompt),
+  Start Menu + optional desktop shortcuts, real uninstaller (kills a running instance
+  first), launch-on-finish. Compiled by the Release workflow with
+  `ISCC /DAppVersion=<tag>`; ISCC is preinstalled on GitHub's windows runners.
+- Bundled runtime: the workflow downloads a portable node.exe into
+  `app/backend/runtime/`; `BackendProcess` prefers `backend/runtime/node.exe` and falls
+  back to PATH `node` (dev unchanged). Installed machines need no Node at all.
+- `App.xaml.cs` repoRoot resolution walks up from the exe looking for the
+  `backend/ + frontend/` layout, so the installed exe self-locates (dev four-levels-up
+  behavior kept as fallback; OPENRAY_ROOT still wins).
+- `updates.install` prefers `Openray-<v>-setup.exe` over the zip now (the installer is the
+  upgrade path; the zip stays for portable use). Tests updated, 7/7.
+- Version reset to 1.0.0 for the first release (the user flagged that 2.4.x was Raycast's
+  lineage, not ours); v1.0.0 and v1.0.1 both cut. `main` aligned to the release history —
+  the remote placeholder snapshot had nothing unique (verified: zero files not in HEAD).
+- Verified locally end-to-end: ISCC compile (31MB), silent install to a test dir, installed
+  exe spawns the bundled node.exe, self-locates, healthy launcher. CI reproduced it: v1.0.1
+  ships `Openray-1.0.1-setup.exe` (26MB) + the zip (41MB); the dev instance (posing 0.9.0)
+  shows the card and Install now picks the setup.exe.
+
 ## 2026-10-17 (evening) — footer hold-and-drag moves the launcher window
 
 Raycast's footer drag, ported: mousedown anywhere on the launcher footer (except the
