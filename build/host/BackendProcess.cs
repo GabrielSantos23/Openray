@@ -54,9 +54,12 @@ public sealed class BackendProcess : IAsyncDisposable
         Directory.CreateDirectory(ExtensionsRoot);
 
         var entry = System.IO.Path.Combine(BackendRoot, "src", "index.js");
+        // Installed builds bundle a portable node.exe next to the backend; dev falls back to
+        // the PATH `node` (Node 20+ documented prerequisite otherwise).
+        var localNode = System.IO.Path.Combine(BackendRoot, "runtime", "node.exe");
         var startInfo = new ProcessStartInfo
         {
-            FileName = "node",
+            FileName = System.IO.File.Exists(localNode) ? localNode : "node",
             ArgumentList = { entry },
             UseShellExecute = false,
             RedirectStandardOutput = true,

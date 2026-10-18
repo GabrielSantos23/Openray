@@ -243,9 +243,26 @@ private MainWindow? _window;
 
         Log.Write($"pipe name: {PipeName}");
 
-        // <build>/host/bin/<config>/<tfm>/ -> four levels up lands on <build>/.
-        var repoRoot = Environment.GetEnvironmentVariable("OPENRAY_ROOT") ??
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        // The app root is the directory holding `backend/` + `frontend/`: the dev tree
+        // (<build>/host/bin/<config>/<tfm>/ -> four levels up) or an installed layout
+        // ({localappdata}\Programs\Openray where the exe sits directly in it).
+        static string FindAppRoot(string start)
+        {
+            var dir = Path.GetFullPath(start);
+            for (var i = 0; i < 6 && dir is not null; i++)
+            {
+                if (Directory.Exists(Path.Combine(dir, "backend")) && Directory.Exists(Path.Combine(dir, "frontend")))
+                {
+                    return dir;
+                }
+                dir = Path.GetDirectoryName(dir)?.Length > 3 ? Path.GetDirectoryName(dir) : null;
+            }
+            return null;
+        }
+
+        var repoRoot = FindAppRoot(Environment.GetEnvironmentVariable("OPENRAY_ROOT")
+            ?? AppContext.BaseDirectory)
+            ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         Log.Write($"repoRoot={repoRoot} (exists={Directory.Exists(repoRoot)})");
 
         _backend = new BackendProcess(PipeName, repoRoot);

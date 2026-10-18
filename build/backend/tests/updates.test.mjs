@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-const { createUpdates, isNewerVersion, parseVersion, pickZipAsset } = await import("../src/updates.js");
+const { createUpdates, isNewerVersion, parseVersion, pickInstallAsset } = await import("../src/updates.js");
 
 function release(tag, assets = [{ name: `Openray-${tag.replace(/^v/, "")}-win-x64.zip`, browser_download_url: `https://x/${tag}.zip` }]) {
   return { tag_name: tag, html_url: `https://github.com/x/releases/tag/${tag}`, assets, body: "notes", published_at: "2026-10-17T00:00:00Z" };
@@ -23,10 +23,12 @@ test("version parsing and comparison", () => {
   assert.equal(isNewerVersion("2.3.9", "2.4.0.0"), false);
 });
 
-test("pickZipAsset", () => {
-  assert.equal(pickZipAsset([{ name: "a.sig" }, { name: "Openray-2.4.1-win-x64.zip" }])?.name, "Openray-2.4.1-win-x64.zip");
-  assert.equal(pickZipAsset([]), null);
-  assert.equal(pickZipAsset(undefined), null);
+test("pickInstallAsset prefers the setup installer, then a 64-bit Windows zip", () => {
+  const setup = { name: "Openray-1.0.1-setup.exe", browser_download_url: "https://x/setup.exe" };
+  assert.equal(pickInstallAsset([{ name: "a.sig" }, setup, { name: "Openray-1.0.1-win-x64.zip" }]), setup);
+  assert.equal(pickInstallAsset([{ name: "Openray-1.0.1-win-x64.zip" }])?.name, "Openray-1.0.1-win-x64.zip");
+  assert.equal(pickInstallAsset([]), null);
+  assert.equal(pickInstallAsset(undefined), null);
 });
 
 function fakeFetch(respond) {

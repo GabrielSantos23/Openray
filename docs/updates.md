@@ -54,19 +54,27 @@ repo returns 404 and the card simply never shows).
    runtime deps, `dotnet publish`es the host, stages the layout and creates the GitHub Release
    with `Openray-<version>-win-x64.zip` and generated notes.
 
-The zip layout is what the host resolves at runtime (`BackendProcess.cs`: repo root contains
-`backend/` and `frontend/`):
+Two assets ship per release:
 
-```
-Openray-<version>/
-  Start Openray.cmd        sets OPENRAY_ROOT=%~dp0app and starts the exe
-  app/Openray.exe + dlls   dotnet publish output
-  app/backend/src + node_modules + package.json
-  app/frontend/dist
-```
+- **`Openray-<version>-setup.exe`** — the proper installer (Inno Setup, per-user, no admin
+  prompt): installs to `%LOCALAPPDATA%\Programs\Openray`, Start Menu + optional desktop
+  shortcuts, a real uninstaller, and a **bundled portable node.exe** under
+  `backend/runtime/` so the target machine needs no Node at all. `updates.install`
+  prefers this asset. Script: `build/installer/openray.iss` (built with ISCC on the
+  runner).
+- **`Openray-<version>-win-x64.zip`** — portable zip of the same layout:
 
-Run `Start Openray.cmd` from the extracted folder. Node.js 20+ is required on the target
-machine (the host spawns `node backend/src/index.js`).
+  ```
+  Openray-<version>/
+    Start Openray.cmd        sets OPENRAY_ROOT=%~dp0app and starts the exe
+    app/Openray.exe + dlls   dotnet publish output
+    app/backend/src + node_modules + package.json + runtime/node.exe
+    app/frontend/dist
+    app/flowkey/worker/dist  (the FlowKey worker lives at backend/src/../../flowkey/worker/dist)
+  ```
+
+  Run `Start Openray.cmd` from the extracted folder. Without the bundled runtime, Node.js
+  20+ must be on PATH (the host prefers `backend/runtime/node.exe`, falling back to `node`).
 
 ## Registry surface
 

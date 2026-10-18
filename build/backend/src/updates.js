@@ -48,10 +48,13 @@ function isNewerVersion(latest, current) {
   return false;
 }
 
-/** The `.zip` asset a release must carry (the workflow uploads exactly one); on multi-asset
- *  releases prefer a 64-bit Windows zip, then any Windows zip, then any zip. */
-function pickZipAsset(assets) {
+/** What `updates.install` downloads: prefer the setup installer (`Openray-<v>-setup.exe`,
+ *  self-contained with shortcuts/uninstaller), fall back to the portable zip; on multi-asset
+ *  releases prefer a 64-bit Windows build over other platforms. */
+function pickInstallAsset(assets) {
   if (!Array.isArray(assets)) return null;
+  const installer = assets.find((asset) => /-setup\.exe$/i.test(String(asset?.name ?? "")));
+  if (installer) return installer;
   const zips = assets.filter((asset) => /\.zip$/i.test(String(asset?.name ?? "")));
   return (
     zips.find((asset) => /windows.*(amd64|x64)|(amd64|x64).*windows/i.test(String(asset?.name ?? ""))) ??
@@ -124,7 +127,7 @@ function createUpdates(options = {}) {
   }
 
   function applyRelease(release) {
-    const asset = pickZipAsset(release?.assets);
+    const asset = pickInstallAsset(release?.assets);
     state.latestVersion = String(release?.tag_name ?? "").trim() || null;
     state.url = String(release?.html_url ?? "") || null;
     state.downloadUrl = asset ? String(asset.browser_download_url ?? "") || null : null;
@@ -232,4 +235,4 @@ function createUpdates(options = {}) {
   return { handlers, schedule, snapshot, close() { closed = true; if (checkTimer) clearTimeout(checkTimer); if (intervalTimer) clearInterval(intervalTimer); } };
 }
 
-module.exports = { createUpdates, parseVersion, isNewerVersion, pickZipAsset, APP_VERSION, DEFAULT_REPO };
+module.exports = { createUpdates, parseVersion, isNewerVersion, pickInstallAsset, APP_VERSION, DEFAULT_REPO };

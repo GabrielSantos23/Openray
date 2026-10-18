@@ -56,7 +56,7 @@ jobs:
         run: |
           $version = $env:GITHUB_REF_NAME -replace '^v', ''
           if (-not $version) { $version = "dev" }
-          $stage = "stage/Openray-$version"
+          $stage = "stage"
           New-Item -ItemType Directory -Force -Path "$stage/app" | Out-Null
           Copy-Item build/publish/* "$stage/app/" -Recurse -Force
           New-Item -ItemType Directory -Force -Path "$stage/app/backend" | Out-Null
@@ -68,6 +68,13 @@ jobs:
           # The FlowKey worker is resolved relative to backend/src (../../flowkey/worker/dist).
           New-Item -ItemType Directory -Force -Path "$stage/app/flowkey/worker" | Out-Null
           Copy-Item build/flowkey/worker/dist "$stage/app/flowkey/worker/dist" -Recurse -Force
+          # Portable node.exe so installed machines need no Node on PATH (host prefers
+          # backend/runtime/node.exe).
+          $nodeZip = "node-win-x64.zip"
+          Invoke-WebRequest -Uri "https://nodejs.org/dist/v20.19.0/node-v20.19.0-win-x64.zip" -OutFile $nodeZip
+          Expand-Archive -Path $nodeZip -DestinationPath node-dist
+          New-Item -ItemType Directory -Force -Path "$stage/app/backend/runtime" | Out-Null
+          Copy-Item node-dist/*/node.exe "$stage/app/backend/runtime/node.exe" -Force
           Set-Content -Path "$stage/Start Openray.cmd" -Value @'
           @echo off
           set "OPENRAY_ROOT=%~dp0app"
@@ -76,8 +83,17 @@ jobs:
           Compress-Archive -Path "$stage/*" -DestinationPath "Openray-$version-win-x64.zip" -Force
           "version=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue
+          $isccPath = if ($iscc) { $iscc.Source } else { "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" }
+          & $isccPath "/DAppVersion=$env:version" "build/installer/openray.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item "build/installer/Openray-$env:version-setup.exe" "Openray-$env:version-setup.exe" -Force
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$env:GITHUB_REF_NAME" --title "Openray $env:GITHUB_REF_NAME" --generate-notes "Openray-$env:version-win-x64.zip"
+        run: gh release create "$env:GITHUB_REF_NAME" --title "Openray $env:GITHUB_REF_NAME" --generate-notes "Openray-$env:version-setup.exe" "Openray-$env:version-win-x64.zip"
