@@ -37,7 +37,8 @@ app/App.tsx                   card row, Enter/footer/panel actions, footer Insta
 | Knob | Default | Meaning |
 | --- | --- | --- |
 | `OPENRAY_UPDATE_REPO` | `GabrielSantos23/Openray` | GitHub `owner/repo` checked for releases |
-| `APP_VERSION` (`updates.js`) | `2.4.0.0` | running version; keep in sync with the csproj |
+| `APP_VERSION` (`updates.js`) | `1.0.0.0` | running version; keep in sync with the csproj |
+| `OPENRAY_APP_VERSION` | unset | dev override: pose as an older build to exercise the card against real releases (the restart script pins the previous version) |
 
 The checked repository must be **public** (the check is unauthenticated GitHub API; a private
 repo returns 404 and the card simply never shows).
@@ -48,7 +49,7 @@ repo returns 404 and the card simply never shows).
    - `build/host/Openray.csproj` `<Version>`
    - `build/frontend/package.json` `version`
    - `build/backend/src/updates.js` `APP_VERSION`
-2. `git tag v2.4.1 && git push origin v2.4.1`.
+2. `git tag v1.0.1 && git push origin v1.0.1`.
 3. `.github/workflows/release.yml` builds the frontend (`vite build`), installs the backend
    runtime deps, `dotnet publish`es the host, stages the layout and creates the GitHub Release
    with `Openray-<version>-win-x64.zip` and generated notes.

@@ -5,7 +5,7 @@
 # Cutting a release:
 #   1. Bump `<Version>` in build/host/Openray.csproj, `version` in build/frontend/package.json
 #      and APP_VERSION in build/backend/src/updates.js (all three must match the tag).
-#   2. `git tag v2.4.1 && git push origin v2.4.1` — this workflow does the rest.
+#   2. `git tag v1.0.1 && git push origin v1.0.1` — this workflow does the rest.
 #
 # The zip layout matches what the host expects at runtime (build/host/BackendProcess.cs:
 # repoRoot contains `backend/` and `frontend/`); `Start Openray.cmd` points OPENRAY_ROOT at it
@@ -65,6 +65,9 @@ jobs:
           Copy-Item build/backend/package.json "$stage/app/backend/" -Force
           New-Item -ItemType Directory -Force -Path "$stage/app/frontend" | Out-Null
           Copy-Item build/frontend/dist "$stage/app/frontend/dist" -Recurse -Force
+          # The FlowKey worker is resolved relative to backend/src (../../flowkey/worker/dist).
+          New-Item -ItemType Directory -Force -Path "$stage/app/flowkey/worker" | Out-Null
+          Copy-Item build/flowkey/worker/dist "$stage/app/flowkey/worker/dist" -Recurse -Force
           Set-Content -Path "$stage/Start Openray.cmd" -Value @'
           @echo off
           set "OPENRAY_ROOT=%~dp0app"

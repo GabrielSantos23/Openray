@@ -18,7 +18,7 @@ const { pipeline } = require("node:stream/promises");
 
 // Keep in sync with build/host/Openray.csproj `<Version>` and build/frontend/package.json —
 // the release process bumps all three (docs/updates.md).
-const APP_VERSION = "2.4.0.0";
+const APP_VERSION = "1.0.0.0";
 const DEFAULT_REPO = "GabrielSantos23/Openray";
 
 const BOOT_DELAY_MS = 15_000;
@@ -66,7 +66,9 @@ function createUpdates(options = {}) {
     dispatch,
     pushToFrontend,
     fetchImpl,
-    appVersion = APP_VERSION,
+    // OPENRAY_APP_VERSION lets a dev instance pose as an older build to exercise the card
+    // against real releases (the restart script pins it to the previous version).
+    appVersion = process.env.OPENRAY_APP_VERSION ?? APP_VERSION,
     repo = process.env.OPENRAY_UPDATE_REPO ?? DEFAULT_REPO,
     dataRoot = process.env.OPENRAY_DATA_DIR ?? path.join(os.tmpdir(), "Openray"),
     now = () => Date.now(),
