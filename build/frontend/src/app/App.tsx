@@ -3000,7 +3000,16 @@ export function MainWindow() {
         )}
       </main>
 
-      <footer className="window__footer">
+      <footer
+        className="window__footer"
+        onMouseDown={(event) => {
+          // Raycast's footer drag: holding anywhere on the footer moves the window, except on
+          // the buttons (Settings / Actions / Install Update) which stay clickable.
+          if (event.button !== 0) return;
+          if (event.target instanceof Element && event.target.closest("button")) return;
+          void ipcRequest("window.dragMainWindow", {}, { module: "frontend" }).catch(() => undefined);
+        }}
+      >
         <button
           type="button"
           className="footer-icon-button"

@@ -257,6 +257,24 @@ public partial class MainWindow : Window
             return null;
         }
 
+        if (method == "window.dragMainWindow")
+        {
+            // Hold-and-drag on the launcher footer (Raycast's footer drag). ReleaseCapture +
+            // WM_NCLBUTTONDOWN/HTCAPTION enters the native move loop even though the mousedown
+            // happened over the WebView child (plain DragMove's button check races the IPC hop
+            // and silently does nothing — same trick the Settings titlebar uses). The guard
+            // keeps the raw SendMessage from parking in the move loop when the button was
+            // already released during the IPC hop (or was never physically held).
+            _webView.Dispatcher.Invoke(() =>
+            {
+                if ((GetAsyncKeyState(VkLButton) & 0x8000) == 0) return;
+                var handle = new WindowInteropHelper(this).Handle;
+                ReleaseCapture();
+                _ = SendMessage(handle, WmNcLButtonDown, HtCaption, IntPtr.Zero);
+            });
+            return null;
+        }
+
         // Settings window rows that reach the host directly (General page). Failures throw so the
         // renderer can roll the switch back, matching Raycast's openAtLogin flow.
         if (method == "settings.openAtLogin")
@@ -760,6 +778,20 @@ public partial class MainWindow : Window
 
     [DllImport("kernel32.dll")]
     private static extern IntPtr GetModuleHandle(string? name);
+
+    // Footer hold-and-drag (window.dragMainWindow): the ReleaseCapture + HTCAPTION pair.
+    private const uint WmNcLButtonDown = 0x00A1;
+    private const int VkLButton = 0x01;
+    private static readonly IntPtr HtCaption = new(2);
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr wParam, IntPtr lParam);
 

@@ -1,3 +1,18 @@
+## 2026-10-17 (evening) — footer hold-and-drag moves the launcher window
+
+Raycast's footer drag, ported: mousedown anywhere on the launcher footer (except the
+Settings / Actions / Install Update buttons, which `closest("button")` excludes) calls the
+new host route `window.dragMainWindow`, which enters the native move loop with
+ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION — the same trick the Settings titlebar uses,
+because plain DragMove's button check races the IPC hop. A GetAsyncKeyState(VK_LBUTTON)
+guard keeps the raw SendMessage from parking in the move loop when the button was released
+during the hop (or was never physically held — dev-tools synthetic events). Verified via
+CDP: synthetic footer mousedown → `window.dragMainWindow ok:true` in the host log, no
+stuck move loop; the physical hold-drag itself is user-testable. Deployment note: publish
+must target `build/host/bin/m3-release/...` (the path restart-mini.ps1 launches), not the
+repo-root `bin/` the earlier sessions' command produced — a stale-binary mismatch cost a
+round of "no native handler" debugging.
+
 ## 2026-10-17 (later) — update check + update card (GitHub Releases)
 
 **What landed**
