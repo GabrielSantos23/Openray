@@ -93,14 +93,10 @@ import {
 import { getInlineSectionResults, loadInlineSectionSettings, type InlineSectionResult, type InlineSectionSettings } from "../inlineSections";
 import {
   FEATURE_FLAGS_CHANGED_EVENT,
-  SHOW_ONBOARDING_EVENT,
   isOnboardingCompleted,
   loadFeatureFlags,
-  markOnboardingCompleted,
-  saveFeatureFlags,
   type FeatureFlags,
 } from "../onboarding/features";
-import { Onboarding } from "../onboarding/Onboarding";
 import { saveInlineSectionSettings } from "../inlineSections";
 import {
   getCommandArguments,
@@ -227,10 +223,9 @@ export function MainWindow() {
   // Action panel for a file result row (Ctrl+K on the Files section).
   const [filePanel, setFilePanel] = useState<FileSearchRow | null>(null);
   const [inlineSectionSettings, setInlineSectionSettings] = useState(() => loadInlineSectionSettings());
-  // Onboarding: feature flags gate root-search sections (buildSections); the flow shows on first
-  // start and can be replayed from Settings → General (host pushes SHOW_ONBOARDING_EVENT).
+  // Onboarding: feature flags gate root-search sections (buildSections); the flow runs on its
+  // own window (first run + Settings replay) and reports back via the onboarding.finished push.
   const [featureFlags, setFeatureFlags] = useState<FeatureFlags>(() => loadFeatureFlags());
-  const [onboardingOpen, setOnboardingOpen] = useState(() => !isOnboardingCompleted());
   const [inlineResults, setInlineResults] = useState<InlineSectionResult[]>([]);
   // Action panel for the ephemeral calculator row (Ctrl+K on the split row).
   const [calculatorPanel, setCalculatorPanel] = useState<CalculatorEntry | null>(null);
@@ -678,23 +673,31 @@ export function MainWindow() {
     return () => window.removeEventListener("openray:inline-section-settings-changed", handleSettingsChange as EventListener);
   }, []);
 
-  // Onboarding: the host pushes SHOW_ONBOARDING_EVENT (Settings → General replay) into this
-  // document; flags changed from the flow's finish step arrive as FEATURE_FLAGS_CHANGED_EVENT.
+  // Onboarding lives on its own larger window (the host opens it for first runs and the
+  // Settings replay). The window shares this WebView2 profile: when it finishes it has already
+  // written the flags + completion flag to localStorage, and the host relays the close here.
   useEffect(() => {
-    const handleShowOnboarding = () => setOnboardingOpen(true);
+    if (!isOnboardingCompleted()) {
+      void ipcRequest("window.showOnboarding", {}, { module: "frontend" }).catch(() => undefined);
+    }
     const handleFlagsChanged = (event: CustomEvent<FeatureFlags>) => setFeatureFlags(event.detail);
-    window.addEventListener(SHOW_ONBOARDING_EVENT, handleShowOnboarding as EventListener);
+    const handleOnboardingFinished = () => {
+      const flags = loadFeatureFlags();
+      setFeatureFlags(flags);
+      setInlineSectionSettings((previous) => {
+        // Keep the inline-section gates in agreement with the onboarding toggles.
+        const next = { ...previous, calculator: flags.calculator, translate: flags.translator, snippets: flags.snippets };
+        saveInlineSectionSettings(next);
+        return next;
+      });
+    };
     window.addEventListener(FEATURE_FLAGS_CHANGED_EVENT, handleFlagsChanged as EventListener);
+    const offFinished = onNotification("onboarding.finished", handleOnboardingFinished);
     return () => {
-      window.removeEventListener(SHOW_ONBOARDING_EVENT, handleShowOnboarding as EventListener);
       window.removeEventListener(FEATURE_FLAGS_CHANGED_EVENT, handleFlagsChanged as EventListener);
+      offFinished();
     };
   }, []);
-  // Capture-phase Escape (below) closes the launcher; while onboarding owns the screen it must not.
-  const onboardingOpenRef = useRef(onboardingOpen);
-  useEffect(() => {
-    onboardingOpenRef.current = onboardingOpen;
-  }, [onboardingOpen]);
 
   // Pop to root on hide: Raycast resets to root search after the window has been closed for the
   // configured timeout ("Pop to Root Search"). Hiding starts the timer; showing cancels it. Both
@@ -1791,13 +1794,23 @@ export function MainWindow() {
 
   // --- Update card actions (docs/updates.md) ---------------------------------------------------
 
-  /** Downloads the release zip and reveals it in Explorer (Enter on the card, footer, panel). */
+  /** Downloads and installs: the setup installer runs silently and the app relaunches
+   *  (Enter on the card, footer, panel); a zip asset falls back to download-and-reveal. */
   const installUpdate = useCallback(() => {
     showToast("Downloading update…");
     void ipc
       .backend("updates.install", {}, { module: "backend" })
       .then((result) => {
-        const path = (result as { path?: string }).path ?? "";
+        const payload = result as { path?: string; launching?: boolean };
+        if (payload.launching) {
+          showToast("Installing update…", "Openray will restart when done");
+          // Give the toast a beat, then exit so the detached updater can replace the files.
+          window.setTimeout(() => {
+            void ipcRequest("window.quitApplication", {}, { module: "frontend" }).catch(() => undefined);
+          }, 2500);
+          return;
+        }
+        const path = payload.path ?? "";
         showToast("Update downloaded", path ? `Run the installer from ${path}` : undefined);
       })
       .catch((error) => showToast("Update failed", error instanceof Error ? error.message : String(error)));
@@ -2047,7 +2060,6 @@ export function MainWindow() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (onboardingOpenRef.current) return;
       if (panelOpenRef.current || selected) return;
       event.preventDefault();
       closeMainWindow();
@@ -3340,33 +3352,6 @@ export function MainWindow() {
 
       <AlertHost />
 
-      {onboardingOpen ? (
-        <Onboarding
-          initialFlags={featureFlags}
-          onComplete={(flags) => {
-            saveFeatureFlags(flags);
-            // Keep the existing inline-section gates in agreement with the onboarding toggles.
-            saveInlineSectionSettings({
-              ...inlineSectionSettings,
-              calculator: flags.calculator,
-              translate: flags.translator,
-              snippets: flags.snippets,
-            });
-            setInlineSectionSettings((previous) => ({
-              ...previous,
-              calculator: flags.calculator,
-              translate: flags.translator,
-              snippets: flags.snippets,
-            }));
-            markOnboardingCompleted();
-            setOnboardingOpen(false);
-          }}
-          onSkip={() => {
-            markOnboardingCompleted();
-            setOnboardingOpen(false);
-          }}
-        />
-      ) : null}
 
     </div>
   );

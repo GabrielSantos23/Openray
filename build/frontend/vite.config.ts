@@ -12,6 +12,7 @@ export default defineConfig({
       input: {
         "main-window": "main-window.html",
         settings: "settings.html",
+        onboarding: "onboarding.html",
         hud: "hud.html",
         notes: "notes.html",
       },

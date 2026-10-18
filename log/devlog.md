@@ -1,3 +1,27 @@
+## 2026-10-18 (later) — v1.0.2: auto-install updates + onboarding on its own screen
+
+Two user reports drove this release. The onboarding commit (2eca8ca, authored on the main
+worktree) was cherry-picked onto the release branch — it had been invisible because the
+running app builds from RaycastMini-flowkey, which didn't contain it; six conflict files
+resolved keeping both the update-card era logic and the new flow (feature flags AND the
+settings toggles, never either/or).
+
+- Onboarding is now a separate, larger window (980x680 borderless, Topmost, no taskbar)
+  instead of an overlay: new host `OnboardingWindow.cs`, a standalone `onboarding.html` vite
+  entry + `onboarding-main.tsx`, and MainWindow.ShowOnboarding() opening it (first run via
+  `window.showOnboarding` from the renderer, replay via Settings). It shares the launcher's
+  WebView2 user-data folder, so the flow's saveFeatureFlags/markOnboardingCompleted land in
+  the same localStorage the launcher reads; the host relays `onboarding.finished` and the
+  launcher re-reads flags + syncs inline-section gates. Verified live: separate target on
+  CDP, 3 steps, user completed it (flags persisted).
+- Auto-install: `updates.install` with the setup.exe asset now writes a detached
+  `install-update.cmd` (waits out the app's exit, runs the installer `/VERYSILENT
+  /FORCECLOSEAPPLICATIONS`, relaunches `<appRoot>\Openray.exe`) and returns `launching`;
+  the renderer shows "Installing update…", quits via the new `window.quitApplication`
+  host route after 2.5s, and the machine upgrades itself. Zip assets keep the
+  download-and-reveal fallback. Tests: 8/8 updates, 235/235 total.
+- Versions bumped to 1.0.2 (csproj, package.json, APP_VERSION) and released as v1.0.2.
+
 ## 2026-10-18 — proper installer (setup.exe) + bundled Node for v1.0.1
 
 The user wanted a real installer instead of the zip-only release. Landed:

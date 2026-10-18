@@ -13,12 +13,13 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { spawn } = require("node:child_process");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 
 // Keep in sync with build/host/Openray.csproj `<Version>` and build/frontend/package.json —
 // the release process bumps all three (docs/updates.md).
-const APP_VERSION = "1.0.0.0";
+const APP_VERSION = "1.0.2.0";
 const DEFAULT_REPO = "GabrielSantos23/Openray";
 
 const BOOT_DELAY_MS = 15_000;
@@ -69,6 +70,7 @@ function createUpdates(options = {}) {
     dispatch,
     pushToFrontend,
     fetchImpl,
+    spawnImpl = spawn,
     // OPENRAY_APP_VERSION lets a dev instance pose as an older build to exercise the card
     // against real releases (the restart script pins it to the previous version).
     appVersion = process.env.OPENRAY_APP_VERSION ?? APP_VERSION,
@@ -223,6 +225,26 @@ function createUpdates(options = {}) {
       if (!response.ok) throw new Error(`download failed: HTTP ${response.status}`);
       if (!response.body) throw new Error("download failed: empty response body");
       await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(targetPath));
+
+      // The setup installer upgrades silently and relaunches: a detached updater script waits
+      // out the app's own exit (the renderer quits via `window.quitApplication` when it sees
+      // `launching`), runs the installer unattended, then starts the updated exe. Zip assets
+      // (the portable fallback) keep the download-and-reveal behavior.
+      if (/\.exe$/i.test(targetPath)) {
+        const frontendRoot = process.env.OPENRAY_FRONTEND_ROOT;
+        const relaunch = frontendRoot ? path.join(path.dirname(frontendRoot), "Openray.exe") : null;
+        const scriptPath = path.join(targetDir, "install-update.cmd");
+        const lines = [
+          "@echo off",
+          "timeout /t 3 /nobreak >nul",
+          `start "" /wait "${targetPath}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /FORCECLOSEAPPLICATIONS`,
+        ];
+        if (relaunch) lines.push(`start "" "${relaunch}"`);
+        fs.writeFileSync(scriptPath, lines.join("\r\n") + "\r\n");
+        spawnImpl("cmd.exe", ["/d", "/c", scriptPath], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+        return { path: targetPath, launching: true, url: state.url };
+      }
+
       try {
         await dispatch?.("backend", "shell.revealFile", { path: targetPath });
       } catch {

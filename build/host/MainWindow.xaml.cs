@@ -257,6 +257,25 @@ public partial class MainWindow : Window
             return null;
         }
 
+        if (method == "window.showOnboarding")
+        {
+            // First run: the launcher renderer asks for the onboarding screen.
+            _webView.Dispatcher.Invoke(ShowOnboarding);
+            return null;
+        }
+
+        if (method == "window.quitApplication")
+        {
+            // The update flow's last step: the detached updater script needs the app gone
+            // before it can replace the files (the updater's own force-close is the backstop).
+            _webView.Dispatcher.Invoke(() =>
+            {
+                RemoveTrayIcon();
+                System.Windows.Application.Current.Shutdown(0);
+            });
+            return null;
+        }
+
         if (method == "window.dragMainWindow")
         {
             // Hold-and-drag on the launcher footer (Raycast's footer drag). ReleaseCapture +
@@ -1216,18 +1235,29 @@ public partial class MainWindow : Window
     private static extern bool GetCursorPos(out NativePoint point);
 
     /// <summary>
-    /// Settings → General → "Replay Onboarding": re-shows the launcher and pushes the onboarding
-    /// event into the renderer, where the App mounts the flow again.
+    /// Opens the onboarding window — first run (the launcher asks via `window.showOnboarding`)
+    /// and Settings → General → "Replay Onboarding". The flow lives on its own larger screen;
+    /// the launcher just learns about the outcome through `onboarding.finished`.
     /// </summary>
     internal void ShowOnboarding()
     {
         ShowMainWindow();
-        _ = _webView.Dispatcher.InvokeAsync(async () =>
+        if (_onboardingWindow is null)
         {
-            await _webView.CoreWebView2.ExecuteScriptAsync(
-                "window.dispatchEvent(new CustomEvent('raycast-mini:show-onboarding'));");
-        });
+            _onboardingWindow = new OnboardingWindow(_backend.FrontendRoot, this);
+            _onboardingWindow.Closed += (_, _) => _onboardingWindow = null;
+        }
+        _onboardingWindow.Show();
+        _onboardingWindow.Activate();
     }
+
+    /// <summary>The onboarding window finished or was skipped: relay to the launcher renderer.</summary>
+    internal void OnboardingFinished()
+    {
+        PostToRenderer("onboarding.finished", null);
+    }
+
+    private OnboardingWindow? _onboardingWindow;
 
     /// <summary>Tells the renderer the window was hidden/shown so it can run pop-to-root timers.</summary>
     private void PostVisibility(bool visible)
